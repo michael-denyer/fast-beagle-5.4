@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2014-2021 Brian L. Browning
- * Ported to C from Beagle 5.5 (27Feb25) vcf/SlidingWindow.java,
+ * Ported to C from Beagle 5.4 (29Oct24) vcf/SlidingWindow.java,
  * vcf/RefTargSlidingWindow.java, vcf/TargSlidingWindow.java and
  * vcf/Window.java; modified 2026.
  *
@@ -40,8 +40,8 @@ typedef struct {
  * the phasing result ctx. */
 typedef int (*phased_allele_fn)(const void *ctx, int m, int hap);
 
-/* Reads windows of window= cM (at most window-markers= markers) that overlap
- * by overlap= cM, as Beagle's SlidingWindow implementations do. */
+/* Reads windows of window= cM that overlap by overlap= cM, as Beagle's
+ * SlidingWindow implementations do. */
 typedef struct sliding_window sliding_window;
 
 sliding_window *sliding_window_open(const par *p);

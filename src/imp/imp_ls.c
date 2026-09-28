@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2014-2021 Brian L. Browning
- * Ported to C from Beagle 5.5 (27Feb25) imp/ImpLS.java, imp/ImpStates.java,
+ * Ported to C from Beagle 5.4 (29Oct24) imp/ImpLS.java, imp/ImpStates.java,
  * imp/ImpLSBaum.java, imp/StateProbsFactory.java and imp/StateProbs.java;
  * modified 2026.
  *
@@ -83,7 +83,7 @@ static void update_fields(imp_states *st, int hap, int step) {
 }
 
 /* Used when no IBS set has a haplotype. Java seeds with the target haplotype
- * index and re-draws while the reference haplotype drawn equals it. */
+ * index; a drawn reference haplotype may repeat. */
 static void fill_q_with_random_haps(imp_states *st, int hap) {
     int n_ref_haps = st->id->n_ref_haps;
     int n_states = n_ref_haps < st->max_states ? n_ref_haps : st->max_states;
@@ -91,7 +91,6 @@ static void fill_q_with_random_haps(imp_states *st, int hap) {
     jrandom_init(&r, hap);
     for (int j = 0; j < n_states; ++j) {
         int h = jrandom_next_int_bound(&r, n_ref_haps);
-        while (h == hap) h = jrandom_next_int_bound(&r, n_ref_haps);
         int_list_add(&st->comp_hap_hap[comp_hap_tracker_seed(&st->t, h)], h);
     }
 }

@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2014-2021 Brian L. Browning
- * Ported to C from Beagle 5.5 (27Feb25) vcf/MarkerMap.java,
+ * Ported to C from Beagle 5.4 (29Oct24) vcf/MarkerMap.java,
  * vcf/GeneticMap.java and vcf/Steps.java; modified 2026.
  *
  * This file is part of fast-beagle, a C port of Beagle. It is free software:
@@ -34,7 +34,10 @@ static void set_gen_pos(marker_map *mm, double *gen_pos, int n) {
     mm->gen_pos = gen_pos;
     mm->gen_dist = util_malloc((size_t)n * sizeof *mm->gen_dist);
     mm->gen_dist[0] = 0.0f;
-    for (int j = 1; j < n; ++j) mm->gen_dist[j] = (float)(gen_pos[j] - gen_pos[j - 1]);
+    for (int j = 1; j < n; ++j) {
+        float d = (float)(gen_pos[j] - gen_pos[j - 1]);
+        mm->gen_dist[j] = d < 1e-7f ? 1e-7f : d;
+    }
 }
 
 void marker_map_init(marker_map *mm, const genetic_map *gm, const marker *const *markers, int n) {

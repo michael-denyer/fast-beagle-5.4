@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2014-2021 Brian L. Browning
- * Ported to C from Beagle 5.5 (27Feb25) bref/SeqCoder3.java; modified 2026.
+ * Ported to C from Beagle 5.4 (29Oct24) bref/SeqCoder3.java; modified 2026.
  *
  * This file is part of fast-beagle, a C port of Beagle. It is free software:
  * you can redistribute it and/or modify it under the terms of the GNU General
@@ -128,7 +128,7 @@ static bool set_allele_map(seq_coder3 *c, const ref_gt_rec *rec) {
     }
     add_major_allele(c, seq_non_major_cnt, n_start_seq, rec->major_allele);
     free(seq_non_major_cnt);
-    if (c->n_seq_map > c->max_nseq) {
+    if (c->n_seq_map >= c->max_nseq) {
         c->n_seq_map = n_start_seq;
         return false;
     }
@@ -136,7 +136,7 @@ static bool set_allele_map(seq_coder3 *c, const ref_gt_rec *rec) {
 }
 
 bool seq_coder3_add(seq_coder3 *c, ref_gt_rec *rec) {
-    if (rec->kind == REF_HAP) util_exit("java.lang.IllegalArgumentException: class vcf.HapRefGTRec");
+    if (rec->kind == REF_HAP) util_exit("java.lang.IllegalArgumentException: class vcf.SeqCodedRefGTRec");
     if (!set_allele_map(c, rec)) return false;
     if (c->n_recs == c->cap_recs) {
         c->cap_recs = c->cap_recs == 0 ? 64 : 2 * c->cap_recs;
