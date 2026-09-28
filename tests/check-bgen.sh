@@ -233,16 +233,15 @@ check_no_partial() {  # label out message beagle-args...
 }
 
 partial_runs() {
-  local stall="$ROOT/tests/fuzz-regressions/window-stall"
   mkdir "$OUT/open-fail.info" "$OUT/vcf-fail.vcf.gz"
   check_no_partial "bgen=phased, .info cannot be opened" "$OUT/open-fail" "Error opening $OUT/open-fail.info" \
     ref="$DATA/ref.vcf.gz" gt="$DATA/target.vcf.gz" bgen=phased
   [ -d "$OUT/open-fail.info" ] || failed "bgen=phased, .info cannot be opened removed a path it did not write"
   check_no_partial "bgen=plink2, VCF cannot be opened" "$OUT/vcf-fail" "Error opening $OUT/vcf-fail.vcf.gz" \
     ref="$DATA/ref.vcf.gz" gt="$DATA/target.vcf.gz" bgen=plink2
-  # shellcheck disable=SC2046  # args.txt is an argument list; splitting it is the point
-  check_no_partial "bgen=phased, fails after writing records" "$OUT/stall" "does not advance" \
-    gt="$stall/targ.vcf" ref="$stall/ref.vcf" $(cat "$stall/args.txt") bgen=phased
+  # Window 2 falls in the target's 50 kb gap, so it has no target marker.
+  check_no_partial "bgen=phased, fails after writing records" "$OUT/gap" "contain no markers in common" \
+    ref="$DATA/ref.vcf.gz" gt="$DATA/target.gap.vcf.gz" map="$DATA/map.map" window=1.5 overlap=0.5 bgen=phased
 }
 
 check_selection "${TABLES[@]}" || fail=1

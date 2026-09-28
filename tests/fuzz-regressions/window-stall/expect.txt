@@ -1,1 +1,1 @@
-1 does not advance
+0 fast-beagle finished

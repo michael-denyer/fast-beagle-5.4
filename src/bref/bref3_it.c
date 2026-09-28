@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2014-2021 Brian L. Browning
- * Ported to C from Beagle 5.5 (27Feb25) bref/Bref3It.java,
- * bref/Bref3Reader.java and bref/Bref3Header.java; modified 2026.
+ * Ported to C from Beagle 5.4 (29Oct24) bref/Bref3It.java and
+ * bref/Bref3Reader.java; modified 2026.
  *
  * This file is part of fast-beagle, a C port of Beagle. It is free software:
  * you can redistribute it and/or modify it under the terms of the GNU General
@@ -32,12 +32,9 @@ typedef struct {
     FILE *f;
     char *path;
     const str_set *exclude_markers;
-    int n_file_haps;
     int n_haps;
-    int *included_haps;      /* file haplotype of each kept haplotype */
-    int *inv_included_haps;  /* kept index of each file haplotype, or -1 */
     samples samples;
-    uint8_t *bytes;          /* 2 bytes per file haplotype */
+    uint8_t *bytes;          /* 2 bytes per haplotype */
     ref_gt_rec **buf;        /* the current block's records not yet returned */
     int buf_head, buf_n, buf_cap;
     bool at_end;             /* the end-of-data block has been read */
@@ -126,8 +123,8 @@ static void read_utf(bref3_it *it, kstring_t *out) {
     free(b);
 }
 
-/* Bref3Header */
-static void read_header(bref3_it *it, const str_set *exclude_samples) {
+/* The Bref3Reader constructor */
+static void read_header(bref3_it *it) {
     if (read_int(it) != MAGIC_NUMBER_V3) {
         util_exit("\nERROR: Unrecognized input file.  Was input file created \n"
                 "with a different version of the bref program?\n\nTerminating program.");
@@ -135,31 +132,17 @@ static void read_header(bref3_it *it, const str_set *exclude_samples) {
     read_utf(it, &it->str);   /* the program string */
     int n_ids = read_int(it);
     if (n_ids < 0) util_exit("java.lang.NullPointerException: %s has no sample list", it->path);
-    if (n_ids > INT_MAX / 2) {
-        /* Java reads every ID before invArray(..., sampleIds.length<<1)
+    if (n_ids > INT_MAX / 4) {
+        /* Java reads every ID before new byte[2*nHaps] (nHaps = 2*nSamples)
          * throws on the overflowed size. */
         for (int j = 0; j < n_ids; ++j) read_utf(it, &it->str);
-        util_exit("java.lang.NegativeArraySizeException: %d", (int)((unsigned)n_ids << 1));
+        util_exit("java.lang.NegativeArraySizeException: %d", (int)((unsigned)n_ids << 2));
     }
     char **ids = util_malloc((size_t)(n_ids > 0 ? n_ids : 1) * sizeof *ids);
-    int n = 0;
-    it->n_file_haps = n_ids << 1;
-    it->inv_included_haps = util_malloc((size_t)(it->n_file_haps > 0 ? it->n_file_haps : 1) * sizeof(int));
-    it->included_haps = util_malloc((size_t)(it->n_file_haps > 0 ? it->n_file_haps : 1) * sizeof(int));
-    for (int j = 0; j < n_ids; ++j) {
+    int n = n_ids;
+    for (int j = 0; j < n; ++j) {
         read_utf(it, &it->str);
-        it->inv_included_haps[j << 1] = it->inv_included_haps[(j << 1) | 1] = -1;
-        if (exclude_samples == NULL || str_set_find(exclude_samples, it->str.s, it->str.l) < 0) {
-            it->included_haps[n << 1] = j << 1;
-            it->included_haps[(n << 1) | 1] = (j << 1) | 1;
-            it->inv_included_haps[j << 1] = n << 1;
-            it->inv_included_haps[(j << 1) | 1] = (n << 1) | 1;
-            ids[n++] = util_strndup(it->str.s, it->str.l);
-        }
-    }
-    if (n == 0) {
-        util_exit("\nError      :  All samples in the bref3 file have been excluded\nBref3 file :  %s\n\n"
-                "java.lang.Throwable: All samples in the bref3 file have been excluded\n\nTerminating program.", it->path);
+        ids[j] = util_strndup(it->str.s, it->str.l);
     }
     bool *is_diploid = util_malloc((size_t)n * sizeof *is_diploid);
     for (int j = 0; j < n; ++j) is_diploid[j] = true;
@@ -175,22 +158,22 @@ static void buf_add(bref3_it *it, ref_gt_rec *rec) {
     it->buf[it->buf_n++] = rec;
 }
 
-/* Bref3Reader.readByteLengthStringArrayAndJoin */
+/* Bref3Reader.readByteLengthStringArray joined with ';', leaving out the
+ * empty and "." IDs that the BasicMarker constructor removes. */
 static void read_ids(bref3_it *it, kstring_t *out) {
     int n = read_unsigned_byte(it);
-    if (n == 0) {
-        kputc('.', out);
-        return;
-    }
+    size_t start = out->l;
     for (int j = 0; j < n; ++j) {
-        if (j > 0) kputc(';', out);
         read_utf(it, &it->str);
+        if (it->str.l == 0 || (it->str.l == 1 && it->str.s[0] == '.')) continue;
+        if (out->l > start) kputc(';', out);
         kputsn(it->str.s, it->str.l, out);
     }
+    if (out->l == start) kputc('.', out);
 }
 
-/* Bref3Reader.readMarker and vcfRecPrefix: the marker is parsed from the VCF
- * record prefix that Java builds. */
+/* Bref3Reader.readMarker: the marker is parsed from a VCF record prefix
+ * holding the fields that Java passes to the BasicMarker constructor. */
 static void read_marker(bref3_it *it, marker *m, const char *chrom) {
     static const char BASES[] = "ACGT";
     kstring_t *s = &it->prefix;
@@ -239,11 +222,10 @@ static void read_marker(bref3_it *it, marker *m, const char *chrom) {
 }
 
 static seq_group *read_hap_to_seq(bref3_it *it, int n_seq) {
-    read_fully(it, it->bytes, 2 * (size_t)it->n_file_haps);
+    read_fully(it, it->bytes, 2 * (size_t)it->n_haps);
     seq_group *g = seq_group_new(it->n_haps, n_seq);
     for (int k = 0; k < it->n_haps; ++k) {
-        int offset = it->included_haps[k] << 1;
-        g->hap_to_seq[k] = it->bytes[offset] << 8 | it->bytes[offset + 1];
+        g->hap_to_seq[k] = it->bytes[2 * k] << 8 | it->bytes[2 * k + 1];
         if (n_seq > 0 && g->hap_to_seq[k] >= n_seq) util_exit("fast-beagle: inconsistent data in %s", it->path);
     }
     return g;
@@ -261,8 +243,8 @@ static void read_hap_record(bref3_it *it, ref_gt_rec *rec, seq_group *g) {
     ref_gt_rec_set_seq_coded(rec, g, seq_to_allele);
 }
 
-/* Bref3Reader.readAlleleRecord and RefGTRec.alleleRefGTRec(marker, samples,
- * hapIndices): the major allele is the one whose list is absent. */
+/* Bref3Reader.readHapCodedRec and RefGTRec.hapCodedInstance: the major allele
+ * is the one whose list is absent. The lists are checked after all are read. */
 static void read_allele_record(bref3_it *it, ref_gt_rec *rec) {
     int n_alleles = marker_n_alleles(&rec->marker);
     rec->kind = n_alleles == 2 ? REF_TWO_ALLELE : REF_ALLELE;
@@ -273,25 +255,28 @@ static void read_allele_record(bref3_it *it, ref_gt_rec *rec) {
         int len = read_int(it);
         rec->hap_list_len[a] = 0;
         rec->hap_lists[a] = NULL;
-        if (len == -1) {
+        if (len == -1) continue;
+        if (len < 0) util_exit("java.lang.NegativeArraySizeException: %d", len);
+        int *list = util_malloc((size_t)(len > 0 ? len : 1) * sizeof *list);
+        for (int c = 0; c < len; ++c) list[c] = read_int(it);
+        rec->hap_list_len[a] = len;
+        rec->hap_lists[a] = list;
+    }
+    /* LowMafRefGTRec.checkIndicesAndReturnNullIndex */
+    for (int a = 0; a < n_alleles; ++a) {
+        if (rec->hap_lists[a] == NULL) {
             if (rec->major_allele != -1) util_exit("java.lang.IllegalArgumentException: invalid array");
             rec->major_allele = a;
             continue;
         }
-        if (len < 0) util_exit("java.lang.NegativeArraySizeException: %d", len);
-        int *list = util_malloc((size_t)(len > 0 ? len : 1) * sizeof *list);
-        int n = 0;
-        for (int c = 0; c < len; ++c) {
-            int hap = read_int(it);
-            if (hap < 0 || hap >= it->n_file_haps) util_exit("java.lang.ArrayIndexOutOfBoundsException: %d", hap);
-            int kept = it->inv_included_haps[hap];
-            if (kept >= 0) {
-                if (n > 0 && list[n - 1] >= kept) util_exit("java.lang.IllegalArgumentException: invalid array");
-                list[n++] = kept;
-            }
+        const int *list = rec->hap_lists[a];
+        int len = rec->hap_list_len[a];
+        if (len > 0 && (list[0] < 0 || list[len - 1] >= it->n_haps)) {
+            util_exit("java.lang.IllegalArgumentException: invalid array");
         }
-        rec->hap_list_len[a] = n;
-        rec->hap_lists[a] = list;
+        for (int k = 1; k < len; ++k) {
+            if (list[k - 1] >= list[k]) util_exit("java.lang.IllegalArgumentException: invalid array");
+        }
     }
     if (rec->major_allele == -1) util_exit("java.lang.IllegalArgumentException: invalid array");
 }
@@ -332,7 +317,7 @@ static void fill(bref3_it *it) {
 
 static const sample_file_it_ops bref3_it_ops;
 
-sample_file_it bref3_it_open(const char *path, const str_set *exclude_samples, const str_set *exclude_markers) {
+sample_file_it bref3_it_open(const char *path, const str_set *exclude_markers) {
     bref3_it *it = util_malloc(sizeof *it);
     *it = (bref3_it){0};
     it->path = util_strndup(path, strlen(path));
@@ -340,8 +325,8 @@ sample_file_it bref3_it_open(const char *path, const str_set *exclude_samples, c
     if (it->f == NULL) util_exit("\nError: file not found [%s]\n\njava.io.FileNotFoundException: %s", path, path);
     setvbuf(it->f, NULL, _IOFBF, 1 << 20);
     it->exclude_markers = exclude_markers;
-    read_header(it, exclude_samples);
-    it->bytes = util_malloc(2 * (size_t)(it->n_file_haps > 0 ? it->n_file_haps : 1));
+    read_header(it);
+    it->bytes = util_malloc(2 * (size_t)(it->n_haps > 0 ? it->n_haps : 1));
     fill(it);
     if (trace_on()) {
         for (int j = 0; j < it->samples.n; ++j) trace_line("T1b-ref", "%s\tdiploid", it->samples.ids[j]);
@@ -369,8 +354,6 @@ static void bref3_it_close(void *self) {
     free(it->buf);
     fclose(it->f);
     samples_free(&it->samples);
-    free(it->included_haps);
-    free(it->inv_included_haps);
     free(it->bytes);
     free(it->str.s);
     free(it->prefix.s);
