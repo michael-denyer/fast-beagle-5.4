@@ -71,6 +71,51 @@ Every case table row holds a name, the expected outcome, tags and Beagle's argum
 - `tests/run-trace.sh` runs an implementation on every case with tracing on, so two runs can be compared with `diff -r`.
 - `tests/check-trace.sh <seam...>` runs the Java trace build and `build/beagle` on every case, including the input edge cases in `tests/trace-cases.txt`, and compares the named trace seams.
 
+### Seam formats
+
+Fields are tab-separated. Floating-point values print as raw bits in hex (`float` 8 digits at most, `double` 16). A digest is FNV-1a over 32-bit words. Lists are comma-separated, and `-` marks an empty list. The hook for each seam is in `java/trace.patch`, and the `Trace` class there documents each record.
+
+| Seam | File | Records |
+|---|---|---|
+| T1a | `T1a-target`, `T1a-ref` | Per input record: CHROM, POS, the stored IDs joined by `;` (`.` for none), REF, the ALT alleles joined by `,` (`.` for none), the allele count, and the END value as an int (empty for none). |
+| T1b | `T1b-target`, `T1b-ref` | Per sample: ID and `diploid` or `haploid`. A bref3 reference lists every sample, because Beagle 5.4 does not apply `excludesamples=` to bref3. |
+| T1c | `T1c-target` | Per target record: record class, phase flag, allele per haplotype (`.` for missing). |
+| T1d | `T1d-ref` | Per reference record: record class, major allele, sequence group and sequence-to-allele map for a `SeqCodedRefGTRec` (`-` otherwise), allele per haplotype. A `group` line gives each group's haplotype-to-sequence map once. |
+| T2 | `T2` | Per window: index, chromosome, last-window flag, `endCm` (double bits), end position, marker counts, overlap and splice indices; then the positions and the target-to-marker map. |
+| T2b | `T2b` | Per window: fixed phasing data, per marker the position, distance, previous stage-1 marker and weight, and the carriers of each allele; then the stage-1 markers, their distances and the step ends. |
+| T3a | `T3a` | Per window: stage-1 minor allele frequencies, IBS2 markers, step starts, and per sample its IBS2 segments. |
+| T3b0 | `T3b0-<start>` | Per initial PBWT sub-window: its marker range and seed, then the alleles at each marker. |
+| T3b1 | `T3b1` | Per window: `pd` seed, recombination intensity, mismatch probability; `pRecomb` per stage-1 marker; `leaveUnph`, the per-sample proportion of unphased heterozygotes left unphased each iteration; then one sample line per target sample (below). |
+| T3b | `T3b` | After each stage-1 iteration: `it` iteration count and swap rate (double bits), then one sample line per target sample. |
+| T3c | `T3c` | Per parameter update: the mismatch and switch data in summation order, then the estimated and stored mismatch probability and recombination intensity. |
+| T3d | `T3d-<it>-fwd`, `T3d-<it>-bwd` | Per IBS search: candidate count, steps per batch, overlap steps, each step's haplotype-to-sequence map, and each step's IBS haplotypes. |
+| T3e | `T3e` | Per stage-1 iteration: `it` iteration index, then one line per target sample (below). |
+| T4a | `T4a` | Per window: the stage-2 IBS haplotypes, forward then backward, per step and target haplotype. |
+| T4b | `T4b` | Per target haplotype: stage-2 state count and a digest of the states and state probabilities. |
+| T4c | `T4c` | Per stage-2 marker: the haplotypes that carry each allele, `M` for the implicit major allele. |
+| T4d | `T4d` | Per target sample: a digest of the stage-2 phase and imputation probabilities. |
+| T5a | `T5a` | Per window: imputation cluster count, haplotype counts, mismatch rate; per cluster its ranges, position, mismatch and switch probabilities and a digest of its sequence map; a digest of the interpolation weights. |
+| T5b | `T5b` | Per window: the imputation steps, then each step's IBS reference haplotypes per target haplotype. |
+| T5c | `T5c` | Per target haplotype: state count, a digest of the states and matches, and a digest of the kept state probabilities. |
+| T5d | `T5d` | Per imputed record: cluster, reference marker, a digest of the allele probabilities, and per ALT allele the dose sums and DR2. |
+
+A stage-1 sample line in T3b1 and T3b is `sample`, the sample index, the alleles of each haplotype at each stage-1 marker, the sizes of the sample's marker clusters, the unphased heterozygote markers, and the missing-genotype markers. A heterozygote is unphased when its phase relative to the previous heterozygote is still open. Beagle 5.4 has no cluster types.
+
+A T3e sample line records one sample's `PhaseBaum1` update. A sample with no unphased heterozygote and no missing genotype skips the HMM and prints `sample <s> 0 0`. Other samples print these fields:
+
+1. `sample` and the sample index.
+2. The counts of unphased heterozygotes and missing genotypes before the update.
+3. The cluster count and the HMM state count.
+4. A digest of the state mismatches (rows 0 to 2, then each cluster, then each state), followed by the state alleles at each missing-genotype cluster.
+5. A digest of the cluster recombination probabilities.
+6. A digest of the emission pair `(1 - size*pMismatch, size*pMismatch)` at each HMM step. The backward pass comes first, then the forward pass.
+7. The likelihood ratio of each unphased heterozygote, in marker order.
+8. The count of phase switches.
+9. The likelihood-ratio threshold, or `-` when none applies. None applies in burn-in or when no heterozygote is unphased.
+10. The unphased heterozygote markers after the update.
+
+The 5.5 build of these seams differed in a few fields. Its T1a printed the raw ID, REF, ALT and first `END=` text. Its T3b1 `pd` line and T3b `it` line carried the per-iteration LR threshold. Its sample lines carried `type:size` clusters, with no unphased or missing lists. It had no `leaveUnph` line and no T3e. Record class names in T1c and T1d are the 5.4 classes, for example `SeqCodedRefGTRec` for 5.5's `HapRefGTRec`.
+
 ## Piece size check
 
 `make check-piece-size` (`tests/check-piece-size.sh`) checks the imputation writer's split of a long cluster. The writer splits a long cluster into work items of at most `PIECE_RECORDS` reference markers (500). `PIECE_RECORDS` is a tuning value that must not change the output.
