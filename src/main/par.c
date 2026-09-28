@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2014-2021 Brian L. Browning
- * Ported to C from Beagle 5.5 (27Feb25) main/Par.java and
+ * Ported to C from Beagle 5.4 (29Oct24) main/Par.java and
  * blbutil/Validate.java; modified 2026.
  *
  * This file is part of fast-beagle, a C port of Beagle. It is free software:
@@ -206,7 +206,6 @@ void par_parse(par *p, int argc, char **argv) {
 
     p->burnin = int_arg(&m, "burnin", 3, 1, IMAX);
     p->iterations = int_arg(&m, "iterations", 12, 1, IMAX);
-    p->initial_lr = float_arg(&m, "initial-lr", 100000.0f, 1.0f, FMAX);
     p->phase_states = int_arg(&m, "phase-states", 280, 1, IMAX);
     p->step_scale = float_arg(&m, "step-scale", 3.0f, FMIN, FMAX);
     p->rare = float_arg(&m, "rare", 0.002f, FMIN, 0.5f);
@@ -224,7 +223,6 @@ void par_parse(par *p, int argc, char **argv) {
     p->ne = float_arg(&m, "ne", 100000.0f, FMIN, FMAX);
     p->err = float_arg(&m, "err", -FMIN, -FMIN, FMAX);
     p->window = float_arg(&m, "window", 40.0f, FMIN, FMAX);
-    p->window_markers = int_arg(&m, "window-markers", 4000000, 100000, IMAX);
     p->overlap = float_arg(&m, "overlap", 2.0f, FMIN, FMAX);
     p->buffer = float_arg(&m, "buffer", 1.0f, FMIN, FMAX);
     p->seed = long_arg(&m, "seed", -99999, INT64_MIN, INT64_MAX);
