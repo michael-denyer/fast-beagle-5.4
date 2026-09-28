@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2014-2021 Brian L. Browning
- * Ported to C from Beagle 5.5 (27Feb25) phase/PhaseData.java,
+ * Ported to C from Beagle 5.4 (29Oct24) phase/PhaseData.java,
  * phase/EstPhase.java and vcf/MarkerMap.java pRecomb; modified 2026.
  *
  * This file is part of fast-beagle, a C port of Beagle. It is free software:
@@ -27,7 +27,7 @@ typedef struct {
     sample_phase *phase;
     int64_t seed;
     int it;
-    float lr_threshold;
+    float *leave_unph_prop;   /* per sample, from its initial unphased count */
     float recomb_intensity;
     float *p_recomb;       /* per stage-1 marker */
     float p_mismatch;
@@ -36,11 +36,10 @@ typedef struct {
 /* new PhaseData(fpd, seed). Writes trace seam T3b1. */
 void phase_data_init(phase_data *pd, const fixed_phase_data *fpd, const par *p, int64_t seed);
 void phase_data_free(phase_data *pd);
-/* Trace seam T3b: the iteration just finished, its swap rate (raw bits), the
- * next LR threshold, and each sample's haplotypes and clusters. */
+/* Trace seam T3b: the iteration count, the swap rate (raw bits), and each
+ * sample's haplotypes, clusters, and unphased and missing markers. */
 void phase_data_trace_iteration(const phase_data *pd, double swap_rate);
-/* PhaseData.incrementIt and advanceToFirstPhasingIt, with the LR threshold
- * for the new iteration. */
+/* PhaseData.incrementIt and advanceToFirstPhasingIt. */
 void phase_data_increment_it(phase_data *pd);
 void phase_data_advance_to_first_phasing_it(phase_data *pd);
 /* PhaseData.updatePMismatch: p_mismatch must be in [0, 1]. */

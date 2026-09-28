@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2014-2021 Brian L. Browning
- * Ported to C from Beagle 5.5 (27Feb25) phase/BasicPhaseStates.java;
+ * Ported to C from Beagle 5.4 (29Oct24) phase/BasicPhaseStates.java;
  * modified 2026.
  *
  * This file is part of fast-beagle, a C port of Beagle. It is free software:
@@ -43,7 +43,7 @@ int basic_phase_states_ibs_states(basic_phase_states *bps, int sample, uint8_t *
  * the sample's clusters c, mismatch[0][c][j] says whether composite haplotype
  * j differs from a homozygous cluster, and mismatch[1] and mismatch[2] whether
  * it differs from the sample's first and second haplotype there. For the k-th
- * missing or masked cluster, ref_at_missing[k][j] is haplotype j's allele. */
+ * missing-genotype cluster, ref_at_missing[k][j] is haplotype j's allele. */
 int basic_phase_states_cluster_states(basic_phase_states *bps, const marker_cluster *mc, int **ref_at_missing, uint8_t ***mismatch);
 void basic_phase_states_free(basic_phase_states *bps);
 

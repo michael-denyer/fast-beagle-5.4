@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2014-2021 Brian L. Browning
- * Ported to C from Beagle 5.5 (27Feb25) phase/PhaseData.java,
+ * Ported to C from Beagle 5.4 (29Oct24) phase/PhaseData.java,
  * phase/EstPhase.java and vcf/MarkerMap.java pRecomb; modified 2026.
  *
  * This file is part of fast-beagle, a C port of Beagle. It is free software:
@@ -23,16 +23,15 @@
 #include "jcompat/jnum.h"
 #include "phase/pbwt_phaser.h"
 
-/* PhaseData.lrThreshold: infinite during burn-in, then falling
- * geometrically from initial-lr to 1 at the last iteration. */
-static float lr_threshold(const par *p, int it) {
-    int n_its_m1 = p->iterations - 1;
-    if (it < p->burnin) return INFINITY;
-    if (it == n_its_m1 + p->burnin) return 1.0f;
-    double last_val = 4.0;
-    double exp = (double)(n_its_m1 - (it - p->burnin)) / n_its_m1;
-    double base = p->initial_lr / last_val;
-    return (float)(last_val * jmath_pow(base, exp));
+/* PhaseData.leaveUnphasedProp: per sample, the proportion of unphased
+ * heterozygotes to leave unphased at each phasing iteration, n^(-1/iterations)
+ * for its initial count n. */
+static float *leave_unphased_prop(const phase_data *pd) {
+    float *prop = util_malloc((size_t)pd->n_samples * sizeof *prop);
+    for (int s = 0; s < pd->n_samples; ++s) {
+        prop[s] = (float)jmath_pow((double)pd->phase[s].n_unphased, -1.0 / pd->par->iterations);
+    }
+    return prop;
 }
 
 /* MarkerMap.pRecomb(recombIntensity) */
@@ -43,7 +42,16 @@ static float *p_recomb(const marker_map *map, float recomb_intensity) {
     return p;
 }
 
-/* Each target sample's haplotypes and clusters as type:size. */
+static void put_ints(kstring_t *s, const int *a, int n) {
+    if (n == 0) kputc('-', s);
+    for (int j = 0; j < n; ++j) {
+        if (j > 0) kputc(',', s);
+        kputw(a[j], s);
+    }
+}
+
+/* Each target sample's haplotypes, cluster sizes, and unphased and missing
+ * markers. */
 static void trace_samples(const phase_data *pd, const char *seam) {
     const fixed_phase_data *fpd = pd->fpd;
     kstring_t s = {0, 0, NULL};
@@ -61,8 +69,12 @@ static void trace_samples(const phase_data *pd, const char *seam) {
         }
         for (int c = 0; c < sp->n_clusters; ++c) {
             if (c > 0) kputc(',', &s);
-            ksprintf(&s, "%d:%d", sp->clust_type[c], sp->clust_size[c]);
+            kputw(sp->clust_size[c], &s);
         }
+        kputc('\t', &s);
+        put_ints(&s, sp->unphased, sp->n_unphased);
+        kputc('\t', &s);
+        put_ints(&s, sp->missing, sp->n_missing);
         trace_line(seam, "%s", s.s);
     }
     free(s.s);
@@ -70,13 +82,20 @@ static void trace_samples(const phase_data *pd, const char *seam) {
 
 static void trace(const phase_data *pd) {
     const fixed_phase_data *fpd = pd->fpd;
-    trace_line("T3b1", "pd\t%" PRId64 "\t%" PRIx32 "\t%" PRIx32 "\t%" PRIx32, pd->seed,
-            jnum_float_bits(pd->recomb_intensity), jnum_float_bits(pd->p_mismatch), jnum_float_bits(pd->lr_threshold));
+    trace_line("T3b1", "pd\t%" PRId64 "\t%" PRIx32 "\t%" PRIx32, pd->seed, jnum_float_bits(pd->recomb_intensity),
+            jnum_float_bits(pd->p_mismatch));
     kstring_t s = {0, 0, NULL};
     kputs("pRecomb\t", &s);
     for (int m = 0; m < fpd->n_stage1; ++m) {
         if (m > 0) kputc(',', &s);
         ksprintf(&s, "%" PRIx32, jnum_float_bits(pd->p_recomb[m]));
+    }
+    trace_line("T3b1", "%s", s.s);
+    s.l = 0;
+    kputs("leaveUnph\t", &s);
+    for (int j = 0; j < pd->n_samples; ++j) {
+        if (j > 0) kputc(',', &s);
+        ksprintf(&s, "%" PRIx32, jnum_float_bits(pd->leave_unph_prop[j]));
     }
     trace_line("T3b1", "%s", s.s);
     free(s.s);
@@ -86,7 +105,7 @@ static void trace(const phase_data *pd) {
 void phase_data_trace_iteration(const phase_data *pd, double swap_rate) {
     uint64_t bits;
     memcpy(&bits, &swap_rate, sizeof bits);
-    trace_line("T3b", "it\t%d\t%" PRIx64 "\t%" PRIx32, pd->it, bits, jnum_float_bits(pd->lr_threshold));
+    trace_line("T3b", "it\t%d\t%" PRIx64, pd->it, bits);
     trace_samples(pd, "T3b");
 }
 
@@ -97,7 +116,7 @@ void phase_data_init(phase_data *pd, const fixed_phase_data *fpd, const par *p, 
     pd->phase = pbwt_phaser_init_phase(fpd, p->nthreads, seed);
     pd->seed = seed;
     pd->it = 0;
-    pd->lr_threshold = lr_threshold(p, pd->it);
+    pd->leave_unph_prop = leave_unphased_prop(pd);
     pd->recomb_intensity = 0.04f * p->ne / (float)fpd->n_haps;
     pd->p_recomb = p_recomb(&fpd->stage1_map, pd->recomb_intensity);
     pd->p_mismatch = par_li_stephens_p_mismatch(fpd->n_haps);
@@ -107,6 +126,7 @@ void phase_data_init(phase_data *pd, const fixed_phase_data *fpd, const par *p, 
 void phase_data_free(phase_data *pd) {
     for (int s = 0; s < pd->n_samples; ++s) sample_phase_free(&pd->phase[s]);
     free(pd->phase);
+    free(pd->leave_unph_prop);
     free(pd->p_recomb);
 }
 
@@ -125,12 +145,8 @@ void phase_data_update_recomb_intensity(phase_data *pd, float recomb_intensity) 
 
 void phase_data_increment_it(phase_data *pd) {
     ++pd->it;
-    pd->lr_threshold = lr_threshold(pd->par, pd->it);
 }
 
 void phase_data_advance_to_first_phasing_it(phase_data *pd) {
-    if (pd->it < pd->par->burnin) {
-        pd->it = pd->par->burnin;
-        pd->lr_threshold = lr_threshold(pd->par, pd->it);
-    }
+    if (pd->it < pd->par->burnin) pd->it = pd->par->burnin;
 }
