@@ -38,7 +38,8 @@ static float *leave_unphased_prop(const phase_data *pd) {
 static float *p_recomb(const marker_map *map, float recomb_intensity) {
     double c = -recomb_intensity;
     float *p = util_malloc((size_t)map->n * sizeof *p);
-    for (int m = 0; m < map->n; ++m) p[m] = (float)-jmath_expm1(c * map->gen_dist[m]);
+    p[0] = 0.0f;
+    for (int m = 1; m < map->n; ++m) p[m] = (float)-jmath_expm1(c * map->gen_dist[m]);
     return p;
 }
 
