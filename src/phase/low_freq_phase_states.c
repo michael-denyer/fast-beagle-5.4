@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2014-2021 Brian L. Browning
- * Ported to C from Beagle 5.5 (27Feb25) phase/LowFreqPhaseStates.java;
+ * Ported to C from Beagle 5.4 (29Oct24) phase/LowFreqPhaseStates.java;
  * modified 2026.
  *
  * This file is part of fast-beagle, a C port of Beagle. It is free software:
@@ -61,7 +61,8 @@ static void add_ibs_hap(low_freq_phase_states *st, int ibs_hap, int step) {
     }
 }
 
-/* Unlike BasicPhaseStates, a haplotype drawn twice is used twice. */
+/* A haplotype drawn twice is used twice. Beagle 5.4 queues these segments at
+ * the last step, not step 0; nothing reads the queue order afterwards. */
 static void fill_q_with_random_haps(low_freq_phase_states *st, int hap) {
     int n_haps = st->ibs->cs.n_haps;
     int n_states = n_haps - 2 < st->max_states ? n_haps - 2 : st->max_states;
