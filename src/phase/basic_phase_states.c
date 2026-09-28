@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2014-2021 Brian L. Browning
- * Ported to C from Beagle 5.5 (27Feb25) phase/BasicPhaseStates.java;
+ * Ported to C from Beagle 5.4 (29Oct24) phase/BasicPhaseStates.java;
  * modified 2026.
  *
  * This file is part of fast-beagle, a C port of Beagle. It is free software:
@@ -55,7 +55,9 @@ static void add_ibs_hap(basic_phase_states *bps, int ibs_hap, int step) {
     }
 }
 
-/* Used when no IBS neighbour was found: random haplotypes outside the sample. */
+/* Used when no IBS neighbour was found: random haplotypes outside the sample,
+ * a haplotype drawn twice used twice. Beagle 5.4 queues them at the last step,
+ * not step 0; nothing reads the queue order afterwards. */
 static void fill_q_with_random_haps(basic_phase_states *bps, int sample) {
     int n_haps = bps->ibs->cs->n_haps;
     int n_states = n_haps - 2 < bps->max_states ? n_haps - 2 : bps->max_states;
@@ -66,7 +68,7 @@ static void fill_q_with_random_haps(basic_phase_states *bps, int sample) {
     for (int j = 0; j < n_states; ++j) {
         int h = jrandom_next_int_bound(&r, n_haps);
         while ((h >> 1) == sample) h = jrandom_next_int_bound(&r, n_haps);
-        comp_hap_tracker_observe(&bps->t, h, 0, bps->min_steps);
+        comp_hap_tracker_seed(&bps->t, h);
     }
 }
 
@@ -160,7 +162,7 @@ int basic_phase_states_cluster_states(basic_phase_states *bps, const marker_clus
         int m_start = marker_cluster_start(mc, c);
         int b_start = hap_bits[m_start];
         int b_end = hap_bits[mc->ends[c]];
-        if (marker_cluster_is_missing_or_masked(mc, c)) {
+        if (mc->has_missing[c]) {
             memset(m0, 0, n);
             memset(m1, 0, n);
             memset(m2, 0, n);

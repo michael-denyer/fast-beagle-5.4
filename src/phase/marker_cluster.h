@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2014-2021 Brian L. Browning
- * Ported to C from Beagle 5.5 (27Feb25) phase/MarkerCluster.java;
+ * Ported to C from Beagle 5.4 (29Oct24) phase/MarkerCluster.java;
  * modified 2026.
  *
  * This file is part of fast-beagle, a C port of Beagle. It is free software:
@@ -11,18 +11,23 @@
 #ifndef PHASE_MARKER_CLUSTER_H
 #define PHASE_MARKER_CLUSTER_H
 
+#include <stdbool.h>
+
 #include "phase/phase_data.h"
 #include "phase/sample_phase.h"
 
-/* A sample's clusters as HMM positions: each cluster's end marker, its
- * unphased heterozygote clusters, and the probability of a switch within
- * each cluster (0 for the first). */
+/* A sample's clusters as HMM positions: each cluster's end marker, the
+ * clusters holding an unphased heterozygote or a missing genotype, and the
+ * probability of a switch since the previous cluster's end (0 for the first
+ * cluster; the second also covers the first). */
 typedef struct {
     sample_phase *sp;
     int n_clusters;
     int *ends;
-    int n_unph_het;
-    int *unph_het_clusters;
+    int n_unph;
+    int *unph_clusters;
+    bool *has_missing;
+    int n_missing_clusters;
     float *p_recomb;
 } marker_cluster;
 
@@ -30,9 +35,6 @@ typedef struct {
 void marker_cluster_init(marker_cluster *mc, const phase_data *pd, int sample);
 static inline int marker_cluster_start(const marker_cluster *mc, int c) {
     return c == 0 ? 0 : mc->ends[c - 1];
-}
-static inline bool marker_cluster_is_missing_or_masked(const marker_cluster *mc, int c) {
-    return mc->sp->clust_type[c] == CLUST_MISSING_GT || mc->sp->clust_type[c] == CLUST_MASKED_HET;
 }
 void marker_cluster_free(marker_cluster *mc);
 

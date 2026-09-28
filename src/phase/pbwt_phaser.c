@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2014-2021 Brian L. Browning
- * Ported to C from Beagle 5.5 (27Feb25) phase/PbwtPhaser.java; modified 2026.
+ * Ported to C from Beagle 5.4 (29Oct24) phase/PbwtPhaser.java; modified 2026.
  *
  * This file is part of fast-beagle, a C port of Beagle. It is free software:
  * you can redistribute it and/or modify it under the terms of the GNU General
@@ -18,7 +18,7 @@
 
 /* The positions are strictly increasing, so Java's binary search insertion
  * point is the first position at or above pos. */
-static int from(const marker_map *map, double pos) {
+static int ins_pt(const marker_map *map, double pos) {
     int lo = 0, hi = map->n;
     while (lo < hi) {
         int mid = (int)((unsigned)(lo + hi) >> 1);
@@ -28,34 +28,23 @@ static int from(const marker_map *map, double pos) {
     return lo;
 }
 
-/* The first position above pos. */
-static int to(const marker_map *map, double pos) {
-    int lo = 0, hi = map->n;
-    while (lo < hi) {
-        int mid = (int)((unsigned)(lo + hi) >> 1);
-        if (map->gen_pos[mid] <= pos) lo = mid + 1;
-        else hi = mid;
-    }
-    return lo;
-}
-
 int_list pbwt_phaser_windows(const fixed_phase_data *fpd, int nthreads) {
     const marker_map *map = &fpd->stage1_map;
     double total_cm = map->gen_pos[map->n - 1] - map->gen_pos[0];
-    double overlap_cm = 0.5;
-    double per_thread = total_cm / nthreads;
-    double advance_cm = 4 * overlap_cm > per_thread ? 4 * overlap_cm : per_thread;
+    double overlap_cm = 1.5;
+    double per_thread = (total_cm - overlap_cm) / nthreads;
+    double advance_cm = 2 * overlap_cm > per_thread ? 2 * overlap_cm : per_thread;
     int_list windows = {0};
     int start = 0;
-    int end = to(map, map->gen_pos[start] + advance_cm);
+    int end = ins_pt(map, map->gen_pos[start] + overlap_cm + advance_cm) + 1;
     while (end < map->n) {
         int_list_add(&windows, start);
         int_list_add(&windows, end);
-        start = from(map, map->gen_pos[end] - overlap_cm);
-        end = to(map, map->gen_pos[end] + advance_cm);
+        start = ins_pt(map, map->gen_pos[end] - overlap_cm) - 1;
+        end = ins_pt(map, map->gen_pos[end] + advance_cm) + 1;
     }
     int_list_add(&windows, start);
-    int_list_add(&windows, end);
+    int_list_add(&windows, map->n);
     return windows;
 }
 
