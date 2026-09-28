@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2014-2021 Brian L. Browning
- * Ported to C from Beagle 5.5 (27Feb25) vcf/VcfIt.java; modified 2026.
+ * Ported to C from Beagle 5.4 (29Oct24) vcf/VcfIt.java; modified 2026.
  *
  * This file is part of fast-beagle, a C port of Beagle. It is free software:
  * you can redistribute it and/or modify it under the terms of the GNU General
@@ -9,6 +9,7 @@
  */
 #include "vcf/vcf_it.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 
 #include "blbutil/line_reader.h"
@@ -18,18 +19,26 @@
 #include "vcf/gt_rec.h"
 #include "vcf/vcf_header.h"
 
+/* VcfIt.DEFAULT_BUFFER_SIZE. Java's string buffer is smaller only when a line
+ * is longer than a sixteenth of the heap divided by 2 * 1024 characters. */
+#define BUFFER_SIZE (1 << 10)
+
 typedef struct {
     line_reader *reader;
     vcf_header header;
     const str_set *exclude;
     kstring_t line;
     bool have_line;     /* line holds the next unparsed data line */
+    gt_rec **buf;       /* parsed records that passed the marker filter */
+    int head, n;
 } vcf_it;
 
 void vcf_it_trace_marker(const char *seam, const marker *m) {
-    span id = marker_id(m), al = marker_alleles(m), end = marker_end_value(m);
-    trace_line(seam, "%s\t%d\t%.*s\t%.*s\t%d\t%.*s", marker_chrom(m), m->pos, id.n, id.s, al.n, al.s,
-            marker_n_alleles(m), end.n, end.s);
+    span id = marker_id(m), al = marker_alleles(m);
+    char end[16] = "";
+    if (m->end != -1) snprintf(end, sizeof end, "%d", m->end);
+    trace_line(seam, "%s\t%d\t%.*s\t%.*s\t%d\t%s", marker_chrom(m), m->pos, id.n, id.s, al.n, al.s,
+            marker_n_alleles(m), end);
 }
 
 /* VcfIt.readLine skips blank lines, except a final one. */
@@ -66,21 +75,32 @@ static void trace_rec(const gt_rec *rec) {
     free(s.s);
 }
 
+/* VcfIt.fillEmissionBuffer: parses blocks of BUFFER_SIZE lines until
+ * BUFFER_SIZE records have passed the marker filter or the input ends, so a
+ * malformed record stops the run before the records ahead of it are used. */
+static void fill_buffer(vcf_it *it) {
+    it->head = 0;
+    while (it->have_line && it->n < BUFFER_SIZE) {
+        for (int k = 0; k < BUFFER_SIZE && it->have_line; ++k) {
+            gt_rec *rec = util_malloc(sizeof *rec);
+            gt_rec_parse(rec, it->line.s, it->line.l, &it->header);
+            rec->refs = 1;
+            read_line(it);
+            if (filter_accept_marker(it->exclude, &rec->marker)) it->buf[it->n++] = rec;
+            else gt_rec_release(rec);
+        }
+    }
+}
+
 /* VcfIt.next: the next record that passes the marker filter. */
 static void *vcf_it_next(void *self) {
     vcf_it *it = self;
-    while (it->have_line) {
-        gt_rec *rec = util_malloc(sizeof *rec);
-        gt_rec_parse(rec, it->line.s, it->line.l, &it->header);
-        rec->refs = 1;
-        read_line(it);
-        if (filter_accept_marker(it->exclude, &rec->marker)) {
-            if (trace_on()) trace_rec(rec);
-            return rec;
-        }
-        gt_rec_release(rec);
-    }
-    return NULL;
+    if (it->n == 0) return NULL;
+    gt_rec *rec = it->buf[it->head++];
+    --it->n;
+    if (trace_on()) trace_rec(rec);
+    if (it->n == 0) fill_buffer(it);
+    return rec;
 }
 
 static const samples *vcf_it_samples(const void *self) {
@@ -90,6 +110,11 @@ static const samples *vcf_it_samples(const void *self) {
 
 static void vcf_it_close(void *self) {
     vcf_it *it = self;
+    while (it->n > 0) {
+        gt_rec_release(it->buf[it->head++]);
+        --it->n;
+    }
+    free(it->buf);
     vcf_header_free(&it->header);
     free(it->line.s);
     line_reader_close(it->reader);
@@ -116,5 +141,7 @@ sample_file_it vcf_it_open(const char *path, const str_set *exclude_samples, con
     vcf_header_read(&it->header, it->reader, &it->line, exclude_samples);
     it->have_line = true;
     if (trace_on()) vcf_header_trace(&it->header, "T1b-target");
+    it->buf = util_malloc(2 * BUFFER_SIZE * sizeof *it->buf);
+    fill_buffer(it);
     return (sample_file_it){&vcf_it_ops, it};
 }

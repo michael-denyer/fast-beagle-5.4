@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2014-2021 Brian L. Browning
- * Ported to C from Beagle 5.5 (27Feb25) main/Par.java and
+ * Ported to C from Beagle 5.4 (29Oct24) main/Par.java and
  * blbutil/Validate.java; modified 2026.
  *
  * This file is part of fast-beagle, a C port of Beagle. It is free software:
@@ -28,7 +28,7 @@ typedef struct {
 
     /* phasing parameters */
     int burnin, iterations, phase_states;
-    float initial_lr, step_scale, rare;
+    float step_scale, rare;
 
     /* imputation parameters */
     bool impute, ap, gp;
@@ -38,7 +38,7 @@ typedef struct {
     /* general parameters */
     bool em;
     float ne, err, window, overlap, buffer;
-    int window_markers, nthreads;
+    int nthreads;
     bool no_nthreads;      /* nthreads= was absent */
     int64_t seed;
 

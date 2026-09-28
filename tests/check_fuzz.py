@@ -17,8 +17,7 @@ must either succeed in both with the same VCF (without ##source and
 exit code 1 and a message line (as every C error exit does). A C crash
 or abort never counts as failing alike. Where the two messages differ the
 input still passes, and the summary counts it under "messages differ".
-Where Java repeats a window that cannot advance without end, C must exit 1
-with its "does not advance" error. A failure is shrunk to a small input,
+A failure is shrunk to a small input,
 whose files are copied to build/fuzz-fail with the two commands.
 
 The invalid-parameter examples change one parameter of such an input so that
@@ -59,7 +58,6 @@ JAR = os.environ.get("JAR", str(ROOT / "data" / "beagle.27Feb25.75f.jar"))
 JAVA = os.environ.get("JAVA", "java")
 FAIL_DIR = ROOT / "build" / "fuzz-fail"
 REGRESSIONS = ROOT / "tests" / "fuzz-regressions"
-STALL = "does not advance"
 # bgen= must fail when no record is left for the BGEN (as plink2 does), after
 # writing the VCF.
 BGEN_EMPTY = "no variants remaining after the bgen filters"
@@ -132,14 +130,12 @@ OUT_OF_BOUNDS = [
     ("imp-segment", "0"),
     ("imp-step", "0"),
     ("imp-nsteps", "0"),
-    ("initial-lr", "0.5"),
     ("step-scale", "0"),
     ("rare", "0.6"),
     ("cluster", "-0.5"),
     ("ne", "0"),
     ("err", "-1"),
     ("nthreads", "0"),
-    ("window-markers", "99999"),
     ("seed", "1e3"),
     ("window", "abc"),
     ("nthreads", "2.5"),
@@ -317,16 +313,13 @@ def check(s):
             c_args.append(f"bgen={s['bgen']}")
         c = [BEAGLE, *c_args]
         rc_c, h_c, log_c = run(c, d / "c")
-        java_loops = rc_j is None and rc_c == 1 and STALL in log_c
         bgen_empty = rc_j == 0 and rc_c == 1 and BGEN_EMPTY in log_c and h_c == h_j is not None
         # Both fail alike when Java prints an error line and C exits 1 with a
         # message. A C signal (negative exit) or abort is never agreement.
         messages = error_messages(log_j, log_c) if rc_j not in (None, 0) and rc_c == 1 else None
         both_succeed = rc_j == 0 and rc_c == 0 and h_j == h_c and h_j is not None
-        ok = java_loops or bgen_empty or messages is not None or both_succeed
-        if java_loops:
-            OUTCOMES["Java repeats a window without end; C exits: does not advance"] += 1
-        elif bgen_empty:
+        ok = bgen_empty or messages is not None or both_succeed
+        if bgen_empty:
             OUTCOMES["same VCF; no record left for the BGEN, so bgen= fails"] += 1
         elif both_succeed:
             OUTCOMES["both succeed, same VCF"] += 1

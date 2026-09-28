@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2014-2021 Brian L. Browning
- * Ported to C from Beagle 5.5 (27Feb25) main/RunStats.java; modified 2026.
+ * Ported to C from Beagle 5.4 (29Oct24) main/RunStats.java; modified 2026.
  *
  * This file is part of fast-beagle, a C port of Beagle. It is free software:
  * you can redistribute it and/or modify it under the terms of the GNU General
@@ -39,7 +39,7 @@ void run_stats_open(run_stats *rs, const par *p, const char *program);
 /* printSampleSummary */
 void run_stats_sample_summary(run_stats *rs, int n_ref_samples, int n_targ_samples);
 /* printWindowUpdate */
-void run_stats_window_update(run_stats *rs, const window *w, const fixed_phase_data *fpd);
+void run_stats_window_update(run_stats *rs, const window *w);
 /* printStage1Info: call after the iteration pd->it has run, before it advances. */
 void run_stats_stage1(run_stats *rs, const phase_data *pd, int64_t nanos);
 /* printStage2Info */

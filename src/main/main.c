@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2014-2021 Brian L. Browning
- * Ported to C from Beagle 5.5 (27Feb25) main/Main.java; modified 2026.
+ * Ported to C from Beagle 5.4 (29Oct24) main/Main.java; modified 2026.
  *
  * This file is part of fast-beagle, a C port of Beagle. It is free software:
  * you can redistribute it and/or modify it under the terms of the GNU General
@@ -150,11 +150,11 @@ int main(int argc, char **argv) {
         cum_targ_markers += w->indices.n_targ_markers - w->indices.targ_overlap_end;
         cum_markers += w->indices.n_markers - w->indices.overlap_end;
         window_writer_begin_window(&ww, w);
+        run_stats_window_update(&rs, w);
         fixed_phase_data fpd;
         fixed_phase_data_init(&fpd, &p, sliding_window_gen_map(sw), w, overlap.n_markers,
                 (const int *const *)overlap.alleles);
         if (trace_on()) fixed_phase_data_trace(&fpd);
-        run_stats_window_update(&rs, w, &fpd);
         int64_t seed = jrandom_next_long(&rand);
         bool impute = w->indices.n_markers != w->indices.n_targ_markers;
         phased_overlap next;
