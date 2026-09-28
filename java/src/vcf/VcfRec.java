@@ -24,6 +24,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.stream.IntStream;
 
 /**
  * <p>Class {@code VcfRec} represents a VCF record.  If one allele in a
@@ -36,6 +37,16 @@ import java.util.Map;
  */
 public final class VcfRec implements GTRec {
 
+    /**
+     * The VCF FORMAT code for log-scaled genotype likelihood data: "GL".
+     */
+    public static final String GL_FORMAT = "GL";
+
+    /**
+     * The VCF FORMAT code for phred-scaled genotype likelihood data: "PL".
+     */
+    public static final String PL_FORMAT = "PL";
+
     private static final int SAMPLE_OFFSET = 9;
 
     private final VcfHeader vcfHeader;
@@ -47,6 +58,7 @@ public final class VcfRec implements GTRec {
     private final Map<String, Integer> formatMap;
 
     private final GTRec gtRec;
+    private final float[] gls;
 
     /**
      * Returns the VCF genotype index for the specified pair of alleles.
@@ -68,15 +80,35 @@ public final class VcfRec implements GTRec {
         }
     }
 
+    private VcfRec(VcfHeader vcfHeader, String vcfRecord, boolean useGT,
+            boolean useGL, float maxLR) {
+        this.vcfHeader = vcfHeader;
+        this.vcfRecord = vcfRecord;
+        this.delimiters = delimiters(vcfHeader, vcfRecord);
+        this.marker = new BasicMarker(vcfRecord);
+        this.formatFields = formats(format());
+        this.formatMap = formatToIndexMap(vcfHeader, vcfRecord, formatFields);
+        boolean storeGT = useGT && formatMap.containsKey("GT");
+        boolean storeGL = useGL &&
+                (formatMap.containsKey("PL") || formatMap.containsKey("GL"));
+        if (storeGT==false && storeGL==false) {
+            String s = "Missing required data: " + vcfRecord;
+            throw new IllegalArgumentException(s);
+        }
+        this.gtRec = storeGT ?
+                new BasicGTRec(new VcfRecGTParser(vcfHeader, vcfRecord)) : null;
+        this.gls = storeGL ? likelihoodsFromGL(maxLR) : null;
+    }
+
     /**
-     * Constructs a new {@code VcfRec} instance from a VCF record.
+     * Constructs and returns a new {@code VcfRec} instance from a
+     * VCF record and its GT format subfield data
      *
      * @param vcfHeader meta-information lines and header line for the
      * specified VCF record.
      * @param vcfRecord a VCF record with a GL format field corresponding to
      * the specified {@code vcfHeader} object
-     * @param markerParser a filter for a VCF record's ID, QUAL, FILTER, and
-     * INFO subfields
+     * @return a new {@code VcfRec} instance
      *
      * @throws IllegalArgumentException if the VCF record does not have a
      * GT format field
@@ -86,22 +118,80 @@ public final class VcfRec implements GTRec {
      * {@code vcfHeader.nHeaderFields()} tab-delimited fields in the
      * specified VCF record
      * @throws NullPointerException if
-     * {@code (vcfHeader == null) || (vcfRecord == null) || (markerParser == null)}
+     * {@code vcfHeader == null || vcfRecord == null}
      */
-    public VcfRec(VcfHeader vcfHeader, String vcfRecord,
-            MarkerParser markerParser) {
-        this.vcfHeader = vcfHeader;
-        this.vcfRecord = vcfRecord;
-        this.delimiters = delimiters(vcfHeader, vcfRecord);
-        this.marker = Marker.instance(vcfRecord, markerParser);
-        this.formatFields = formats(format());
-        this.formatMap = formatToIndexMap(vcfHeader, vcfRecord, formatFields);
-        if (formatMap.containsKey("GT")==false) {
-            String s = "Missing FORMAT/GT field: " + vcfRecord;
-            throw new IllegalArgumentException(s);
-        }
-        this.gtRec = new BasicGTRec(
-                new VcfRecGTParser(vcfHeader, vcfRecord, markerParser));
+    public static VcfRec fromGT(VcfHeader vcfHeader, String vcfRecord) {
+        boolean useGT = true;
+        boolean useGL = false;
+        float maxLR = Float.NaN;
+        return new VcfRec(vcfHeader, vcfRecord, useGT, useGL, maxLR);
+    }
+
+    /**
+     * Constructs and returns a new {@code VcfRec} instance from a
+     * VCF record and its GL or PL format subfield data. If both
+     * GL and PL format subfields are present, the GL format field will be used.
+     * If the maximum normalized genotype likelihood is 1.0 for a sample,
+     * then any other genotype likelihood for the sample that is less than
+     * {@code lrThreshold} is set to 0.
+     *
+     * @param vcfHeader meta-information lines and header line for the
+     * specified VCF record
+     * @param vcfRecord a VCF record with a GL format field corresponding to
+     * the specified {@code vcfHeader} object
+     * @param maxLR the maximum likelihood ratio
+     * @return a new {@code VcfRec} instance
+     *
+     * @throws IllegalArgumentException if the VCF record does not have a
+     * GL format field
+     * @throws IllegalArgumentException if a VCF record format error is
+     * detected
+     * @throws IllegalArgumentException if there are not
+     * {@code vcfHeader.nHeaderFields()} tab-delimited fields in the
+     * specified VCF record
+     * @throws NullPointerException if
+     * {@code vcfHeader == null || vcfRecord == null}
+     */
+    public static VcfRec fromGL(VcfHeader vcfHeader, String vcfRecord,
+            float maxLR) {
+        boolean useGT = false;
+        boolean useGL = true;
+        return new VcfRec(vcfHeader, vcfRecord, useGT, useGL, maxLR);
+    }
+
+    /**
+     * Constructs and returns a new {@code VcfRec} instance from a VCF
+     * record and its GT, GL, and PL format subfield data.
+     * If the GT format subfield is present and non-missing, the
+     * GT format subfield is used to determine genotype likelihoods.  Otherwise
+     * the GL or PL format subfield is used to determine genotype likelihoods.
+     * If both the GL and PL format subfields are present, only the GL format
+     * subfield will be used.  If the maximum normalized genotype likelihood
+     * is 1.0 for a sample, then any other genotype likelihood for the sample
+     * that is less than {@code lrThreshold} is set to 0.
+     *
+     * @param vcfHeader meta-information lines and header line for the
+     * specified VCF record
+     * @param vcfRecord a VCF record with a GT, a GL or a PL format field
+     * corresponding to the specified {@code vcfHeader} object
+     * @param maxLR the maximum likelihood ratio
+     * @return a new {@code VcfRec}
+     *
+     * @throws IllegalArgumentException if the VCF record does not have a
+     * GT, GL, or PL format field
+     * @throws IllegalArgumentException if a VCF record format error is
+     * detected
+     * @throws IllegalArgumentException if there are not
+     * {@code vcfHeader.nHeaderFields()} tab-delimited fields in the
+     * specified VCF record
+     * @throws NullPointerException if
+     * {@code vcfHeader == null || vcfRecord == null}
+     */
+    public static VcfRec fromGTGL(VcfHeader vcfHeader, String vcfRecord,
+            float maxLR) {
+        boolean useGT = true;
+        boolean useGL = true;
+        return new VcfRec(vcfHeader, vcfRecord, useGT, useGL, maxLR);
     }
 
     private static int[] delimiters(VcfHeader vcfHeader, String vcfRecord) {
@@ -131,6 +221,22 @@ public final class VcfRec implements GTRec {
         throw new IllegalArgumentException(s);
     }
 
+    /**
+     * Return {@code true} if all characters in the specified
+     * string are letters or digits and returns {@code false} otherwise.
+     * @param s a string.
+     * @return {@code true} if all characters in the specified
+     * string are letters or digits and returns {@code false} otherwise.
+     */
+    private static boolean isAlphanumeric(String s) {
+        for (int j=0, n=s.length(); j<n; ++j) {
+            if (Character.isLetterOrDigit(s.charAt(j))==false) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     private String[] formats(String formats) {
         if (formats.equals(Const.MISSING_DATA_STRING) || formats.isEmpty()) {
             String s = "missing format field: " + vcfRecord;
@@ -142,6 +248,13 @@ public final class VcfRec implements GTRec {
                 String s = "missing format in format subfield list: " + vcfRecord;
                 throw new IllegalArgumentException(s);
             }
+            //  Commented-out alpha-numeric check to avoid throwing an
+            //    exception when the FORMAT subfield code is not alphanumeric.
+//            if (isAlphanumeric(f)==false) {
+//                 String s = "format subfield must be alphanumeric (" + f + "): "
+//                         + vcfRecord;
+//                 throw new IllegalArgumentException(s);
+//            }
         }
         return fields;
     }
@@ -172,6 +285,99 @@ public final class VcfRec implements GTRec {
             ++start;
         }
         return start;
+    }
+
+    private float[] likelihoodsFromGL(float maxLR) {
+        float minLR = 1f/maxLR;
+        int nGt = this.marker.nGenotypes();
+        String[] dataGL = hasFormat(GL_FORMAT) ? formatData(GL_FORMAT) : null;
+        String[] dataPL = hasFormat(PL_FORMAT) ? formatData(PL_FORMAT) : null;
+        double[] doubleLike = new double[nGt];
+        float[] floatLike = new float[vcfHeader.samples().size()*nGt];
+        int floatLikeIndex = 0;
+        for (int s=0, n=samples().size(); s<n; ++s) {
+            Arrays.fill(doubleLike, 0.0);
+            if (dataGL != null) {
+                String[] fields = getGL(GL_FORMAT, dataGL, s, nGt);
+                for (int k=0; k<nGt; ++k) {
+                    doubleLike[k] = GL2Like(fields[k]);
+                }
+            }
+            else if (dataPL != null) {
+                String[] fields = getGL(PL_FORMAT, dataPL, s, nGt);
+                for (int k=0; k<nGt; ++k) {
+                    doubleLike[k] = PL2Like(fields[k]);
+                }
+            }
+            rescaleToMax1(doubleLike);
+            for (int gt=0; gt<nGt; ++gt) {
+                if (doubleLike[gt] >= minLR) {
+                    floatLike[floatLikeIndex] = (float) doubleLike[gt];
+                }
+                ++floatLikeIndex;
+            }
+        }
+        assert floatLikeIndex==floatLike.length;
+        return floatLike;
+    }
+
+    private String[] getGL(String format, String[] sampleData,
+            int sample, int nGt) {
+        if (sampleData[sample].equals(Const.MISSING_DATA_STRING)) {
+            String[] fields = new String[nGt];
+            Arrays.fill(fields, "0");
+            return fields;
+        }
+        else {
+            String[] subfields = StringUtil.getFields(sampleData[sample],
+                    Const.comma);
+            if (subfields.length!=nGt) {
+                String s = "unexpected number of " + format + " subfields: "
+                        + sampleData(sample, format) + Const.nl
+                        + vcfRecord;
+                throw new IllegalArgumentException(s);
+            }
+            for (String subfield : subfields) {
+                if (subfield.equals(Const.MISSING_DATA_STRING)) {
+                    String s = "missing subfield in " + format + " field: "
+                        + sampleData(sample, format) + Const.nl
+                        + vcfRecord;
+                    throw new IllegalArgumentException(s);
+                }
+            }
+            return subfields;
+        }
+    }
+
+    private static double GL2Like(String gl) {
+        return Math.pow(10.0, Double.parseDouble(gl));
+    }
+
+    private static double PL2Like(String pl) {
+        return Math.pow(10.0, -Integer.parseInt(pl)/10.0);
+    }
+
+    private static void rescaleToMax1(double[] like) {
+        double max = max(like);
+        if (max == 0.0f) {
+            Arrays.fill(like, 1.0);
+        }
+        else {
+            for (int j=0; j<like.length; ++j) {
+                like[j] /= max;
+            }
+        }
+    }
+
+    /* returns max{double[] like, double 0.0} */
+    private static double max(double[] like) {
+        double max = 0.0;
+        for (int k=0; k<like.length; ++k) {
+            if (like[k] > max) {
+                max = like[k];
+            }
+        }
+        return max;
     }
 
     /**
@@ -375,8 +581,30 @@ public final class VcfRec implements GTRec {
     }
 
     @Override
+    public int allele1(int sample) {
+        return gtRec == null ? -1 : gtRec.allele1(sample);
+    }
+
+    @Override
+    public int allele2(int sample) {
+        return gtRec == null ? -1 : gtRec.allele2(sample);
+    }
+
+    @Override
     public int get(int hap) {
         return gtRec == null ? -1 : gtRec.get(hap);
+    }
+
+    @Override
+    public int[] alleles() {
+        if (gtRec==null) {
+            return IntStream.range(0, size())
+                    .map(h -> -1)
+                    .toArray();
+        }
+        else {
+            return gtRec.alleles();
+        }
     }
 
     @Override
@@ -388,6 +616,59 @@ public final class VcfRec implements GTRec {
     public boolean isPhased() {
         return  gtRec == null ? false : gtRec.isPhased();
     }
+
+
+    /**
+     * Returns the probability of the observed data for the specified sample
+     * if the specified pair of ordered alleles is the true ordered genotype.
+     * Returns {@code 1.0f} if the corresponding genotype determined by the
+     * {@code isPhased()}, {@code allele1()}, and {@code allele2()} methods
+     * is consistent with the specified ordered genotype, and returns
+     * {@code 0.0f} otherwise.
+     * @param sample the sample index
+     * @param allele1 the first allele index
+     * @param allele2 the second allele index
+     * @return the probability of the observed data for the specified sample
+     * if the specified pair of ordered alleles is the true ordered genotype.
+     *
+     * @throws IndexOutOfBoundsException if
+     * {@code samples < 0 || samples >= this.size()}
+     * @throws IndexOutOfBoundsException if
+     * {@code allele1 < 0 || allele1 >= this.marker().nAlleles()}
+     * @throws IndexOutOfBoundsException if
+     * {@code allele2 < 0 || allele2 >= this.marker().nAlleles()}
+     */
+    public float gl(int sample, int allele1, int allele2) {
+        if (allele1<0 || allele1>=marker.nAlleles()) {
+            throw new IllegalArgumentException(String.valueOf(allele1));
+        }
+        if (allele2<0 || allele2>=marker.nAlleles()) {
+            throw new IllegalArgumentException(String.valueOf(allele2));
+        }
+        if (gtRec==null
+                || (gls!=null
+                && (gtRec.allele1(sample) == -1 || gtRec.allele2(sample) == -1))) {
+            int n = marker.nAlleles();
+            if (allele1 < 0 || allele2 < 0 || allele1 >= n || allele2 >= n) {
+                String s = allele1 + " " + allele2 + " " + n;
+                throw new ArrayIndexOutOfBoundsException(s);
+            }
+            int gtIndex = VcfRec.gtIndex(allele1, allele2);
+            return gls[(sample*marker.nGenotypes()) + gtIndex];
+        }
+        else {
+            int a1 = gtRec.allele1(sample);
+            int a2 = gtRec.allele2(sample);
+            if ((a1<0 || a2<0) || (a1==allele1 && a2==allele2)
+                    || (isPhased(sample)==false && (a1==allele2 && a2==allele1))) {
+                return 1f;
+            }
+            else {
+                return 0f;
+            }
+        }
+    }
+
 
     @Override
     public int size() {

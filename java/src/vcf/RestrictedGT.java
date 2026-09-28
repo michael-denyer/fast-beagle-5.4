@@ -108,6 +108,17 @@ public class RestrictedGT implements GT {
     }
 
     @Override
+    public int allele1(int marker, int sample) {
+        return gt.allele1(inclusionMap[marker], sample);
+    }
+
+    @Override
+    public int allele2(int marker, int sample) {
+        return gt.allele2(inclusionMap[marker], sample);
+    }
+
+
+    @Override
     public int allele(int marker, int hap) {
         return gt.allele(inclusionMap[marker], hap);
     }

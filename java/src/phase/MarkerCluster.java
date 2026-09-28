@@ -20,8 +20,8 @@ package phase;
 
 import blbutil.FloatArray;
 import ints.IntArray;
+import ints.IntList;
 import ints.WrappedIntArray;
-import phase.SamplePhase.ClustType;
 
 /**
  * <p>Class {@code MarkerCluster} represents a partition of markers into
@@ -33,9 +33,10 @@ import phase.SamplePhase.ClustType;
  */
 public class MarkerCluster {
 
-    private final SamplePhase samplePhase;
     private final int[] clusterToEnd;
-    private final IntArray unphHetClusters;
+    private final IntArray hetClusters;
+    private final int nMissingGTClusters;
+    private final boolean[] clustHasMissingGT;
     private final FloatArray pRecomb;
 
     /**
@@ -48,30 +49,58 @@ public class MarkerCluster {
      * @throws NullPointerException if {@code phaseData == null}
      */
     public MarkerCluster(PhaseData phaseData, int sample) {
-        this.samplePhase = phaseData.estPhase().get(sample);
+        SamplePhase samplePhase = phaseData.estPhase().get(sample);
         this.clusterToEnd = samplePhase.clustEnds();
-        this.unphHetClusters = unphHetClusters(samplePhase);
+        this.hetClusters = unphHetClusters(samplePhase, clusterToEnd);
+        boolean[] hasMissingGT = new boolean[clusterToEnd.length];
+        this.nMissingGTClusters = setClustHasMissingGT(samplePhase.missing(),
+                clusterToEnd, hasMissingGT);
+        this.clustHasMissingGT = hasMissingGT;
         this.pRecomb = pClustRecomb(phaseData.pRecomb(), clusterToEnd);
     }
 
-    private static IntArray unphHetClusters(SamplePhase samplePhase) {
-        int nUnph = samplePhase.nUnphased();
-        int nClusters = samplePhase.nClusters();
-        int[] unphHetClusters = new int[nUnph];
-        int index = 0;
-        for (int c=0; c<nClusters; ++c) {
-            if (samplePhase.clustType(c)==ClustType.UNPHASED_HET) {
-                unphHetClusters[index++] = c;
+    private static IntArray unphHetClusters(SamplePhase samplePhase,
+            int[] clustToEnd) {
+        IntArray unph = samplePhase.unphased();
+        int nUnph = unph.size();
+        IntList hetClusters = new IntList(nUnph);
+        int unphIndex = 0;
+        int nextUnph = unphIndex<nUnph ? unph.get(unphIndex++) : Integer.MAX_VALUE;
+        for (int j=0; j<clustToEnd.length; ++j) {
+            int clustEnd = clustToEnd[j];
+            if (nextUnph<clustEnd) {
+                hetClusters.add(j);
+                nextUnph = unphIndex<nUnph ? unph.get(unphIndex++) : Integer.MAX_VALUE;
+                while (nextUnph<clustEnd) {
+                    nextUnph = unphIndex<nUnph ? unph.get(unphIndex++) : Integer.MAX_VALUE;
+                }
             }
         }
-        return new WrappedIntArray(unphHetClusters);
+        return new WrappedIntArray(hetClusters);
+    }
+
+    private static int setClustHasMissingGT(IntArray missGTList,
+            int[] cluster2End, boolean[] clustHasMissingGT) {
+        int missCnt = 0;
+        int i = 0;
+        int nMissGT = missGTList.size();
+        for (int c=0; c<cluster2End.length; ++c) {
+            int end = cluster2End[c];
+            for ( ; i<nMissGT && missGTList.get(i)<end; ++i) {
+                clustHasMissingGT[c] = true;
+            }
+            if (clustHasMissingGT[c]) {
+                ++missCnt;
+            }
+        }
+        return missCnt;
     }
 
     private static FloatArray pClustRecomb(FloatArray pRecomb,
             int[] cluster2End) {
         int nClusters = cluster2End.length;
         float[] pClustRecomb = new float[nClusters];
-        int start = cluster2End[0];
+        int start = 0;
         for (int j=1; j<nClusters; ++j) {
             int end = cluster2End[j];
             float pNoRecomb = 1.0f;
@@ -82,14 +111,6 @@ public class MarkerCluster {
             start = end;
         }
         return new FloatArray(pClustRecomb);
-    }
-
-    /**
-     * Return the estimated haplotypes.
-     * @return the estimated haplotypes
-     */
-    public SamplePhase samplePhase() {
-        return samplePhase;
     }
 
     /**
@@ -142,87 +163,27 @@ public class MarkerCluster {
      * @return a sorted list of cluster indices in increasing order for which
      * the cluster contains an unphased heterozygote
      */
-    public IntArray unphasedHetClusters() {
-        return unphHetClusters;
+    public IntArray unphClusters() {
+        return hetClusters;
     }
 
     /**
-     * Returns {@code true} if the cluster has an unphased heterozygous genotype,
+     * Returns {@code true} if the cluster has at least one missing genotype,
      * and returns {@code false} otherwise.
-     * @param cluster a cluster index
-     * @return {@code true} if the cluster has an unphased heterozygous genotype,
-     * and returns {@code false} otherwise
+     * @param index a cluster index
+     * @return {@code true} if the cluster has at least one missing genotype
      * @throws IndexOutOfBoundsException if
-     * {@code cluster < 0 || cluster >= this.nClusters()}
+     * {@code index < 0 || index >= this.nClusters()}
      */
-    public boolean isUnphasedHet(int cluster) {
-        return samplePhase.clustType(cluster)==ClustType.UNPHASED_HET;
+    public boolean clustHasMissingGT(int index) {
+        return clustHasMissingGT[index];
     }
 
     /**
-     * Returns {@code true} if the cluster has a phased heterozygous genotype,
-     * and returns {@code false} otherwise.
-     * @param cluster a cluster index
-     * @return {@code true} if the cluster has a phased heterozygous genotype,
-     * and returns {@code false} otherwise
-     * @throws IndexOutOfBoundsException if
-     * {@code cluster < 0 || cluster >= this.nClusters()}
+     * Returns the number of clusters containing at least one missing genotype.
+     * @return the number of clusters with at least one missing genotype
      */
-    public boolean isPhasedHet(int cluster) {
-        return samplePhase.clustType(cluster)==ClustType.PHASED_HET;
-    }
-
-    /**
-     * Returns {@code true} if the cluster is a heterozygous genotype,
-     * and returns {@code false} otherwise.
-     * @param cluster a cluster index
-     * @return {@code true} if the cluster is a heterozygous genotype,
-     * and {@code false} otherwise
-     * @throws IndexOutOfBoundsException if
-     * {@code cluster < 0 || cluster >= this.nClusters()}
-     */
-    public boolean isHet(int cluster) {
-        ClustType clustType = samplePhase.clustType(cluster);
-        return clustType==ClustType.UNPHASED_HET
-                || clustType==ClustType.PHASED_HET;
-    }
-
-        /**
-     * Returns {@code true} if the cluster has a missing genotype, and
-     * returns {@code false} otherwise.
-     * @param cluster a cluster index
-     * @return {@code true} if the cluster has a missing genotype
-     * @throws IndexOutOfBoundsException if
-     * {@code cluster < 0 || cluster >= this.nClusters()}
-     */
-    public boolean isMissingGT(int cluster) {
-        return samplePhase.clustType(cluster) == ClustType.MISSING_GT;
-    }
-
-    /**
-     * Returns {@code true} if the cluster is a masked heterozygote genotype,
-     * and returns {@code false} otherwise.
-     * @param cluster a cluster index
-     * @return {@code true} if the cluster is a masked heterozygote genotype
-     * @throws IndexOutOfBoundsException ift
-     * {@code cluster < 0 || cluster >= this.nClusters()}
-     */
-    public boolean isMaskedHet(int cluster) {
-        return samplePhase.clustType(cluster) == ClustType.MASKED_HET;
-    }
-
-    /**
-     * Returns {@code true} if the cluster has a missing genotype or a
-     * masked heterozygote genotype, and returns {@code false} otherwise.
-     * @param cluster a cluster index
-     * @return {@code true} if the cluster has a missing genotype or a
-     * masked heterozygote genotype, and returns {@code false} otherwise
-     * @throws IndexOutOfBoundsException if
-     * {@code cluster < 0 || cluster >= this.nClusters()}
-     */
-    public boolean isMissingGtOrMaskedHet(int cluster) {
-        ClustType clustType = samplePhase.clustType(cluster);
-        return clustType == ClustType.MISSING_GT
-                || clustType==ClustType.MASKED_HET;
+    public int nMissingGTClusters() {
+        return nMissingGTClusters;
     }
 }

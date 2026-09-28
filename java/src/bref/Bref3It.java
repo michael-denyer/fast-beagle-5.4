@@ -49,7 +49,7 @@ import vcf.Samples;
 public final class Bref3It implements SampleFileIt<RefGTRec> {
 
     private final File brefFile;
-    private final DataInputStream dataIn;
+    private final DataInputStream bref;
     private final Bref3Reader bref3Reader;
     private final Deque<RefGTRec> buffer;
 
@@ -62,35 +62,34 @@ public final class Bref3It implements SampleFileIt<RefGTRec> {
      * line of the specified bref file
      */
     public Bref3It(File brefFile) {
-        this(brefFile, Filter.acceptAllFilter(), Filter.acceptAllFilter());
+        this(brefFile, Filter.acceptAllFilter());
     }
 
     /**
      * Constructs a new {@code Bref4It} instance.
-     * @param brefFile a bref v3 file or {@code null} if the bref3 file
-     * is to be read from stdin
-     * @param sampleFilter a sample filter
-     * @param markerFilter a marker filter
+     * @param brefFile a bref v4 file
+     * @param markerFilter a marker filter or {@code null}
      *
-     * @throws IllegalArgumentException if a format error is detected in
-     * the specified bref v3 file
-     * @throws NullPointerException if
-     * {@code (sampleFilter == null) || (markerFilter == null)}
+     * @throws IllegalArgumentException if a format error is detected in a
+     * line of the specified bref v3 file
+     * @throws NullPointerException if {@code file == null}
      */
-    public Bref3It(File brefFile, Filter<String> sampleFilter,
-            Filter<Marker> markerFilter) {
-        InputStream dis;
+    public Bref3It(File brefFile, Filter<Marker> markerFilter) {
+        if (markerFilter == null) {
+            markerFilter = Filter.acceptAllFilter();
+        }
+        InputStream is = null;
         if (brefFile==null) {
-            dis = new BufferedInputStream(System.in);
+            is = new BufferedInputStream(System.in);
         }
         else {
-            dis = FileUtil.bufferedInputStream(brefFile);
+            is = FileUtil.bufferedInputStream(brefFile);
         }
         this.brefFile = brefFile;
-        this.dataIn = new DataInputStream(dis);
-        this.bref3Reader = new Bref3Reader(brefFile, dataIn, sampleFilter, markerFilter);
+        this.bref = new DataInputStream(is);
+        this.bref3Reader = new Bref3Reader(bref, markerFilter);
         this.buffer = new ArrayDeque<>(500);
-        bref3Reader.readBlock(dataIn, buffer);
+        bref3Reader.readBlock(bref, buffer);
     }
 
     /**
@@ -115,7 +114,7 @@ public final class Bref3It implements SampleFileIt<RefGTRec> {
         }
         RefGTRec rec = buffer.removeFirst();
         if (buffer.isEmpty()) {
-            bref3Reader.readBlock(dataIn, buffer);
+            bref3Reader.readBlock(bref, buffer);
         }
         return rec;
     }
@@ -123,7 +122,7 @@ public final class Bref3It implements SampleFileIt<RefGTRec> {
     @Override
     public void close() {
         try {
-            dataIn.close();
+            bref.close();
         } catch (IOException ex) {
             Utilities.exit(ex, "Error closing file");
         }

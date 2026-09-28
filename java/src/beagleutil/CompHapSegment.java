@@ -30,42 +30,42 @@ public class CompHapSegment implements Comparable<CompHapSegment> {
 
     private int hap;
     private int startMarker;
-    private int lastIbsStep;
+    private int ibsStep;
     private final int compHapIndex;
 
     /**
      * Constructs a new {@code CompHapSegment} from the specified data.
      * @param hap the haplotype
-     * @param startMarker the index of the first marker in the haplotype segment
-     * @param ibsStep the last recorded IBS step
+     * @param start the index of the first marker in the haplotype segment
+     * @param ibsStep the last recorded IBS ibsStep
      * @param compHapIndex the composite haplotype index
      */
-    public CompHapSegment(int hap, int startMarker, int ibsStep, int compHapIndex) {
+    public CompHapSegment(int hap, int start, int ibsStep, int compHapIndex) {
         this.hap = hap;
-        this.startMarker = startMarker;
-        this.lastIbsStep = ibsStep;
+        this.startMarker = start;
+        this.ibsStep = ibsStep;
         this.compHapIndex = compHapIndex;
     }
 
     /**
      * Update the haplotype, the first marker in the haplotype segment,
-     * and the last recorded IBS step.
+     * and the last recorded IBS ibsStep.
      * @param hap the haplotype
-     * @param startMarker the first marker in the haplotype segment
-     * @param lastIbsStep the last recorded IBS step
+     * @param start the index of the first marker in the haplotype segment
+     * @param ibsStep the last recorded IBS ibsStep
      */
-    public void updateSegment(int hap, int startMarker, int lastIbsStep) {
+    public void updateSegment(int hap, int start, int ibsStep) {
         this.hap = hap;
-        this.startMarker = startMarker;
-        this.lastIbsStep = lastIbsStep;
+        this.startMarker = start;
+        this.ibsStep = ibsStep;
     }
 
     /**
-     * Updates the last recorded IBS step to the specified value
-     * @param ibsStep the last recorded IBS Step
+     * Updates the last recorded IBS ibsStep to the specified value
+     * @param ibsStep the last recorded IBS ibsStep
      */
-    public void setLastIbsStep(int ibsStep) {
-        this.lastIbsStep = ibsStep;
+    public void updateStep(int ibsStep) {
+        this.ibsStep = ibsStep;
     }
 
     /**
@@ -85,11 +85,11 @@ public class CompHapSegment implements Comparable<CompHapSegment> {
     }
 
     /**
-     * Returns the last recorded IBS step for {@code this.hap()}.
-     * @return the last recorded IBS step for {@code this.hap()}
+     * Returns the last recorded IBS ibsStep for {@code this.hap()}.
+     * @return the last recorded IBS ibsStep for {@code this.hap()}
      */
-    public int lastIbsStep() {
-        return lastIbsStep;
+    public int ibsStep() {
+        return ibsStep;
     }
 
     /**
@@ -110,8 +110,8 @@ public class CompHapSegment implements Comparable<CompHapSegment> {
      */
     @Override
     public int compareTo(CompHapSegment seg) {
-        if (this.lastIbsStep!=seg.lastIbsStep) {
-            return this.lastIbsStep<seg.lastIbsStep ? -1 : 1;
+        if (this.ibsStep!=seg.ibsStep) {
+            return this.ibsStep<seg.ibsStep ? -1 : 1;
         } else {
             return 0;
         }

@@ -32,7 +32,8 @@ import java.util.NoSuchElementException;
  *
  * @author Brian L. Browning {@code <browning@uw.edu>}
  */
-public final class IntervalVcfIt<E extends GTRec> implements SampleFileIt<E> {
+public final class IntervalVcfIt<E extends MarkerContainer>
+        implements SampleFileIt<E> {
 
     private final SampleFileIt<E> it;
     private final ChromInterval interval;
@@ -96,7 +97,7 @@ public final class IntervalVcfIt<E extends GTRec> implements SampleFileIt<E> {
         E nextRecord = null;
         while (nextRecord==null && it.hasNext()) {
             E candidate = it.next();
-            if (interval.contains(candidate.marker())) {
+            if (inInterval(interval, candidate.marker())) {
                 nextRecord = candidate;
             }
         }
@@ -107,11 +108,17 @@ public final class IntervalVcfIt<E extends GTRec> implements SampleFileIt<E> {
         E nextRecord = null;
         if (it.hasNext()) {
             E candidate = it.next();
-            if (interval.contains(candidate.marker())) {
+            if (inInterval(interval, candidate.marker())) {
                 nextRecord = candidate;
             }
         }
         return nextRecord;
+    }
+
+    private static boolean inInterval(ChromInterval interval, Marker marker) {
+        return (marker.chromIndex() == interval.chromIndex()
+                && interval.start() <= marker.pos()
+                && marker.pos() <= interval.inclEnd());
     }
 
     /**

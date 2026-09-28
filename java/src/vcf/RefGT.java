@@ -18,7 +18,6 @@
  */
 package vcf;
 
-import ints.IntArray;
 import java.util.Arrays;
 import java.util.stream.IntStream;
 
@@ -172,6 +171,16 @@ public class RefGT implements GT {
     @Override
     public boolean isPhased() {
         return true;
+    }
+
+    @Override
+    public int allele1(int marker, int hapPair) {
+        return recs[marker].allele1(hapPair);
+    }
+
+    @Override
+    public int allele2(int marker, int hapPair) {
+        return recs[marker].allele2(hapPair);
     }
 
     @Override

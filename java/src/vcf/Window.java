@@ -26,10 +26,10 @@ import java.util.Optional;
 import java.util.stream.IntStream;
 
 /**
- * Class {@code Window} represents a sliding window of target VCF records
+ * Interface {@code Window1} represents a sliding window of target VCF records
  * or a sliding window of reference and target VCF records.
  *
- * <p>Instances of class {@code Window} are immutable.</p>
+ * <p>Instances of class {@code Window1} are immutable.</p>
  *
  * @author Brian L. Browning {@code <browning@uw.edu>}
  */
@@ -57,7 +57,7 @@ public class Window {
     private final RefGT restrictRefGT;  // null if no reference haplotypes
 
     /**
-     * Constructs a new {@code Window} instance from the specified data.
+     * Constructs a new {@code Window1} instance from the specified data.
      * @param genMap the genetic map
      * @param windowIndex the window index
      * @param lastWindow {@code true} if this window is the last window
@@ -175,8 +175,8 @@ public class Window {
      * indices will be shifted by the number of target samples so that the
      * first reference sample will have an index equal to the number of target
      * samples. An element of the returned array will be empty and equal to
-     * {@code Window.ZERO_FREQ_ARRAY} if the allele has no carriers, and the
-     * the element will be empty and equal to {@code Window.HIGH_FREQ_ARRAY}
+     * {@code Window1.ZERO_FREQ_ARRAY} if the allele has no carriers, and the
+     * the element will be empty and equal to {@code Window1.HIGH_FREQ_ARRAY}
      * if the number of carriers of the allele exceeds the specified
      * maximum number of carriers.</p>
      *
@@ -204,9 +204,8 @@ public class Window {
         int nTargSamples = targGT.nSamples();
         int nRefSamples = (restrictRefGT!=null) ? restrictRefGT.nSamples() : 0;
         for (int s=0; s<nTargSamples; ++s) {
-            int hap1 = s << 1;
-            int a1 = targGT.allele(m, hap1);
-            int a2 = targGT.allele(m, hap1 | 0b1);
+            int a1 = targGT.allele1(m, s);
+            int a2 = targGT.allele2(m, s);
             if (a1>=0 && carriers[a1].size()<=maxCarriers) {
                 carriers[a1].add(s);
             }
@@ -216,9 +215,8 @@ public class Window {
         }
         if (restrictRefGT!=null) {
             for (int s=0; s<nRefSamples; ++s) {
-                int hap1 = s << 1;
-                int a1 = restrictRefGT.allele(m, hap1);
-                int a2 = restrictRefGT.allele(m, hap1 | 0b1);
+                int a1 = restrictRefGT.allele1(m, s);
+                int a2 = restrictRefGT.allele2(m, s);
                 if (a1>=0 && carriers[a1].size()<=maxCarriers) {
                     carriers[a1].add(nTargSamples + s);
                 }

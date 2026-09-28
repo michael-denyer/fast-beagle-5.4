@@ -58,31 +58,26 @@ public final class BitArrayRefGTRec implements GTRec {
                 .toArray(BitArrayRefGTRec[]::new);
     }
 
-//    NB: The toBitArrayRefGTRecs() method is commented-out because it is
-//        not currently used
-//    ToDo: decide whether to delete toBitArrayRefGTRecs() method after
-//          XRefGT amd BrefGT code stabilizes.
-//
-//    /**
-//     * Returns the phased, non-missing genotypes as a {@code BitArrayRefGTRec[]}
-//     * array.  This method converts column-major data into row-major data.
-//     * @param gt the genotype data
-//     * @param nThreads the maximum number of computational threads for object
-//     * construction
-//     * @return the phased, non-missing genotypes as a {@code BitArrayRefGTRec[]}
-//     * array
-//     * @throws IllegalArgumentException if {@code nThreads < 1}
-//     * @throws NullPointerException if {@code gt == null}
-//     */
-//    public static BitArrayRefGTRec[] toBitArrayRefGTRecs(XRefGT gt, int nThreads) {
-//        Markers markers = gt.markers();
-//        Samples samples = gt.samples();
-//        BitArray[] bitLists = gt.toBitLists(nThreads);
-//        return IntStream.range(0, bitLists.length)
-//                .parallel()
-//                .mapToObj(m -> new BitArrayRefGTRec(markers.marker(m), samples, bitLists[m]))
-//                .toArray(BitArrayRefGTRec[]::new);
-//    }
+    /**
+     * Returns the phased, non-missing genotypes as a {@code BitArrayRefGTRec[]}
+     * array.  This method converts column-major data into row-major data.
+     * @param gt the genotype data
+     * @param nThreads the maximum number of computational threads for object
+     * construction
+     * @return the phased, non-missing genotypes as a {@code BitArrayRefGTRec[]}
+     * array
+     * @throws IllegalArgumentException if {@code nThreads < 1}
+     * @throws NullPointerException if {@code gt == null}
+     */
+    public static BitArrayRefGTRec[] toBitArrayRefGTRecs(XRefGT gt, int nThreads) {
+        Markers markers = gt.markers();
+        Samples samples = gt.samples();
+        BitArray[] bitLists = gt.toBitLists(nThreads);
+        return IntStream.range(0, bitLists.length)
+                .parallel()
+                .mapToObj(m -> new BitArrayRefGTRec(markers.marker(m), samples, bitLists[m]))
+                .toArray(BitArrayRefGTRec[]::new);
+    }
 
     private BitArrayRefGTRec(Marker marker, Samples samples, BitArray alleles) {
         this.bitsPerAllele = marker.bitsPerAllele();
@@ -111,9 +106,20 @@ public final class BitArrayRefGTRec implements GTRec {
         return true;
     }
 
+
     @Override
     public boolean isPhased(int sample) {
         return true;
+    }
+
+    @Override
+    public int allele1(int sample) {
+        return allele(sample<<1);
+    }
+
+    @Override
+    public int allele2(int sample) {
+        return allele((sample<<1) | 0b1);
     }
 
     @Override
@@ -133,6 +139,13 @@ public final class BitArrayRefGTRec implements GTRec {
             mask <<= 1;
         }
         return allele;
+    }
+
+    @Override
+    public int[] alleles() {
+        return IntStream.range(0, size())
+                .map(h -> get(h))
+                .toArray();
     }
 
     /**

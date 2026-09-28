@@ -162,7 +162,8 @@ public class Stage2Haps {
     public GTRec[] toGTRecs(int start, int end) {
         return IntStream.range(start, end)
                 .parallel()
-                .mapToObj(m -> gtRec(m))
+                .boxed()
+                .map(m -> gtRec(m))
                 .toArray(GTRec[]::new);
     }
 
@@ -190,7 +191,7 @@ public class Stage2Haps {
         if (majorAllele == -1) { // can occur if all alleles are rare due to high missing rate
             setMajorAlleleToNull(hapIndices);
         }
-        return RefGTRec.alleleRefGTRec(markers.marker(m), targSamples, hapIndices);
+        return RefGTRec.hapCodedInstance(markers.marker(m), targSamples, hapIndices);
     }
 
     private int setMajorAlleleToNull(int[][] hapIndices) {

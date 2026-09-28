@@ -19,6 +19,11 @@
 package phase;
 
 /**
+ * To Do:
+ * - HmmUpdater: Add/update doc comments and add parameter checking
+ */
+
+/**
  * <p>Class {@code HmmUpdater} has static methods for next marker
  * updates of forward and backward HMM values.</p>
  *
@@ -34,9 +39,8 @@ public class HmmUpdater {
      * Updates the forward values and returns the sum of the updated forward
      * values.
      * @param fwd the array of forward values that will be updated
-     * @param pSwitch an array of probabilities of jumping to a 
-     * random HMM state
-     * @param fwdSum the sum of forward values in the specified array
+     * @param pSwitch the probability of jumping to a random state
+     * @param sum the sum of forward values in the specified array
      * @param pMismatch two element array with emission probabilities
      * for 0 or 1 mismatches between the observed and reference
      * haplotype alleles
@@ -49,30 +53,29 @@ public class HmmUpdater {
      * {@code (0 <= j && j < nStates)} and
      * {@code (mismatch[j] < 0 || mismatch[j] > 1)}
      * @throws IndexOutOfBoundsException if
-     * {@code (fwd.length < nStates || mismatch.length < nStates)}
+     * {@code fwd.length < nStates || mismatch.length < nStates}
      * @throws NullPointerException if
      * {@code fwd == null || pMismatch == null || mismatch == null}
      */
-    public static float fwdUpdate(float[] fwd, float fwdSum, float pSwitch,
+    public static float fwdUpdate(float[] fwd, float sum, float pSwitch,
             float[] pMismatch, byte[] mismatch, int nStates) {
         if (pMismatch.length!=2) {
             throw new IllegalArgumentException(String.valueOf(pMismatch.length));
         }
         float shift = pSwitch/nStates;
-        float scale = (1.0f - pSwitch)/fwdSum;
-        fwdSum = 0.0f;
+        float scale = (1.0f - pSwitch)/sum;
+        sum = 0.0f;
         for (int k=0; k<nStates; ++k) {
             fwd[k] = pMismatch[mismatch[k]]*(scale*fwd[k] + shift);
-            fwdSum += fwd[k];
+            sum += fwd[k];
         }
-        return fwdSum;
+        return sum;
     }
 
     /**
      * Updates the backward values.
      * @param bwd the array of backward values that will be updated
-     * @param pSwitch an array of probabilities of jumping to a 
-     * random HMM state
+     * @param pSwitch the probability of jumping to a random state
      * @param pMismatch two element array with emission probabilities
      * for 0 or 1 mismatches between alleles the observed and reference
      * haplotype alleles
@@ -84,11 +87,9 @@ public class HmmUpdater {
      * {@code (0 <= j && j < nStates)} and
      * {@code (mismatch[j] < 0 || mismatch[j] > 1)}
      * @throws IndexOutOfBoundsException if
-     * {@code (bwd.length < nStates || mismatch.length < nStates)}
+     * {@code bwd.length < nStates || mismatch.length < nStates}
      * @throws NullPointerException if
-     * {@code (bwd == null || mismatch == null)}
-     * @throws NullPointerException if
-     * {@code (bwd == null || pSwitch == null || pMismatch == null || mismatch == null)}
+     * {@code bwd == null || mismatch == null}
      */
     public static void bwdUpdate(float[] bwd, float pSwitch, float[] pMismatch,
             byte[] mismatch, int nStates) {

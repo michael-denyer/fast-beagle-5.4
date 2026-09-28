@@ -18,7 +18,6 @@
  */
 package vcf;
 
-import ints.IndexArray;
 import ints.IntArray;
 
 /**
@@ -48,15 +47,15 @@ public interface RefGTRec extends GTRec {
      * specified data
      * @throws NullPointerException if {@code rec == null}
      */
-    static RefGTRec alleleRefGTRec(RefGTRec rec) {
+    static RefGTRec alleleCodedInstance(RefGTRec rec) {
         if (rec.isAlleleCoded()) {
             return rec;
         }
         if (rec.marker().nAlleles()==2) {
-            return new TwoAlleleRefGTRec(rec);
+            return new LowMafRefDiallelicGTRec(rec);
         }
         else {
-            return new AlleleRefGTRec(rec);
+            return new LowMafRefGTRec(rec);
         }
     }
 
@@ -73,12 +72,12 @@ public interface RefGTRec extends GTRec {
      * VCF record
      * @throws NullPointerException if {@code gtp == null}
      */
-    static RefGTRec alleleRefGTRec(VcfRecGTParser gtp) {
+    static RefGTRec alleleCodedInstance(VcfRecGTParser gtp) {
         if (gtp.nAlleles()==2) {
-            return new TwoAlleleRefGTRec(gtp);
+            return new LowMafRefDiallelicGTRec(gtp);
         }
         else {
-            return new AlleleRefGTRec(gtp);
+            return new LowMafRefGTRec(gtp);
         }
     }
 
@@ -88,7 +87,7 @@ public interface RefGTRec extends GTRec {
      *
      * @param marker the marker
      * @param samples the samples
-     * @param alleleToHaps an array whose {@code j}-th element is {@code null}
+     * @param hapIndices an array whose {@code j}-th element is {@code null}
      * if {@code j} is the major allele and otherwise is a list of haplotypes
      * sorted in increasing order that carry the {@code j}-th allele.
      * If there is more than one allele with a maximal allele count, the
@@ -108,48 +107,27 @@ public interface RefGTRec extends GTRec {
      * @throws NullPointerException if
      * {@code marker == null || samples == null || hapIndices == null}
      */
-    static RefGTRec alleleRefGTRec(Marker marker, Samples samples,
-            int[][] alleleToHaps) {
+    static RefGTRec hapCodedInstance(Marker marker, Samples samples,
+            int[][] hapIndices) {
         if (marker.nAlleles()==2) {
-            return new TwoAlleleRefGTRec(marker, samples, alleleToHaps);
+            return new LowMafRefDiallelicGTRec(marker, samples, hapIndices);
         }
         else {
-            return new AlleleRefGTRec(marker, samples, alleleToHaps);
+            return new LowMafRefGTRec(marker, samples, hapIndices);
         }
     }
 
     /**
-     * Returns an array of length {@code this.marker().nAlleles()} whose
-     * {@code j}-th element is {@code null} or is a list of the
-     * haplotypes in increasing order that carry allele {@code j}. Exactly
-     * one element of the returned array must be {@code null}. It is
-     * recommended that the {@code null} element correspond to the major allele
-     * with lowest index, but this is not a requirement for implementations
-     * of this method.
-     *
-     * @return Returns an array of length {@code this..marker().nAlleles()} whose
-     * {@code j}-th element is {@code null} or is a list of the
-     * haplotypes in increasing order that carry allele {@code j}
+     * Returns an array whose {@code j}-th element is {@code null}
+     * if {@code j} is the major allele with lowest index, and otherwise is
+     * an array of indices of haplotypes that carry the {@code j}-th allele
+     * sorted in increasing order
+     * @return an array whose {@code j}-th element is {@code null}
+     * if {@code j} is the major allele with lowest index, and otherwise is
+     * an array of indices of haplotypes that carry the {@code j}-th allele
+     * sorted in increasing order
      */
-    int[][] alleleToHaps();
-
-    /**
-     * Returns an {@code IndexArray} with {@code this.size()} elements that maps
-     * haplotype to allele.
-     *
-     * @return an {@code IndexArray} with {@code this.size()} elements that maps
-     * haplotype to allele
-     */
-    IndexArray hapToAllele();
-
-    /**
-     * Returns the sum of the lengths of non-null rows of
-     * {@code this.alleleToHaps()}.
-     *
-     * @return the sum of the lengths of non-null rows of
-     * {@code this.alleleToHaps()}
-     */
-    int nAlleleCodedHaps();
+    int[][] hapIndices();
 
     /**
      * Returns {@code true}.
@@ -179,9 +157,8 @@ public interface RefGTRec extends GTRec {
     boolean isAlleleCoded();
 
     /**
-     * Returns the major allele with lowest index.
-     *
-     * @return the major allele with lowest index
+     * Returns the index of the major allele.
+     * @return the index of the major allele
      */
     int majorAllele();
 

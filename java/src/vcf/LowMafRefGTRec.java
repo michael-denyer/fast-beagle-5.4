@@ -18,40 +18,39 @@
  */
 package vcf;
 
-import ints.IndexArray;
 import ints.IntArray;
 import java.util.Arrays;
 import java.util.stream.IntStream;
 
 /**
- * <p>Class {@code AlleleRefGTRec} represent represents phased, non-missing
+ * <p>Class {@code LowMafRefGTRec} represent represents phased, non-missing
  * genotypes for a list of reference samples at a single marker.</p>
  *
- * <p>Class {@code AlleleRefGTRec} stores the haplotypes that carry each
+ * <p>Class {@code LowMafRefGTRec} stores the haplotypes that carry each
  * non-major allele.</p>
  *
- * <p>Instances of class {@code AlleleRefGTRec} are immutable.</p>
+ * <p>Instances of class {@code LowMemRefGTRec} are immutable.</p>
  *
  * @author Brian L. Browning {@code <browning@uw.edu>}
  */
-public final class AlleleRefGTRec implements RefGTRec {
+public final class LowMafRefGTRec implements RefGTRec {
 
     private final Marker marker;
     private final Samples samples;
     private final int nHaps;
     private final int majorAllele;
-    private final int[][] alleleToHaps;
+    private final int[][] hapIndices;
 
     /**
-     * Constructs a new {@code AlleleRefGTRec} instance from the specified data.
+     * Constructs a new {@code LowMafRefGTRec} instance from the specified data.
      *
      * @param rec the phased, non-missing genotype data
      * @throws NullPointerException if {@code rec == null}
      */
-    public AlleleRefGTRec(RefGTRec rec) {
-        this.alleleToHaps = rec.alleleToHaps();
+    public LowMafRefGTRec(RefGTRec rec) {
+        this.hapIndices = rec.hapIndices();
         int majAllele = 0;
-        while (alleleToHaps[majAllele]!=null) {
+        while (hapIndices[majAllele]!=null) {
             ++majAllele;
         }
         this.marker = rec.marker();
@@ -61,7 +60,7 @@ public final class AlleleRefGTRec implements RefGTRec {
     }
 
     /**
-     * Constructs a new {@code AlleleRefGTRc} instance from the specified
+     * Constructs a new {@code LowMafRefGTRc} instance from the specified
      * data.
      *
      * @param gtp a VCF record parser that extracts sample genotypes
@@ -71,14 +70,14 @@ public final class AlleleRefGTRec implements RefGTRec {
      * VCF record
      * @throws NullPointerException if {@code gtp == null}
      */
-    public AlleleRefGTRec(VcfRecGTParser gtp) {
+    public LowMafRefGTRec(VcfRecGTParser gtp) {
         this.marker = gtp.marker();
         this.samples = gtp.samples();
         this.nHaps = 2*gtp.nSamples();
-        this.alleleToHaps = gtp.nonMajRefIndices();
+        this.hapIndices = gtp.nonMajRefIndices();
         int majAl = -1;
-        for (int j=0; j<alleleToHaps.length; ++j) {
-            if (alleleToHaps[j]==null) {
+        for (int j=0; j<hapIndices.length; ++j) {
+            if (hapIndices[j]==null) {
                 majAl = j;
                 break;
             }
@@ -87,7 +86,7 @@ public final class AlleleRefGTRec implements RefGTRec {
     }
 
     /**
-     * Constructs a new {@code AlleleRefGTRec} instance from the specified data.
+     * Constructs a new {@code LowMafRefGTRec} instance from the specified data.
      * The specified {@code hapIndices} array is required to contain exactly one
      * {@code null} element. The {@code null} element should be the major
      * allele because this is most memory-efficient, but this requirement is not
@@ -112,12 +111,12 @@ public final class AlleleRefGTRec implements RefGTRec {
      * @throws NullPointerException if
      * {@code marker == null || samples == null || hapIndices == null}
      */
-    public AlleleRefGTRec(Marker marker, Samples samples, int[][] hapIndices) {
+    public LowMafRefGTRec(Marker marker, Samples samples, int[][] hapIndices) {
         this.marker = marker;
         this.samples = samples;
         this.nHaps = 2*samples.size();
         this.majorAllele = checkIndicesAndReturnNullIndex(hapIndices, nHaps);
-        this.alleleToHaps = deepCopy(hapIndices);
+        this.hapIndices = deepCopy(hapIndices);
     }
 
     static int checkIndicesAndReturnNullIndex(int[][] hapIndices, int nHaps) {
@@ -167,32 +166,8 @@ public final class AlleleRefGTRec implements RefGTRec {
     }
 
     @Override
-    public int[][] alleleToHaps() {
-        return deepCopy(alleleToHaps);
-    }
-
-    @Override
-    public IndexArray hapToAllele() {
-        return new IndexArray(toIntArray(), alleleToHaps.length);
-    }
-
-    private IntArray toIntArray() {
-        int[] ia = IntStream.range(0, nHaps)
-                .map(h -> majorAllele)
-                .toArray();
-        for (int al=0; al<alleleToHaps.length; ++al) {
-            if (alleleToHaps[al]!=null) {
-                for (int h : alleleToHaps[al]) {
-                    ia[h] = al;
-                }
-            }
-        }
-        return IntArray.packedCreate(ia, alleleToHaps.length);
-    }
-
-    @Override
-    public int nAlleleCodedHaps() {
-        return IntArrayRefGTRec.nonNullCnt(alleleToHaps);
+    public int[][] hapIndices() {
+        return deepCopy(hapIndices);
     }
 
     @Override
@@ -228,20 +203,47 @@ public final class AlleleRefGTRec implements RefGTRec {
         return marker;
     }
 
+
+    @Override
+    public int allele1(int sample) {
+        return get(sample<<1);
+    }
+
+    @Override
+    public int allele2(int sample) {
+        return get((sample<<1) | 0b1);
+    }
+
     @Override
     public int get(int hap) {
         if (hap < 0 || hap >= nHaps) {
             throw new IndexOutOfBoundsException(String.valueOf(hap));
         }
-        for (int j=0; j<alleleToHaps.length; ++j) {
+        for (int j=0; j<hapIndices.length; ++j) {
             if (j != majorAllele) {
-                if (Arrays.binarySearch(alleleToHaps[j], hap) >= 0) {
+                if (Arrays.binarySearch(hapIndices[j], hap) >= 0) {
                     return j;
                 }
             }
         }
         return majorAllele;
     }
+
+    @Override
+    public int[] alleles() {
+        int[] ia = IntStream.range(0, nHaps)
+                .map(h -> majorAllele)
+                .toArray();
+        for (int al=0; al<hapIndices.length; ++al) {
+            if (al != majorAllele) {
+                for (int h : hapIndices[al]) {
+                    ia[h] = al;
+                }
+            }
+        }
+        return ia;
+    }
+
 
     @Override
     public boolean isAlleleCoded() {
@@ -259,7 +261,7 @@ public final class AlleleRefGTRec implements RefGTRec {
         alCnts[majorAllele] = nHaps;
         for (int j=0; j<alCnts.length; ++j) {
             if (j!=majorAllele) {
-                int alCnt = alleleToHaps[j].length;
+                int alCnt = hapIndices[j].length;
                 alCnts[j] = alCnt;
                 alCnts[majorAllele] -= alCnt;
             }
@@ -269,21 +271,21 @@ public final class AlleleRefGTRec implements RefGTRec {
 
     @Override
     public int alleleCount(int allele) {
-        if (alleleToHaps[allele]==null) {
+        if (hapIndices[allele]==null) {
             throw new IllegalArgumentException("major allele");
         }
         else {
-            return alleleToHaps[allele].length;
+            return hapIndices[allele].length;
         }
     }
 
     @Override
     public int hapIndex(int allele, int copy) {
-        if (alleleToHaps[allele]==null) {
+        if (hapIndices[allele]==null) {
             throw new IllegalArgumentException("major allele");
         }
         else {
-            return alleleToHaps[allele][copy];
+            return hapIndices[allele][copy];
         }
     }
 
@@ -321,5 +323,19 @@ public final class AlleleRefGTRec implements RefGTRec {
             throw new IndexOutOfBoundsException(String.valueOf(index));
         }
         return toIntArray();
+    }
+
+    private IntArray toIntArray() {
+        int[] ia = IntStream.range(0, nHaps)
+                .map(i -> majorAllele)
+                .toArray();
+        for (int al=0; al<hapIndices.length; ++al) {
+            if (hapIndices[al]!=null) {
+                for (int i : hapIndices[al]) {
+                    ia[i] = al;
+                }
+            }
+        }
+        return IntArray.packedCreate(ia, hapIndices.length);
     }
 }

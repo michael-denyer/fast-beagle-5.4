@@ -16,32 +16,19 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-package phase;
+package vcf;
 
 /**
- * <p>Interface {@code PhaseBaum} updates the estimated genotype phase 
- * of specified samples.
- * </p>
- * <p>Instances of classes that implement {@code PhaseBaum} are not 
- * required to be thread-safe.
- * </p>
+ * Interface {@code MarkerContainer} represents an object that stores
+ * a unique {@code vcf.Marker} instance.
  *
  * @author Brian L. Browning {@code <browning@uw.edu>}
  */
-public interface PhaseBaum {
+public interface MarkerContainer {
 
     /**
-     * Returns the number of target samples.
-     * @return the number of target samples
+     * Returns the marker.
+     * @return the marker
      */
-    int nTargSamples();
-
-    /**
-     * Estimates and stores the phased haplotypes for the specified sample
-     * @param sample a sample index
-     * @throws IndexOutOfBoundsException if
-     * {@code sample < 0 || sample >= this.nTargSamples()}
-     */
-    void phase(int sample);
-    
+    Marker marker();
 }

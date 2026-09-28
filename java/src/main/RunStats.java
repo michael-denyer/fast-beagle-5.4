@@ -25,8 +25,8 @@ import java.io.File;
 import java.io.PrintWriter;
 import java.util.Arrays;
 import java.util.Optional;
-import phase.FixedPhaseData;
 import phase.PhaseData;
+import vcf.GT;
 import vcf.Marker;
 import vcf.Markers;
 import vcf.RefGT;
@@ -130,20 +130,19 @@ public class RunStats {
    /**
      * Prints information about the marker window to a log
      * file and to standard output.
-     * @param window input data for the next marker window
-     * @param fpd the input data for phasing that is the same in each iteration
-     * @throws NullPointerException if {@code (window == null) || (fpd == null)}
+     * @param window the input genotype data for the marker window
      */
-    public void printWindowUpdate(Window window, FixedPhaseData fpd) {
-        Markers targMarkers = fpd.targGT().markers();
-        Markers stage1TargMarkers = fpd.stage1TargGT().markers();
-        Markers markers = window.refGT().map(refGT -> refGT.markers()).orElse(targMarkers);
+    public void printWindowUpdate(Window window) {
+        GT targGT = window.targGT();
+        Optional<RefGT> refGT = window.refGT();
+        Markers markers = refGT.isPresent() ? refGT.get().markers() :
+                targGT.markers();
         Marker first = markers.marker(0);
         Marker last = markers.marker(markers.size() - 1);
         StringBuilder sb = new StringBuilder(30);
         sb.append(Const.nl);
         sb.append("Window ");
-        sb.append(fpd.window());
+        sb.append(window.windowIndex());
         sb.append(" [");
         String chr = first.chrom();
         if (chr.equals(Const.MISSING_DATA_STRING)==false) {
@@ -159,13 +158,10 @@ public class RunStats {
         sb.append(last.pos());
         sb.append(']');
         sb.append(Const.nl);
-        if (window.refGT().isPresent()) {
+        if (refGT.isPresent()) {
             sb.append(String.format("Reference markers: %,20d%n", markers.size()));
         }
-        sb.append(String.format("Study     markers: %,20d%n", targMarkers.size()));
-        if (stage1TargMarkers.size() != targMarkers.size()) {
-            sb.append(String.format("Stage 1   markers: %,20d%n", stage1TargMarkers.size()));
-        }
+        sb.append(String.format("Study     markers: %,20d%n", targGT.nMarkers()));
         Utilities.duoPrint(log, sb.toString());
         log.flush();
     }
@@ -253,7 +249,7 @@ public class RunStats {
         }
         phaseNanos(elapsedNanos);
         String msg;
-        int it = pd.it();
+        int it = pd.it();        
         if (it < par.burnin()) {
             if (it==0) {
                println("");

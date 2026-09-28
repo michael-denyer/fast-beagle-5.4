@@ -160,10 +160,9 @@ public class BlockLineReader implements FileIt<String[]> {
     }
 
     /**
-     * Returns {@code true}.  The {@code this.next()} method will return
-     * {@code BlockLineReader.SENTINAL} if the iterations has no
-     * more elements.
-     * @return {@code true}
+     * Returns the next element in the iteration.
+     * @return the next element in the iteration
+     * @throws java.util.NoSuchElementException if the iteration has no more elements
      */
     @Override
     public boolean hasNext() {
@@ -171,10 +170,9 @@ public class BlockLineReader implements FileIt<String[]> {
     }
 
     /**
-     * Returns the next element in the iteration.  Returns
-     * {@code BlockLineReader.SENTINAL} if the iterations has no
-     * more elements.
-     * @return the next element in the iteration
+     * Returns {@code true} if the iteration has more elements, and returns
+     * {@code false} otherwise.
+     * @return {@code true} if the iteration has more elements
      */
     @Override
     public String[] next() {
