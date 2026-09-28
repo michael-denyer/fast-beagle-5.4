@@ -46,9 +46,9 @@ The first run proves on every gate run that the recorded hashes are the jar's ou
 
 A matching final hash can hide two errors that cancel. The trace seams compare the pipeline's intermediate state. `java/trace.patch` adds hooks to a copy of the Java source, and `make java-trace` builds it in `build/java-trace/`. With `-Dbeagle.trace=<dir>`, the Java build writes each seam to `<dir>/<seam>.txt`. fast-beagle writes the same files with `trace=<dir>`.
 
-The 20 seams are `T1a T1b T1c T1d T2 T2b T3a T3b0 T3b1 T3b T3c T3d T4a T4b T4c T4d T5a T5b T5c T5d`. They cover input records and samples (T1), windows and fixed phasing data (T2), stage-1 phasing (T3), stage-2 phasing (T4) and imputation (T5). Seams that hold floating-point values print them as raw bits. Seams over large state print an FNV-1a digest of it.
+The 21 seams are `T1a T1b T1c T1d T2 T2b T3a T3b0 T3b1 T3b T3c T3d T3e T4a T4b T4c T4d T5a T5b T5c T5d`. [Seam formats](testing.md#seam-formats) describes each record. They cover input records and samples (T1), windows and fixed phasing data (T2), stage-1 phasing (T3), stage-2 phasing (T4) and imputation (T5). Seams that hold floating-point values print them as raw bits. Seams over large state print an FNV-1a digest of it.
 
-`tests/check-trace.sh` runs both builds at 2 threads on the 34 oracle cases and the 7 input edge cases in `tests/trace-cases.txt`, 41 cases in all. The 7 extra cases cover CRLF line ends, Latin-1 bytes, a missing final newline, 600 markers 10 bp apart, a bref3 edge case, and two runs that both tools refuse. The script compares each seam file with `cmp`. It also requires the same exit code per case and fails if fast-beagle writes a seam file that Java does not. The gate then runs the 9 thread-dependent seams, `T3b0 T3b1 T3b T3c T3d T4a T4b T4c T4d`, again at 1 and 18 threads on `gt-ibs2` and `gt-ibs2-miss`.
+`tests/check-trace.sh` runs both builds at 2 threads on the 34 oracle cases and the 7 input edge cases in `tests/trace-cases.txt`, 41 cases in all. The 7 extra cases cover CRLF line ends, Latin-1 bytes, a missing final newline, 600 markers 10 bp apart, a bref3 edge case, and two runs that both tools refuse. The script compares each seam file with `cmp`. It also requires the same exit code per case and fails if fast-beagle writes a seam file that Java does not. The gate then runs the 10 thread-dependent seams, `T3b0 T3b1 T3b T3c T3d T3e T4a T4b T4c T4d`, again at 1 and 18 threads on `gt-ibs2` and `gt-ibs2-miss`.
 
 ### Differential fuzzing
 
@@ -150,7 +150,7 @@ To run the checks one at a time:
 ```bash
 tests/check-oracle.sh java -ea -jar data/beagle.27Feb25.75f.jar
 tests/check-oracle.sh build/beagle
-tests/check-trace.sh T1a T1b T1c T1d T2 T2b T3a T3b0 T3b1 T3b T3c T3d T4a T4b T4c T4d T5a T5b T5c T5d
+tests/check-trace.sh T1a T1b T1c T1d T2 T2b T3a T3b0 T3b1 T3b T3c T3d T3e T4a T4b T4c T4d T5a T5b T5c T5d
 tests/check-failures.sh java -ea -jar data/beagle.27Feb25.75f.jar
 tests/check-failures.sh build/beagle
 uv run --python 3.12 --script tests/check_fuzz.py --examples 200

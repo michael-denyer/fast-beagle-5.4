@@ -17,11 +17,11 @@
 # shellcheck disable=SC2329  # java_build, oracle_trace and trace_threads run through step
 set -uo pipefail
 cd "$1" || exit 1
-SEAMS="T1a T1b T1c T1d T2 T2b T3a T3b0 T3b1 T3b T3c T3d T4a T4b T4c T4d T5a T5b T5c T5d"
+SEAMS="T1a T1b T1c T1d T2 T2b T3a T3b0 T3b1 T3b T3c T3d T3e T4a T4b T4c T4d T5a T5b T5c T5d"
 # Seams whose content depends on nthreads, rechecked at 1 and 18 threads on the
 # cases whose windows are long enough for the thread count to split them: the
 # cases with per-thread hashes.
-THREAD_SEAMS="T3b0 T3b1 T3b T3c T3d T4a T4b T4c T4d"
+THREAD_SEAMS="T3b0 T3b1 T3b T3c T3d T3e T4a T4b T4c T4d"
 
 mkdir -p build
 fail=0

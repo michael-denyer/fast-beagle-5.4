@@ -1,6 +1,6 @@
 --- a/blbutil/Trace.java
 +++ b/blbutil/Trace.java
-@@ -0,0 +1,465 @@
+@@ -0,0 +1,514 @@
 +/* SPDX-License-Identifier: GPL-3.0-or-later */
 +package blbutil;
 +
@@ -48,10 +48,26 @@
 +        out.print('\n');
 +    }
 +
-+    /** T1a: one input record's marker as the iterator returned it. */
++    /** T1a: one input record's marker as the iterator returned it: CHROM,
++     * POS, the stored IDs joined by ';' ('.' for none), REF, the ALT alleles
++     * joined by ',' ('.' for none), the allele count and the INFO END value
++     * as an int (empty for none). Beagle 5.4 prints ID and ALT this way. */
 +    public static void marker(String seam, Marker m) {
-+        line(seam, m.chrom() + '\t' + m.pos() + '\t' + m.id() + '\t' + m.alleles()
-+                + '\t' + m.nAlleles() + '\t' + m.endValue());
++        StringBuilder sb = new StringBuilder();
++        sb.append(m.chrom()).append('\t').append(m.pos()).append('\t');
++        if (m.nIds() == 0) sb.append('.');
++        for (int j = 0, n = m.nIds(); j < n; ++j) {
++            if (j > 0) sb.append(';');
++            sb.append(m.id(j));
++        }
++        sb.append('\t').append(m.allele(0)).append('\t');
++        if (m.nAlleles() == 1) sb.append('.');
++        for (int j = 1, n = m.nAlleles(); j < n; ++j) {
++            if (j > 1) sb.append(',');
++            sb.append(m.allele(j));
++        }
++        sb.append('\t').append(m.nAlleles()).append('\t').append(m.end() == -1 ? "" : String.valueOf(m.end()));
++        line(seam, sb.toString());
 +    }
 +
 +    /** T1b: the samples of an input file, after excludesamples=. */
@@ -76,12 +92,12 @@
 +    private static final java.util.IdentityHashMap<Object, Integer> GROUPS = new java.util.IdentityHashMap<>();
 +
 +    /** T1d: a reference record's class, major allele and allele per haplotype. A
-+     * HapRefGTRec also names its sequence group, the shared hapToSeq object, whose
++     * SeqCodedRefGTRec also names its sequence group, the shared hapToSeq object, whose
 +     * contents are written once as a "group" line when first seen. */
 +    public static synchronized void refRec(String seam, vcf.RefGTRec rec) {
 +        String group = "-";
 +        String seqToAllele = "-";
-+        if (rec instanceof vcf.HapRefGTRec) {
++        if (rec instanceof vcf.SeqCodedRefGTRec) {
 +            ints.IntArray hapToSeq = rec.map(0);
 +            Integer id = GROUPS.get(hapToSeq);
 +            if (id == null) {
@@ -219,12 +235,13 @@
 +    }
 +
 +    /** T3b1: each window's initial phasing state: the seed,
-+     * recombination intensity, mismatch probability and LR threshold (raw
-+     * bits), pRecomb per stage-1 marker, then per target sample its two
-+     * haplotypes and its clusters as type ordinal:size. */
++     * recombination intensity and mismatch probability (raw bits), pRecomb
++     * per stage-1 marker, each target sample's proportion of unphased
++     * heterozygotes left unphased per iteration (raw bits), then per target
++     * sample its haplotypes, clusters and unphased and missing markers. */
 +    public static void phaseData(String seam, phase.PhaseData pd) {
 +        line(seam, "pd\t" + pd.seed() + '\t' + floatBits(pd.recombIntensity()) + '\t'
-+                + floatBits(pd.pMismatch()) + '\t' + floatBits(pd.lrThreshold()));
++                + floatBits(pd.pMismatch()));
 +        StringBuilder sb = new StringBuilder("pRecomb\t");
 +        blbutil.FloatArray pRecomb = pd.pRecomb();
 +        for (int m = 0, n = pRecomb.size(); m < n; ++m) {
@@ -232,18 +249,27 @@
 +            sb.append(floatBits(pRecomb.get(m)));
 +        }
 +        line(seam, sb.toString());
++        sb.setLength(0);
++        sb.append("leaveUnph\t");
++        for (int s = 0, n = pd.fpd().targGT().nSamples(); s < n; ++s) {
++            if (s > 0) sb.append(',');
++            sb.append(floatBits(pd.leaveUnphasedProp(s)));
++        }
++        line(seam, sb.toString());
 +        samples(seam, pd);
 +    }
 +
 +    /** T3b: after each stage-1 iteration of each window, the iteration
-+     * count, the swap rate (raw bits), the LR threshold, and each target
-+     * sample's haplotypes and clusters. */
++     * count, the swap rate (raw bits), and each target sample's haplotypes,
++     * clusters and unphased and missing markers. */
 +    public static void iteration(String seam, phase.PhaseData pd, double swapRate) {
-+        line(seam, "it\t" + pd.it() + '\t' + Long.toHexString(Double.doubleToRawLongBits(swapRate)) + '\t'
-+                + floatBits(pd.lrThreshold()));
++        line(seam, "it\t" + pd.it() + '\t' + Long.toHexString(Double.doubleToRawLongBits(swapRate)));
 +        samples(seam, pd);
 +    }
 +
++    /** A T3b or T3b1 sample line: the sample index, the allele per stage-1
++     * marker on each haplotype, the cluster sizes, then the unphased and the
++     * missing marker indices ('-' for none). */
 +    private static void samples(String seam, phase.PhaseData pd) {
 +        StringBuilder sb = new StringBuilder();
 +        phase.EstPhase est = pd.estPhase();
@@ -251,15 +277,34 @@
 +        for (int s = 0, n = est.fpd().stage1TargGT().nSamples(); s < n; ++s) {
 +            phase.SamplePhase sp = est.get(s);
 +            sb.setLength(0);
-+            sb.append("sample\t").append(sp.sample()).append('\t');
++            sb.append("sample\t").append(s).append('\t');
 +            for (int m = 0; m < nMarkers; ++m) sb.append(sp.allele1(m)).append(m + 1 < nMarkers ? ',' : '\t');
 +            for (int m = 0; m < nMarkers; ++m) sb.append(sp.allele2(m)).append(m + 1 < nMarkers ? ',' : '\t');
-+            for (int c = 0; c < sp.nClusters(); ++c) {
++            int[] ends = sp.clustEnds();
++            for (int c = 0; c < ends.length; ++c) {
 +                if (c > 0) sb.append(',');
-+                sb.append(sp.clustType(c).ordinal()).append(':').append(sp.clustSize(c));
++                sb.append(ends[c] - (c == 0 ? 0 : ends[c - 1]));
 +            }
++            sb.append('\t').append(intsOrDash(sp.unphased())).append('\t').append(intsOrDash(sp.missing()));
 +            line(seam, sb.toString());
 +        }
++    }
++
++    private static final java.util.concurrent.ConcurrentSkipListMap<Integer, String> STAGE1_SAMPLES
++            = new java.util.concurrent.ConcurrentSkipListMap<>();
++
++    /** T3e: one target sample's stage-1 HMM update in one iteration. Stored
++     * until the iteration's threads finish, then written in sample order. */
++    public static void stage1Sample(int sample, String fields) {
++        STAGE1_SAMPLES.put(sample, "sample\t" + sample + '\t' + fields);
++    }
++
++    public static void flushStage1Samples(String seam, int it) {
++        line(seam, "it\t" + it);
++        for (String s : STAGE1_SAMPLES.values()) {
++            line(seam, s);
++        }
++        STAGE1_SAMPLES.clear();
 +    }
 +
 +    /** T3d: each IBS neighbour search: its parameters, each step's sequence count and haplotype to
@@ -453,6 +498,10 @@
 +        return Integer.toHexString(Float.floatToRawIntBits(f));
 +    }
 +
++    private static String intsOrDash(ints.IntArray a) {
++        return a.size() == 0 ? "-" : ints(a);
++    }
++
 +    private static String ints(ints.IntArray a) {
 +        StringBuilder sb = new StringBuilder();
 +        for (int j = 0, n = a.size(); j < n; ++j) {
@@ -468,15 +517,15 @@
 +}
 --- a/bref/Bref3It.java
 +++ b/bref/Bref3It.java
-@@ -89,6 +89,7 @@
+@@ -88,6 +88,7 @@
          this.brefFile = brefFile;
-         this.dataIn = new DataInputStream(dis);
-         this.bref3Reader = new Bref3Reader(brefFile, dataIn, sampleFilter, markerFilter);
+         this.bref = new DataInputStream(is);
+         this.bref3Reader = new Bref3Reader(bref, markerFilter);
 +        if (blbutil.Trace.on()) blbutil.Trace.samples("T1b-ref", bref3Reader.samples());
          this.buffer = new ArrayDeque<>(500);
-         bref3Reader.readBlock(dataIn, buffer);
+         bref3Reader.readBlock(bref, buffer);
      }
-@@ -114,6 +115,10 @@
+@@ -113,6 +114,10 @@
              throw new NoSuchElementException();
          }
          RefGTRec rec = buffer.removeFirst();
@@ -485,7 +534,7 @@
 +            blbutil.Trace.refRec("T1d-ref", rec);
 +        }
          if (buffer.isEmpty()) {
-             bref3Reader.readBlock(dataIn, buffer);
+             bref3Reader.readBlock(bref, buffer);
          }
 --- a/imp/ImpData.java
 +++ b/imp/ImpData.java
@@ -625,7 +674,7 @@
 @@ -175,6 +175,9 @@
              runStats.printStage1Info(pd, (System.nanoTime() - t0));
              pd.incrementIt();
-             double swapRate = SwapRate.getAndResetSwapRate();
+             double swapRate = PhaseBaum1.getAndResetSwapRate();
 +            if (blbutil.Trace.on()) {
 +                blbutil.Trace.iteration("T3b", pd, swapRate);
 +            }
@@ -646,7 +695,7 @@
      private static UnsignedByteArray toByteArray(ImpData impData,
 --- a/phase/FixedPhaseData.java
 +++ b/phase/FixedPhaseData.java
-@@ -163,6 +163,9 @@
+@@ -164,6 +164,9 @@
          int maxMafHaps = 10000;
          this.stage1Maf = maf(stage1RefGT, stage1TargGT, maxMafHaps, par.seed());
          this.stage1Ibs2 = new Ibs2(stage1TargGT, stage1Map, stage1Maf);
@@ -724,9 +773,127 @@
      }
  
      private static void checkConsistency(PhaseData phaseData,
+--- a/phase/PhaseBaum1.java
++++ b/phase/PhaseBaum1.java
+@@ -66,6 +66,8 @@
+     private int missIndex = -1;
+ 
+     private int swapCnt = 0;
++    private long emDigest;          // trace seam T3e
++    private float traceThreshold;   // trace seam T3e
+     private static final AtomicLong nSwaps = new AtomicLong(0);
+     private static final AtomicLong nUnphHets = new AtomicLong(0);
+ 
+@@ -142,15 +144,82 @@
+             MarkerCluster mc = new MarkerCluster(phaseData, sample);
+             missIndex = mc.nMissingGTClusters();
+             nStates = states.ibsStates(sample, mc, refAlleles, mismatches);
++            String traceStates = blbutil.Trace.on() ? traceStates(mc) : null;
++            emDigest = 0xcbf29ce484222325L;
++            traceThreshold = Float.NaN;
+             bwdAlg(mc);
+             fwdAlg(phase, mc);
+             updatePhase(sample, phase);
+             estPhase.set(sample, phase);
++            if (blbutil.Trace.on()) {
++                blbutil.Trace.stage1Sample(sample, nUnph + "\t" + nMiss + '\t' + traceStates + '\t'
++                        + Long.toHexString(emDigest) + '\t' + traceLrs() + '\t' + swapCnt + '\t'
++                        + (Float.isNaN(traceThreshold) ? "-" : Integer.toHexString(Float.floatToRawIntBits(traceThreshold)))
++                        + '\t' + traceInts(phase.unphased()));
++            }
+         }
++        else if (blbutil.Trace.on()) {
++            blbutil.Trace.stage1Sample(sample, "0\t0");
++        }
+         nUnphHets.addAndGet(nUnph);
+         nSwaps.addAndGet(swapCnt);
+     }
+ 
++    /* T3e: the cluster count, HMM state count, an FNV-1a digest of the
++     * state mismatches (rows 0..2, each cluster, each state) then of the
++     * state alleles at each missing-genotype cluster, and a digest of the
++     * cluster recombination probabilities (raw bits). */
++    private String traceStates(MarkerCluster mc) {
++        long h = 0xcbf29ce484222325L;
++        for (int r = 0; r < 3; ++r) {
++            for (int c = 0; c < mc.nClusters(); ++c) {
++                for (int k = 0; k < nStates; ++k) {
++                    h = (h ^ mismatches[r][c][k]) * 0x100000001b3L;
++                }
++            }
++        }
++        for (int j = 0; j < mc.nMissingGTClusters(); ++j) {
++            for (int k = 0; k < nStates; ++k) {
++                h = (h ^ (refAlleles.get(j)[k] & 0xffffffffL)) * 0x100000001b3L;
++            }
++        }
++        long r = 0xcbf29ce484222325L;
++        FloatArray pRec = mc.pRecomb();
++        for (int c = 0; c < pRec.size(); ++c) {
++            r = (r ^ (Float.floatToRawIntBits(pRec.get(c)) & 0xffffffffL)) * 0x100000001b3L;
++        }
++        return mc.nClusters() + "\t" + nStates + '\t' + Long.toHexString(h) + '\t' + Long.toHexString(r);
++    }
++
++    private void traceEm() {
++        emDigest = (emDigest ^ (Float.floatToRawIntBits(emProbs[0]) & 0xffffffffL)) * 0x100000001b3L;
++        emDigest = (emDigest ^ (Float.floatToRawIntBits(emProbs[1]) & 0xffffffffL)) * 0x100000001b3L;
++    }
++
++    private String traceLrs() {
++        if (lrList.size() == 0) {
++            return "-";
++        }
++        StringBuilder sb = new StringBuilder();
++        for (int j = 0, n = lrList.size(); j < n; ++j) {
++            if (j > 0) sb.append(',');
++            sb.append(Integer.toHexString(Float.floatToRawIntBits(lrList.get(j))));
++        }
++        return sb.toString();
++    }
++
++    private static String traceInts(IntArray a) {
++        if (a.size() == 0) {
++            return "-";
++        }
++        StringBuilder sb = new StringBuilder();
++        for (int j = 0, n = a.size(); j < n; ++j) {
++            if (j > 0) sb.append(',');
++            sb.append(a.get(j));
++        }
++        return sb.toString();
++    }
++
+     private void ensureCapacity(int nUnph, int nMiss) {
+         if (refAlleles.size()<nMiss) {
+             for (int j=refAlleles.size(); j<nMiss; ++j) {
+@@ -196,6 +265,7 @@
+             float pRec = pClustRecomb.get(c);
+             emProbs[1] = (mc.clusterEnd(c) - mc.clusterStart(c))*pMismatch;
+             emProbs[0] = 1.0f - emProbs[1];
++            if (blbutil.Trace.on()) traceEm();
+             sum[0] = HmmUpdater.fwdUpdate(fwd[0], sum[0], pRec, emProbs, mismatches[0][c], nStates);
+             sum[1] = HmmUpdater.fwdUpdate(fwd[1], sum[1], pRec, emProbs, mismatches[1][c], nStates);
+             sum[2] = HmmUpdater.fwdUpdate(fwd[2], sum[2], pRec, emProbs, mismatches[2][c], nStates);
+@@ -288,6 +358,7 @@
+             float pRec = pClustRecomb.get(cP1);
+             emProbs[1] = (mc.clusterEnd(c) - mc.clusterStart(c))*pMismatch;
+             emProbs[0] = 1f - emProbs[1];
++            if (blbutil.Trace.on()) traceEm();
+             HmmUpdater.bwdUpdate(bwd[0], pRec, emProbs, mismatches[0][cP1], nStates);
+             HmmUpdater.bwdUpdate(bwd[1], pRec, emProbs, mismatches[1][cP1], nStates);
+             HmmUpdater.bwdUpdate(bwd[2], pRec, emProbs, mismatches[2][cP1], nStates);
+@@ -328,6 +399,7 @@
+             float leaveUnphasedProp = phaseData.leaveUnphasedProp(sample);
+             IntList nextUnph = new IntList();
+             float threshold = threshold(lrList, leaveUnphasedProp);
++            traceThreshold = threshold;
+             for (int j=0, n=prevUnph.size(); j<n; ++j) {
+                 if (lrList.get(j) < threshold) {
+                     nextUnph.add(prevUnph.get(j));
 --- a/phase/PhaseData.java
 +++ b/phase/PhaseData.java
-@@ -59,6 +59,9 @@
+@@ -56,6 +56,9 @@
          float recombIntensity = (float) 0.04f*fpd.par().ne()/fpd.nHaps();
          this.trProb = new TrProb(fpd.stage1Map(), recombIntensity);
          this.pMismatch = Par.liStephensPMismatch(fpd.nHaps());
@@ -735,10 +902,10 @@
 +        }
      }
  
-     static float lrThreshold(Par par, int it) {
+     private static float[] leaveUnphasedProp(FixedPhaseData fpd,
 --- a/phase/PhaseLS.java
 +++ b/phase/PhaseLS.java
-@@ -53,6 +53,10 @@
+@@ -52,6 +52,10 @@
          int nSamples = pd.fpd().targGT().nSamples();
          int nBurninIts = par.burnin();
          PbwtPhaseIbs phaseIbs = pbwtPhaseIbs(pd);
@@ -749,7 +916,17 @@
          if (par.em()) {
              Random rand = new Random(pd.seed());
              if (it==0) {
-@@ -113,6 +117,14 @@
+@@ -78,6 +82,9 @@
+             } );
+         }
+         MultiThreadUtils.shutdownExecService(es);
++        if (blbutil.Trace.on()) {
++            blbutil.Trace.flushStage1Samples("T3e", it);
++        }
+     }
+ 
+     private static PbwtPhaseIbs pbwtPhaseIbs(PhaseData pd) {
+@@ -111,6 +118,14 @@
          if (Float.isFinite(recombIntensity) && recombIntensity>0f) {
              pd.updateRecombIntensity(recombIntensity);
          }
@@ -764,7 +941,7 @@
      }
  
      private static ParamEstimates getParamEst(PbwtPhaseIbs phaseIbs, Random rand) {
-@@ -190,6 +202,11 @@
+@@ -188,6 +203,11 @@
              } );
          }
          MultiThreadUtils.shutdownExecService(es);
@@ -824,9 +1001,9 @@
 +    }
 +
      private void imputeInterval(int sample, int start, int end) {
-         int hap1 = sample << 1;
-         int hap2 = hap1 | 0b1;
-@@ -117,6 +130,9 @@
+         for (int m=start; m<end; ++m) {
+             int a1 = unphTargGT.allele1(m, sample);
+@@ -115,6 +128,9 @@
                      float[] alProbs2 = unscaledAlProbs(m, 1, a1, a2);
                      float p1 = alProbs1[a1]*alProbs2[a2];
                      float p2 = alProbs1[a2]*alProbs2[a1];
@@ -836,7 +1013,7 @@
                      boolean switchAlleles = (p1<p2 || (p1==p2 && rand.nextBoolean()));
                      if (switchAlleles) {
                          int tmp = a1;
-@@ -126,6 +142,7 @@
+@@ -124,6 +140,7 @@
                  }
              }
              else {
@@ -844,7 +1021,7 @@
                  a1 = imputeAllele(m, 0);
                  a2 = imputeAllele(m, 1);
              }
-@@ -205,6 +222,9 @@
+@@ -203,6 +220,9 @@
                      }
                  }
              }
@@ -907,15 +1084,15 @@
      }
 --- a/vcf/RefIt.java
 +++ b/vcf/RefIt.java
-@@ -132,6 +132,7 @@
-         boolean storeId = true;
-         MarkerParser filter = new MarkerParser(storeId, false, false, false);
+@@ -129,6 +129,7 @@
+         String firstDataLine = head[head.length-1];
+         boolean[] isDiploid = VcfHeader.isDiploid(firstDataLine);
          this.vcfHeader = new VcfHeader(src, nonDataLines, isDiploid, sampleFilter);
 +        if (blbutil.Trace.on()) blbutil.Trace.samples("T1b-ref", vcfHeader.samples());
          this.mapper = (String s) -> {
-             return RefGTRec.alleleRefGTRec(new VcfRecGTParser(vcfHeader, s, filter));
+             return RefGTRec.alleleCodedInstance(new VcfRecGTParser(vcfHeader, s));
          } ;
-@@ -261,6 +262,10 @@
+@@ -251,6 +252,10 @@
              throw new NoSuchElementException();
          }
          RefGTRec first = recBuffer.removeFirst();
@@ -928,8 +1105,8 @@
          }
 --- a/vcf/RefTargSlidingWindow.java
 +++ b/vcf/RefTargSlidingWindow.java
-@@ -251,6 +251,7 @@
-                     double endCm = nextEndCm(nextRefRec.marker());
+@@ -245,6 +245,7 @@
+                     endCm = nextEndCm(endCm);
                      int endPos = genMap.basePos(chromIndex, endCm);
                      Window window = readWindow(chromIndex, endPos, ++windowIndex);
 +                    if (blbutil.Trace.on()) blbutil.Trace.window("T2", window, endCm, endPos);
@@ -938,25 +1115,25 @@
                      int refOverlapStart = window.indices().overlapStart();
 --- a/vcf/TargSlidingWindow.java
 +++ b/vcf/TargSlidingWindow.java
-@@ -195,6 +195,7 @@
-                     double nextEndCm = nextEndCm(nextRec.marker());
-                     int endPos = genMap.basePos(chromIndex, nextEndCm);
+@@ -192,6 +192,7 @@
+                     endCm = nextEndCm(endCm);
+                     int endPos = genMap.basePos(nextRec.marker().chromIndex(), endCm);
                      Window window = readWindow(chromIndex, endPos, ++windowIndex);
-+                    if (blbutil.Trace.on()) blbutil.Trace.window("T2", window, nextEndCm, endPos);
++                    if (blbutil.Trace.on()) blbutil.Trace.window("T2", window, endCm, endPos);
                      SlidingWindow.addToQ(q, window);
                      int overlapStart = window.indices().overlapStart();
                      overlap.addAll(recs.subList(overlapStart, recs.size()));
 --- a/vcf/VcfIt.java
 +++ b/vcf/VcfIt.java
-@@ -218,6 +218,7 @@
-         MarkerParser fieldFilter = new MarkerParser(storeId, false, false, false);
+@@ -217,6 +217,7 @@
+         boolean[] isDiploid = VcfHeader.isDiploid(firstDataLine);
          this.it = it;
          this.vcfHeader = new VcfHeader(src, nonDataLines, isDiploid, sampleFilter);
 +        if (blbutil.Trace.on()) blbutil.Trace.samples("T1b-target", vcfHeader.samples());
-         this.mapper = (String s) -> recMapper.apply(vcfHeader, s, fieldFilter);
+         this.mapper = (String s) -> recMapper.apply(vcfHeader, s);
          this.next = firstDataLine;
          this.markerFilter = markerFilter;
-@@ -303,6 +304,10 @@
+@@ -302,6 +303,10 @@
              throw new NoSuchElementException();
          }
          E first = recBuffer.removeFirst();
