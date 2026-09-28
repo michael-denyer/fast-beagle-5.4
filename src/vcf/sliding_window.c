@@ -69,7 +69,7 @@ static sample_file_it ref_file_it_open(const char *path, const str_set *exclude_
             || (n >= 8 && strcmp(path + n - 8, ".vcf.bgz") == 0);
     if (!bref3 && !vcf_name) {
         fprintf(stderr, "\nERROR: unrecognized reference filename extension: \n"
-                "       expected \".bref3\", \".bref4\", \".vcf\", \".vcf.gz\", or \".vcf.bgz\"\n\n");
+                "       Expected \".bref3\", \".vcf\", \".vcf.gz\", or \".vcf.bgz\"\n\n");
     }
     return bref3 ? bref3_it_open(path, exclude_samples, exclude_markers)
             : ref_it_open(path, exclude_samples, exclude_markers, n_threads);
@@ -129,9 +129,9 @@ sliding_window *sliding_window_open(const par *p) {
     }
     sw->gen_map = genetic_map_open(p->map, interval);
     sw->window_cm = p->window;
-    sw->window_markers = p->window_markers;
+    sw->window_markers = 4000000;
     sw->overlap_cm = p->overlap;
-    sw->overlap_markers = p->window_markers >> 2;
+    sw->overlap_markers = 4000000 >> 2;
     sw->impute = p->impute;
     return sw;
 }

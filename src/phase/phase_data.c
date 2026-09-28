@@ -31,7 +31,7 @@ static float lr_threshold(const par *p, int it) {
     if (it == n_its_m1 + p->burnin) return 1.0f;
     double last_val = 4.0;
     double exp = (double)(n_its_m1 - (it - p->burnin)) / n_its_m1;
-    double base = p->initial_lr / last_val;
+    double base = 100000.0f / last_val;
     return (float)(last_val * jmath_pow(base, exp));
 }
 

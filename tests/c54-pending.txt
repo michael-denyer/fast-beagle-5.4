@@ -23,10 +23,8 @@ oracle gt-x
 oracle imp-x
 oracle gt-multi
 oracle imp-multi
-oracle gt-phased
 oracle imp-chroms
 oracle gt-ibs2
-oracle imp-bigref
 oracle gt-ibs2-miss
 oracle gt-573
 oracle gt-states
@@ -46,51 +44,28 @@ oracle gt-plateau2
 oracle imp-plateau2
 oracle gt-gap-map
 oracle imp-seqlimit
-oracle imp-seqlimit-bref3
 oracle imp-phased
 oracle imp-phased-map
 oracle imp-phased-bref3-excls
 oracle imp-phased-excls
 oracle imp-phased-states
-failure end-before-pos
-failure ref-not-acgtn
-failure duplicate-alleles
-failure initial-lr
-failure window-markers
 failure imp-gap-map
 failure imp-gap-map-noimp
 log gt
-log ref
-log imp
-log imp-apgp
-log imp-bref3
-log imp-bref3-excl
 log imp-bref3-excls
 log imp-bref3-exclr
-log imp-bref3-multi
-log imp-bref3-end
-log imp-chrom
 log gt-map
 log gt-udigit
 log imp-map
 log gt-miss
-log imp-miss
 log gt-excl
-log imp-excl
-log gt-x
-log imp-x
 log gt-multi
-log imp-multi
-log gt-phased
 log imp-chroms
 log gt-ibs2
-log imp-bigref
 log gt-ibs2-miss
 log gt-573
 log gt-states
-log imp-states
 log imp-evict
-log imp-gap
 log gt-common
 log gt-common-map
 log gt-rare
@@ -103,18 +78,11 @@ log imp-plateau
 log gt-plateau2
 log imp-plateau2
 log gt-gap-map
-log imp-seqlimit
-log imp-seqlimit-bref3
-log imp-phased
 log imp-phased-map
 log imp-phased-bref3-excls
-log imp-phased-excls
-log imp-phased-states
 fuzz-regression seq-coder-full
 fuzz-regression window-stall
 fuzz
-fuzz-invalid out-of-bounds initial-lr 0.5
-fuzz-invalid out-of-bounds window-markers 99999
 trace edge-bref3 T1d nthreads=2
 trace edge-bref3 T3b nthreads=2
 trace edge-bref3 T3b1 nthreads=2
@@ -128,16 +96,6 @@ trace edge-dense T3e nthreads=2
 trace edge-latin1 T3b nthreads=2
 trace edge-latin1 T3b1 nthreads=2
 trace edge-latin1 T3e nthreads=2
-trace edge-markers T1a nthreads=2
-trace edge-markers T1c nthreads=2
-trace edge-markers T2 nthreads=2
-trace edge-markers T2b nthreads=2
-trace edge-markers T3a nthreads=2
-trace edge-markers T3b nthreads=2
-trace edge-markers T3b0 nthreads=2
-trace edge-markers T3b1 nthreads=2
-trace edge-markers T3c nthreads=2
-trace edge-markers T3d nthreads=2
 trace edge-noeol T3b nthreads=2
 trace edge-noeol T3b1 nthreads=2
 trace edge-noeol T3e nthreads=2
@@ -177,7 +135,6 @@ trace gt-common-map T4a nthreads=2
 trace gt-common-map T4b nthreads=2
 trace gt-common-map T4c nthreads=2
 trace gt-common-map T4d nthreads=2
-trace gt-end-text T1a nthreads=2
 trace gt-end-text T3b nthreads=2
 trace gt-end-text T3b1 nthreads=2
 trace gt-end-text T3c nthreads=2
@@ -275,7 +232,6 @@ trace gt-ibs2-miss T4c nthreads=2
 trace gt-ibs2-miss T4d nthreads=1
 trace gt-ibs2-miss T4d nthreads=18
 trace gt-ibs2-miss T4d nthreads=2
-trace gt-ids-dot T1a nthreads=2
 trace gt-ids-dot T3b nthreads=2
 trace gt-ids-dot T3b1 nthreads=2
 trace gt-ids-dot T3c nthreads=2

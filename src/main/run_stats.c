@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2014-2021 Brian L. Browning
- * Ported to C from Beagle 5.5 (27Feb25) main/RunStats.java and the printing
+ * Ported to C from Beagle 5.4 (29Oct24) main/RunStats.java and the printing
  * methods of blbutil/Utilities.java; modified 2026.
  *
  * This file is part of fast-beagle, a C port of Beagle. It is free software:
@@ -29,8 +29,8 @@
 
 /* The first two lines of Main.SHORT_HELP, naming this program. Beagle's third
  * line points to a usage text that this program does not print. */
-static const char BANNER[] = "fast-beagle: a C port of beagle.27Feb25.75f.jar (version 5.5)\n"
-                             "Copyright (C) 2014-2024 Brian L. Browning\n";
+static const char BANNER[] = "fast-beagle: a C port of beagle.29Oct24.c8e.jar (version 5.4)\n"
+                             "Copyright (C) 2014-2022 Brian L. Browning\n";
 
 int64_t run_stats_nanos(void) {
     struct timespec ts;
@@ -180,21 +180,20 @@ static const marker *window_marker(const window *w, bool ref, int m) {
     return ref ? &w->ref[m]->marker : &w->targ[m]->marker;
 }
 
-void run_stats_window_update(run_stats *rs, const window *w, const fixed_phase_data *fpd) {
+void run_stats_window_update(run_stats *rs, const window *w) {
     bool ref = rs->par->ref != NULL;
     int n_markers = ref ? w->n_ref : w->n_targ;
     const marker *first = window_marker(w, ref, 0);
     const marker *last = window_marker(w, ref, n_markers - 1);
     const char *chr = marker_chrom(first);
-    duo_print(rs, "\nWindow %d [", fpd->window);
+    duo_print(rs, "\nWindow %d [", w->index);
     if (strcmp(chr, ".") != 0) duo_print(rs, "%s:", chr);
     duo_print(rs, "%d-", (int)first->pos);
     if (strcmp(chr, marker_chrom(last)) != 0) duo_print(rs, "%s:", marker_chrom(last));
     duo_print(rs, "%d]\n", (int)last->pos);
     char buf[32];
     if (ref) duo_print(rs, "Reference markers: %20s\n", grouped(buf, n_markers));
-    duo_print(rs, "Study     markers: %20s\n", grouped(buf, fpd->n_markers));
-    if (fpd->n_stage1 != fpd->n_markers) duo_print(rs, "Stage 1   markers: %20s\n", grouped(buf, fpd->n_stage1));
+    duo_print(rs, "Study     markers: %20s\n", grouped(buf, w->n_targ));
     flush(rs);
 }
 

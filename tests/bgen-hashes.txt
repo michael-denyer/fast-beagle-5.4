@@ -23,8 +23,8 @@ d747ceb5d095a785 131c1dd8db5030f8 b162271d1b13eb1c gt-filter-end plink2
 86095ad8fcd63329 8eb8347cc1cc011e b162271d1b13eb1c gt-ibs2 plink2
 d6b7e2b08d5ff893 8eb8347cc1cc011e b162271d1b13eb1c gt-ibs2-miss phased
 4127e2d0b8724079 8eb8347cc1cc011e b162271d1b13eb1c gt-ibs2-miss plink2
-90df5e4c85a5061d 131c1dd8db5030f8 6dcb6cd86986f03b gt-ids-dot phased
-e365f72897f41790 131c1dd8db5030f8 6dcb6cd86986f03b gt-ids-dot plink2
+d39b56e07a7bfabe 131c1dd8db5030f8 95dcaf09e8ca3b46 gt-ids-dot phased
+960cc5f64e35be5c 131c1dd8db5030f8 95dcaf09e8ca3b46 gt-ids-dot plink2
 2c351f7f06a62655 131c1dd8db5030f8 b162271d1b13eb1c gt-long phased
 3e15e99f5c71b163 131c1dd8db5030f8 b162271d1b13eb1c gt-long plink2
 7346ddc718bf60df 131c1dd8db5030f8 b162271d1b13eb1c gt-map phased

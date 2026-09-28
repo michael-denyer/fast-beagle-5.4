@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2014-2021 Brian L. Browning
- * Ported to C from Beagle 5.5 (27Feb25) vcf/FilterUtil.java and
+ * Ported to C from Beagle 5.4 (29Oct24) vcf/FilterUtil.java and
  * blbutil/Utilities.java (idSet); modified 2026.
  *
  * This file is part of fast-beagle, a C port of Beagle. It is free software:
@@ -30,8 +30,8 @@ str_set *filter_id_set(const char *path) {
         if (start == end) continue;
         for (size_t j = start; j < end; ++j) {
             if ((unsigned char)s[j] <= ' ') {
-                util_exit("Line has more than one white-space delimited field (file: '%s'; line: '%.*s')",
-                        path, (int)(end - start), s + start);
+                util_exit("java.lang.IllegalArgumentException: line has >1 white-space delimited fields: %.*s",
+                        (int)(end - start), s + start);
             }
         }
         str_set_index(set, s + start, end - start);
@@ -44,7 +44,7 @@ str_set *filter_id_set(const char *path) {
 bool filter_accept_marker(const str_set *exclude, const marker *m) {
     if (exclude == NULL || str_set_size(exclude) == 0) return true;
     if (marker_has_id(m)) {
-        /* MarkerUtils.ids: StringUtil.getFields(id, ';') keeps empty fields. */
+        /* FilterUtil.markerIsInSet: each entry of the stored ID list. */
         span id = marker_id(m);
         const char *f = id.s, *end = id.s + id.n;
         for (;;) {
