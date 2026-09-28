@@ -56,8 +56,6 @@ void marker_cluster_init(marker_cluster *mc, const phase_data *pd, int sample) {
     set_has_missing(mc, sp);
     mc->p_recomb = util_malloc((size_t)n * sizeof *mc->p_recomb);
     mc->p_recomb[0] = 0.0f;
-    /* Beagle 5.4 starts the first interval at marker 0, not at the first
-     * cluster's end. */
     int start = 0;
     for (int c = 1; c < n; ++c) {
         int end = mc->ends[c];
