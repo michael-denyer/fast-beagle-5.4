@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2014-2021 Brian L. Browning
- * Ported to C from Beagle 5.5 (27Feb25) phase/BasicPhaseStates.java;
+ * Ported to C from Beagle 5.4 (29Oct24) phase/BasicPhaseStates.java;
  * modified 2026.
  *
  * This file is part of fast-beagle, a C port of Beagle. It is free software:
@@ -160,7 +160,7 @@ int basic_phase_states_cluster_states(basic_phase_states *bps, const marker_clus
         int m_start = marker_cluster_start(mc, c);
         int b_start = hap_bits[m_start];
         int b_end = hap_bits[mc->ends[c]];
-        if (marker_cluster_is_missing_or_masked(mc, c)) {
+        if (mc->has_missing[c]) {
             memset(m0, 0, n);
             memset(m1, 0, n);
             memset(m2, 0, n);
