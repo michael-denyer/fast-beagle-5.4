@@ -39,7 +39,7 @@ static void set_clusters(sample_phase *sp, const int *hap1, const int *hap2) {
     int n_markers = sp->fpd->n_stage1;
     int_list sizes = {0};
     double max_clust_end = gen_pos[0] + (double)MAX_CLUSTER_CM;
-    bool prev_is_miss_or_het = false;
+    bool prev_is_missing_or_het = false;
     int last_end = 0;
     int miss_index = 0;
     int next_miss = miss_index < sp->n_missing ? sp->missing[miss_index++] : -1;
@@ -47,15 +47,15 @@ static void set_clusters(sample_phase *sp, const int *hap1, const int *hap2) {
         int size = m - last_end;
         bool is_missing = m == next_miss;
         if (is_missing) next_miss = miss_index < sp->n_missing ? sp->missing[miss_index++] : -1;
-        bool is_miss_or_het = is_missing || hap1[m] != hap2[m];
-        if (prev_is_miss_or_het || is_miss_or_het || gen_pos[m] > max_clust_end || size == 255) {
+        bool is_missing_or_het = is_missing || hap1[m] != hap2[m];
+        if (prev_is_missing_or_het || is_missing_or_het || gen_pos[m] > max_clust_end || size == 255) {
             if (m > 0) {
                 int_list_add(&sizes, size);
                 max_clust_end = gen_pos[m] + (double)MAX_CLUSTER_CM;
                 last_end = m;
             }
         }
-        prev_is_miss_or_het = is_miss_or_het;
+        prev_is_missing_or_het = is_missing_or_het;
     }
     int_list_add(&sizes, n_markers - last_end);
 
