@@ -6,8 +6,8 @@
     // Tables mix aligned and compact pipes; re-aligning a whole table when
     // one cell grows makes diffs noisy.
     "MD060": false,
-    // Markdown has no syntax for a sized, centred image.
-    "MD033": { "allowed_elements": ["img", "p"] }
+    // Markdown has no syntax for a sized, right-aligned image.
+    "MD033": { "allowed_elements": ["img"] }
   },
   "ignores": ["third_party/**", "java/src/**", "data/**", "build/**"]
 }
