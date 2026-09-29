@@ -58,7 +58,6 @@ log gt-long
 log gt-plateau
 log gt-plateau2
 log gt-gap-map
-fuzz-regression seq-coder-full
 fuzz
 trace edge-bref3 T3b nthreads=2
 trace edge-bref3 T3b1 nthreads=2
