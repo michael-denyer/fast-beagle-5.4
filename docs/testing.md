@@ -1,6 +1,6 @@
 # Checks and the pre-merge gate
 
-Most checks compare fast-beagle with Beagle 5.4 or with a tool whose output it must match. The unmodified Beagle 5.4 Java source in `java/src/` and the release jar `beagle.29Oct24.c8e.jar` are the oracle. [Byte identity with Beagle 5.5](byte-identity.md) summarises what these checks proved for the Beagle 5.5 port.
+Most checks compare fast-beagle with Beagle 5.4 or with a tool whose output it must match. The unmodified Beagle 5.4 Java source in `java/src/` and the release jar `beagle.29Oct24.c8e.jar` are the oracle. [Byte identity with Beagle 5.4](byte-identity.md) summarises what these checks prove.
 
 ## Check an implementation
 
@@ -120,8 +120,6 @@ A T3e sample line records one sample's `PhaseBaum1` update. A sample with no unp
 9. The likelihood-ratio threshold, or `-` when none applies. None applies in burn-in or when no heterozygote is unphased.
 10. The unphased heterozygote markers after the update.
 
-The 5.5 build of these seams differed in a few fields. Its T1a printed the raw ID, REF, ALT and first `END=` text. Its T3b1 `pd` line and T3b `it` line carried the per-iteration LR threshold. Its sample lines carried `type:size` clusters, with no unphased or missing lists. It had no `leaveUnph` line and no T3e. Record class names in T1c and T1d are the 5.4 classes, for example `SeqCodedRefGTRec` for 5.5's `HapRefGTRec`.
-
 ## Piece size check
 
 `make check-piece-size` (`tests/check-piece-size.sh`) checks the imputation writer's split of a long cluster. The writer splits a long cluster into work items of at most `PIECE_RECORDS` reference markers (500). `PIECE_RECORDS` is a tuning value that must not change the output.
@@ -205,7 +203,12 @@ The live checks need `PLINK2` naming the pinned plink2 binary, and fail without 
   - `window` below 1.1 times `overlap`
   - a value out of bounds or not a number
   - an unknown parameter
-- The script shrinks a failure to a small input and saves it in `build/fuzz-fail` with both commands. Inputs from past failures go in `tests/fuzz-regressions/`, which runs first. Each one's `expect.txt` holds the C result recorded from Beagle 5.4: an exit code and a message, or exit code 0 and the VCF hash. Beagle 5.4 finishes `window-stall`, which Beagle 5.5 repeats without end. `seq-coder-full` is a reference record whose allele count reaches the sequence limit of a 3-sample panel: Beagle 5.4 throws at 1 thread and hangs after throwing at 2. `seq-coder-last` ends the reference with that record, so no coded record is left to take its place and Beagle 5.4 throws a different exception.
+- The script shrinks a failure to a small input and saves it in `build/fuzz-fail` with both commands. Inputs from past failures go in `tests/fuzz-regressions/`, which runs first. Each one's `expect.txt` holds the C result recorded from Beagle 5.4: an exit code and a message, or exit code 0 and the VCF hash. Where the jar hangs after it throws, the expected result is exit code 1 with the jar's message.
+  - `window-stall` runs short windows (`window=0.5 overlap=0.3`) over a sparse target, so consecutive windows can print the same bounds. Beagle 5.4 finishes it.
+  - `seq-coder-full` is a reference record whose allele count reaches the sequence limit of a 3-sample panel. Beagle 5.4 throws at 1 thread and hangs after throwing at 2.
+  - `seq-coder-last` ends the reference with that record, so no coded record is left to take its place and Beagle 5.4 throws a different exception.
+  - `seq-coder-block` has a second such failure in the first block of reference lines. Beagle 5.4 codes the whole block when it opens the reference, so it throws before the first window, whose single target position would fail otherwise. It hangs after throwing.
+- The runner stops a run after 120 s, and stops a Java run as soon as its main thread throws, because another thread can keep the JVM alive.
 - The full tier runs a fixed set of 200 examples (about 30 s per 100 on an M5) and 2 for each invalid-parameter change. The nightly CI run fuzzes 200 new examples. `uv run --python 3.12 --script tests/check_fuzz.py --examples 1000 --random` tries new ones.
 
 ## Model check the pipelined writer

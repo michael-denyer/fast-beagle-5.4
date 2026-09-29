@@ -1,6 +1,6 @@
 # Parameters and output files
 
-fast-beagle takes Beagle 5.5's `key=value` arguments and writes Beagle's output. This page lists what differs from Beagle and the parameters that fast-beagle adds. For every other parameter, see the [Beagle 5.5 documentation](https://faculty.washington.edu/browning/beagle/beagle.html). [How fast-beagle differs from Beagle 5.5](beagle-divergences.md) lists every other difference.
+fast-beagle takes Beagle 5.4's `key=value` arguments and writes Beagle's output. This page lists what differs from Beagle and the parameters that fast-beagle adds. For every other parameter, see the [Beagle 5.4 documentation](https://faculty.washington.edu/browning/beagle/beagle_5.4_18Mar22.pdf). [How fast-beagle differs from Beagle 5.4](beagle-divergences.md) lists every other difference.
 
 ## Run a phasing or imputation job
 
@@ -12,14 +12,17 @@ The run writes `result.vcf.gz`. Without `ref=` it phases the target only. The VC
 
 ## Thread count
 
-`nthreads=` sets both the thread count and the partitions that Beagle's output depends on. The output therefore matches Beagle run with the same thread count. Beagle's output depends on the thread count when a window is longer than 4 cM.
+`nthreads=` sets both the thread count and the partitions that Beagle's output depends on. The output therefore matches Beagle run with the same thread count.
+
+Beagle's output depends on the thread count through the initial PBWT phase of each window. That phase splits the window's stage-1 markers into overlapping sub-windows, phases each one with its own seed and joins them in their overlaps. Each sub-window overlaps the previous one by 1.5 cM and advances max(3, (L - 1.5) / nthreads) cM, where L is the genetic length in cM from the window's first stage-1 marker to its last. At 1 thread, and at any thread count when L is at most 4.5 cM, the window is one sub-window and the thread count does not change the output. When L is longer than 4.5 cM, 2 or more threads split the window, and each thread count below (L - 1.5) / 3 can split it differently, so the output can differ between them. The advance stops shrinking at 3 cM, so every thread count from (L - 1.5) / 3 up gives the same split.
 
 ## Reference panels in bref3 format
 
-`ref=` also reads bref3 files (`.bref3`). fast-beagle writes the output that Beagle writes from the same bref3 file. In Beagle and in fast-beagle alike, that output can differ from the output with a VCF reference of the same panel. It differs in two ways:
+`ref=` also reads bref3 files (`.bref3`). fast-beagle writes the output that Beagle writes from the same bref3 file. In Beagle and in fast-beagle alike, that output can differ from the output with a VCF reference of the same panel. It differs in three ways:
 
-- First, bref3 stores the sequence coding computed over every sample and marker in the file. Beagle codes a VCF reference after `excludesamples=` and `excludemarkers=` remove records and samples. With either parameter the coding groups differ. Imputation clusters break at group boundaries, so imputed values change (cases `imp-bref3-excl` and `imp-bref3-excls`).
-- Second, bref3 keeps INFO/END only for markers that are not SNVs, so imputed SNV records lose `END=` (case `imp-bref3-end`).
+- First, bref3 stores the sequence coding computed over every marker in the file. Beagle codes a VCF reference after `excludemarkers=` removes records. With `excludemarkers=` the coding groups differ. Imputation clusters break at group boundaries, so imputed values change (case `imp-bref3-excl`).
+- Second, Beagle 5.4 applies `excludesamples=` to the target and to a VCF reference, but not to a bref3 reference. Every sample in a bref3 file stays in the panel (cases `imp-bref3-exclr` and `imp-phased-bref3-excls`, whose output equals the run without `excludesamples=`). fast-beagle does the same. To leave reference samples out, remove them before you write the bref3 file.
+- Third, bref3 keeps INFO/END only for markers that are not SNVs, so imputed SNV records lose `END=` (case `imp-bref3-end`).
 
 ## BGEN output
 
@@ -76,8 +79,8 @@ The report differs from Beagle's in these lines:
 
 | Line | fast-beagle |
 |---|---|
-| Banner | `fast-beagle: a C port of beagle.27Feb25.75f.jar (version 5.5)` and the copyright line |
-| `Command line:` | The program path as you ran it, in place of `java -Xmx<heap>m -jar beagle.27Feb25.75f.jar` |
+| Banner | `fast-beagle: a C port of beagle.29Oct24.c8e.jar (version 5.4)` and the copyright line, without Beagle's `Enter "java -jar beagle.29Oct24.c8e.jar" to list command line argument` line |
+| `Command line:` | The program path as you ran it, in place of `java -Xmx<heap>m -jar beagle.29Oct24.c8e.jar` |
 | `Total time:` | Includes closing the output files |
 | `CPU time:` | User plus system CPU time. Beagle does not print it. |
 | `Max memory:` | The max resident memory in MB. Beagle does not print it. |
