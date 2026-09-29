@@ -1,6 +1,6 @@
 # Byte identity with Beagle 5.5
 
-> This page describes the Beagle 5.5 port that this repository starts from. The gate's oracle is now Beagle 5.4 (`beagle.29Oct24.c8e.jar`), and [`tests/c54-pending.txt`](../tests/c54-pending.txt) lists the checks the C engine does not yet pass against it ([Parity ratchet](testing.md#parity-ratchet)). The page will describe Beagle 5.4 when the port is done.
+> This page describes the Beagle 5.5 port that this repository starts from. The gate's oracle is now Beagle 5.4 (`beagle.29Oct24.c8e.jar`), and the C engine passes every check against it. The page will describe Beagle 5.4 when the port is done.
 
 fast-beagle writes the same VCF text as the Java release of Beagle 5.5, `beagle.27Feb25.75f.jar`, when both run with the same arguments, seed and `nthreads=`. The gate proves this on 34 recorded cases at 1, 2 and 18 threads, and compares 20 intermediate trace seams with an instrumented copy of the Java source. It also runs 200 generated inputs and 84 invalid-parameter inputs through both tools. It checks the Java library functions that Beagle calls against a real JVM, and runs every check on macOS arm64 and on Linux x86_64. The proof covers the tested inputs, parameters, thread counts and platforms. The [limits](#limits) section lists what it does not cover.
 

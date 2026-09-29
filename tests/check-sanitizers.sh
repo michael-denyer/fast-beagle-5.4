@@ -2,9 +2,8 @@
 # Builds build/beagle and the BGEN unit tests under AddressSanitizer and
 # UndefinedBehaviorSanitizer, in build/san so the normal build is untouched,
 # then runs every oracle case as VCF only, with bgen=plink2 and with
-# bgen=phased. Every run must exit 0 with the oracle hash (any hash while
-# tests/c54-pending.txt lists the case) and no sanitizer report. On Linux
-# LeakSanitizer also runs; it does not support macOS arm64.
+# bgen=phased. Every run must exit 0 with the oracle hash and no sanitizer
+# report. On Linux LeakSanitizer also runs; it does not support macOS arm64.
 # On macOS it then builds build/beagle under ThreadSanitizer in build/tsan and
 # runs every oracle case at 18 threads, and the thread-dependent cases again
 # with trace= (parallel_for workers write trace seams). ThreadSanitizer cannot
@@ -50,7 +49,7 @@ while read -r name expect tags args; do
       bgen=()
       [ "$mode" = vcf ] || bgen=(bgen="$mode")
       out="$OUT/$name.t$t.$mode"
-      case_verdict "$(c_expect "$name" "$expect")" "$args" "$out" "$t" "$SAN/build/beagle" ${bgen[@]+"${bgen[@]}"}
+      case_verdict "$expect" "$args" "$out" "$t" "$SAN/build/beagle" ${bgen[@]+"${bgen[@]}"}
       ok=$?
       if grep -Eq "$REPORT" "$out.run.log"; then
         echo "FAIL $name nthreads=$t $mode: sanitizer report"; grep -E -A12 "$REPORT" "$out.run.log" | head -40; fail=1
@@ -83,7 +82,7 @@ while read -r name expect _ args; do
     out="$OUT/$name.tsan.$traced"
     trace=()
     [ $traced = yes ] && { mkdir -p "$out.trace"; trace=(trace="$out.trace"); }
-    case_verdict "$(c_expect "$name" "$expect")" "$args" "$out" 18 "$TSAN/build/beagle" ${trace[@]+"${trace[@]}"}
+    case_verdict "$expect" "$args" "$out" 18 "$TSAN/build/beagle" ${trace[@]+"${trace[@]}"}
     ok=$?
     if grep -q ThreadSanitizer "$out.run.log"; then
       echo "FAIL $name nthreads=18 traced=$traced: ThreadSanitizer report"; grep -A20 ThreadSanitizer "$out.run.log" | head -40; fail=1

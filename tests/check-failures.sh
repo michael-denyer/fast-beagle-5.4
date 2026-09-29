@@ -6,8 +6,6 @@
 # Usage: tests/check-failures.sh <command...>
 #   tests/check-failures.sh java -ea -jar data/beagle.29Oct24.c8e.jar
 #   tests/check-failures.sh build/beagle
-# A command other than java is judged under the parity ratchet
-# (tests/c54-ratchet.sh) with the key "failure <case>".
 set -uo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 # shellcheck source=cases.sh
@@ -20,19 +18,10 @@ failed() { echo "FAIL $*"; fail=1; }
 
 # ABSENT names an output the refused run must not write.
 check() {  # name message args...
-  local name=$1 message=$2 status=0 miss=FAIL; shift 2
-  [ "${BEAGLE[0]}" = java ] || miss=$(miss_label "failure $name")
+  local name=$1 message=$2; shift 2
   "${BEAGLE[@]}" "$@" seed=$SEED nthreads=2 > "$OUT/$name.log" 2>&1
-  if refused "$OUT/$name.log" $? "$message" ${ABSENT:+"$ABSENT"}; then
-    echo "PASS $name: $message"
-  else
-    echo "$miss $name $VERDICT"; status=1
-  fi
-  if [ "${BEAGLE[0]}" = java ]; then
-    [ $status -eq 0 ] || fail=1
-  else
-    ratchet "failure $name" $status || fail=1
-  fi
+  refused "$OUT/$name.log" $? "$message" ${ABSENT:+"$ABSENT"} || { failed "$name $VERDICT"; return; }
+  echo "PASS $name: $message"
 }
 
 unchanged() {  # name file hash

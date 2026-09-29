@@ -6,9 +6,6 @@
 # log, and a run that fails on a malformed reference must end its log with the
 # error message.
 #
-# The log comparison is judged under the parity ratchet (tests/c54-ratchet.sh)
-# with the key "log <case>".
-#
 # Usage: tests/check-log.sh    (after make build/beagle)
 # CASES restricts the run to the named cases (default all); NTHREADS sets the
 # thread count (default 2).
@@ -49,11 +46,9 @@ while read -r name _ _ args; do
     echo "FAIL $name: build/beagle's standard output differs from its log"
     diff "$c.log" "$c.run.log" | head -10; fail=1
   elif ! diff <(mask "$j.log") <(mask "$c.log") > "$OUT/$name.diff"; then
-    echo "$(miss_label "log $name") $name: the logs differ"; head -20 "$OUT/$name.diff"
-    ratchet "log $name" 1 || fail=1
+    echo "FAIL $name: the logs differ"; head -20 "$OUT/$name.diff"; fail=1
   else
     echo "PASS $name nthreads=$T $(wc -l < "$c.log" | tr -d ' ') lines"
-    ratchet "log $name" 0 || fail=1
   fi
 done < <(cases)
 

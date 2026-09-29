@@ -1,6 +1,6 @@
 # Architecture and source layout
 
-fast-beagle is a file-by-file C port of Beagle 5.5 (27Feb25), being ported to Beagle 5.4 (29Oct24). The oracle cases (`tests/check-oracle.sh build/beagle`) now record Beagle 5.4's output, and [`tests/c54-pending.txt`](../tests/c54-pending.txt) lists the ones the C engine does not yet match. [CONTEXT.md](../CONTEXT.md) defines the domain terms.
+fast-beagle is a file-by-file C port of Beagle 5.5 (27Feb25), being ported to Beagle 5.4 (29Oct24). The oracle cases (`tests/check-oracle.sh build/beagle`) record Beagle 5.4's output, and the C engine matches every one. [CONTEXT.md](../CONTEXT.md) defines the domain terms.
 
 ## Each window runs through four stages
 

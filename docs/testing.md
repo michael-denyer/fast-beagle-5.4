@@ -1,6 +1,6 @@
 # Checks and the pre-merge gate
 
-Most checks compare fast-beagle with Beagle 5.4 or with a tool whose output it must match. The unmodified Beagle 5.4 Java source in `java/src/` and the release jar `beagle.29Oct24.c8e.jar` are the oracle. The C engine is still the Beagle 5.5 port, so the checks that compare it with Beagle 5.4 go through the [parity ratchet](#parity-ratchet). [Byte identity with Beagle 5.5](byte-identity.md) summarises what these checks proved for the Beagle 5.5 port.
+Most checks compare fast-beagle with Beagle 5.4 or with a tool whose output it must match. The unmodified Beagle 5.4 Java source in `java/src/` and the release jar `beagle.29Oct24.c8e.jar` are the oracle. [Byte identity with Beagle 5.5](byte-identity.md) summarises what these checks proved for the Beagle 5.5 port.
 
 ## Check an implementation
 
@@ -223,16 +223,6 @@ The model represents condition-variable waits with wait sets and spurious wakeup
 ## Benchmark
 
 `tests/bench/` holds the 1000 Genomes chr20 benchmark. `fetch-chr20.sh <dir>` downloads and derives the inputs, and `bench.sh <dir> <rounds>` times Java and C alternately. [perf-baseline.md](perf-baseline.md) has the method and the current result.
-
-## Parity ratchet
-
-`tests/c54-pending.txt` lists the checks of `build/beagle` whose result still differs from Beagle 5.4's, one key per line: `oracle <case>`, `failure <case>`, `log <case>`, `trace <case> <seam> nthreads=<n>`, `fuzz-regression <directory>`, `fuzz` for the generated examples, and `fuzz-invalid <change>`. `tests/c54-ratchet.sh` holds the one rule that `tests/check-oracle.sh`, `tests/check-failures.sh`, `tests/check-log.sh`, `tests/check-trace.sh` and `tests/check_fuzz.py` apply to such a result:
-
-- A key that is not listed must match, as before.
-- A listed key that differs prints `pending <key>` and passes.
-- A listed key that matches fails with `remove <key> from tests/c54-pending.txt`, so the list only shrinks.
-
-`tests/check-oracle.sh` and `tests/check-failures.sh` apply the ratchet to every command except `java`. The sanitizer, tabix and BGEN checks run oracle cases too. For a listed `oracle <case>` they require exit 0 and any hash, and keep their own checks.
 
 ## Run the pre-merge gate
 
