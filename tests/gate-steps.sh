@@ -2,7 +2,7 @@
 # The gate's checks, in order, run in the checkout <root>. tests/check-local.sh
 # runs them natively and on Linux x86_64 in docker, and CI runs them on each
 # runner. Prints one pass or FAIL line per check; each check's output goes to
-# build/check-<name>.log.
+# build/check-<name>.log, or build/check-c-<name>.log in the C tier.
 #
 # Usage: [GATE_TIER=c] [GATE_FUZZ=random] tests/gate-steps.sh <root>
 # Needs Java 21, htslib and uv; the full tier also needs PLINK2 naming the
@@ -27,8 +27,8 @@ mkdir -p build
 fail=0
 tier=${GATE_TIER:-full}
 case $tier in full|c) ;; *) echo "GATE_TIER must be full or c, not $tier"; exit 2 ;; esac
-bgen_oracle=live
-[ "$tier" = c ] && bgen_oracle=recorded
+bgen_oracle=live logs=build/check-
+[ "$tier" = c ] && bgen_oracle=recorded logs=build/check-c-
 fuzz_args=(--examples 200)
 case ${GATE_FUZZ:-fixed} in
   fixed) ;;
@@ -37,10 +37,10 @@ case ${GATE_FUZZ:-fixed} in
 esac
 step() {  # name command...
   local name=$1; shift
-  if "$@" > "build/check-$name.log" 2>&1; then
+  if "$@" > "$logs$name.log" 2>&1; then
     echo "  pass  $name"
   else
-    echo "  FAIL  $name (build/check-$name.log)"; fail=1
+    echo "  FAIL  $name ($logs$name.log)"; fail=1
   fi
 }
 full_step() {  # name command...: runs only in the full tier
