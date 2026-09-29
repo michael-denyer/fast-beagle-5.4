@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2014-2021 Brian L. Browning
- * Ported to C from Beagle 5.5 (27Feb25) vcf/Markers.java and
- * vcf/Marker.java (equals, hashCode, toString); modified 2026.
+ * Ported to C from Beagle 5.4 (29Oct24) vcf/Markers.java and
+ * vcf/BasicMarker.java (equals, hashCode, toString); modified 2026.
  *
  * This file is part of fast-beagle, a C port of Beagle. It is free software:
  * you can redistribute it and/or modify it under the terms of the GNU General
@@ -23,8 +23,7 @@ static bool span_equals(span a, span b) {
 
 bool marker_equals(const marker *a, const marker *b) {
     return a->chrom_index == b->chrom_index && a->pos == b->pos
-            && span_equals(marker_alleles(a), marker_alleles(b))
-            && span_equals(marker_end_value(a), marker_end_value(b));
+            && span_equals(marker_alleles(a), marker_alleles(b)) && a->end == b->end;
 }
 
 static void print_marker(const marker *m) {
@@ -35,12 +34,11 @@ static void print_marker(const marker *m) {
 /* A hash consistent with marker_equals, for the duplicate check. */
 static uint32_t marker_hash(const marker *m) {
     uint32_t h = 2166136261u;
-    span al = marker_alleles(m), end = marker_end_value(m);
+    span al = marker_alleles(m);
     h = (h ^ (uint32_t)m->chrom_index) * 16777619u;
     h = (h ^ (uint32_t)m->pos) * 16777619u;
     for (int j = 0; j < al.n; ++j) h = (h ^ (unsigned char)al.s[j]) * 16777619u;
-    h = (h ^ 0xff) * 16777619u;
-    for (int j = 0; j < end.n; ++j) h = (h ^ (unsigned char)end.s[j]) * 16777619u;
+    h = (h ^ (uint32_t)m->end) * 16777619u;
     return h;
 }
 
@@ -56,7 +54,7 @@ void markers_check(const marker *const *markers, int n) {
             if (chr0 == chr1 && chr1 == chr2) {
                 int32_t pos0 = markers[j - 2]->pos, pos1 = markers[j - 1]->pos, pos2 = markers[j]->pos;
                 if ((pos1 < pos0 && pos1 < pos2) || (pos1 > pos0 && pos1 > pos2)) {
-                    fprintf(stderr, "markers not in chromosomal order: ");
+                    fprintf(stderr, "java.lang.IllegalArgumentException: markers not in chromosomal order: ");
                     print_marker(markers[j - 2]);
                     print_marker(markers[j - 1]);
                     print_marker(markers[j]);
@@ -81,9 +79,9 @@ void markers_check(const marker *const *markers, int n) {
         size_t slot = marker_hash(markers[j]) & (cap - 1);
         while (table[slot] != NULL) {
             if (marker_equals(table[slot], markers[j])) {
-                fprintf(stderr, "Duplicate marker: ");
-                print_marker(markers[j]);
-                fputc('\n', stderr);
+                span id = marker_id(markers[j]), al = marker_alleles(markers[j]);
+                fprintf(stderr, "java.lang.IllegalArgumentException: Duplicate marker: %s\t%d\t%.*s\t%.*s\n",
+                        marker_chrom(markers[j]), markers[j]->pos, id.n, id.s, al.n, al.s);
                 exit(1);
             }
             slot = (slot + 1) & (cap - 1);

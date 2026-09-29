@@ -21,7 +21,7 @@ def main():
                 outputs.append([s.rstrip("\n").split("\t") for s in f if s[0] != "#"])
         assert outputs[0] == outputs[1] == outputs[2]
         phased, imputed, observed, mono, five = outputs[0]
-        assert phased[6:] == [".", ".", "GT", "0|1", "1", "0|1"]
+        assert phased[6:] == ["PASS", ".", "GT", "0|1", "1", "0|1"]
         assert imputed[6] == "PASS" and imputed[7].endswith(";IMP")
         assert imputed[8] == "GT:DS:AP1:AP2:GP"
         assert imputed[9].split(":")[:4] == ["0|1", "1.21", "0.33", "0.88"]

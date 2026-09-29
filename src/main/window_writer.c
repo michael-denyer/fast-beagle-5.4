@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2014-2021 Brian L. Browning
- * Ported to C from Beagle 5.5 (27Feb25) main/WindowWriter.java,
+ * Ported to C from Beagle 5.4 (29Oct24) main/WindowWriter.java,
  * vcf/VcfWriter.java, vcf/VcfRecBuilder.java and imp/ImputedRecBuilder.java;
  * modified 2026.
  *
@@ -191,16 +191,9 @@ static void put_info(const out_rec *rb, bool is_imputed, int n_input_targ_haps, 
         jnum_format_fixed(buf, sizeof buf, (double)(rb->sum_al_probs[a] / n_input_targ_haps), 4);
         kputs(buf, l);
     }
-    /* ImputedRecBuilder.extractEnd */
-    span info = marker_info(rb->mk);
-    for (int j = 0; j + 4 <= info.n; ++j) {
-        if (memcmp(info.s + j, "END=", 4) == 0) {
-            int k = j + 4;
-            while (k < info.n && info.s[k] != ';') ++k;
-            kputc(';', l);
-            kputsn(info.s + j, (size_t)(k - j), l);
-            break;
-        }
+    if (rb->mk->end != -1) {
+        kputs(";END=", l);
+        kputw(rb->mk->end, l);
     }
     if (is_imputed) kputs(";IMP", l);
 }
@@ -276,7 +269,7 @@ void window_writer_open(window_writer *ww, const par *p, const samples *s) {
     write_line(ww);
     ksprintf(l, "##filedate=%s", date);
     write_line(ww);
-    kputs("##source=\"beagle.27Feb25.75f.jar\"", l);
+    kputs("##source=\"beagle.29Oct24.c8e.jar\"", l);
     write_line(ww);
     kputs("##INFO=<ID=AF,Number=A,Type=Float,Description=\"Estimated ALT Allele Frequencies\">", l);
     write_line(ww);
@@ -284,6 +277,9 @@ void window_writer_open(window_writer *ww, const par *p, const samples *s) {
             "estimated REF dose [P(RA) + 2*P(RR)] and true REF dose\">", l);
     write_line(ww);
     kputs("##INFO=<ID=IMP,Number=0,Type=Flag,Description=\"Imputed marker\">", l);
+    write_line(ww);
+    kputs("##INFO=<ID=END,Number=1,Type=Integer,Description=\"End position of the variant described in this record  "
+            "(for use with symbolic alleles)\">", l);
     write_line(ww);
     kputs("##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">", l);
     write_line(ww);
@@ -329,7 +325,9 @@ void window_writer_rec_begin(const window_writer *ww, out_rec *r, const marker *
     if (ks_resize(&r->info, 32) != 0) util_exit("Out of memory");
     if (ww->bgen != NULL) r->bgen = bgen_rec_begin(ww->bgen, r->bgen, mk);
     if (kind == OUT_PHASED) {
-        put_span(marker_info(mk), &r->info);
+        /* VcfRecBuilder: END=<int> or "." */
+        if (mk->end == -1) kputc('.', &r->info);
+        else ksprintf(&r->info, "END=%d", mk->end);
         kputs("GT", &r->fields);
     } else {
         int n = r->n_alleles;
@@ -407,9 +405,7 @@ void window_writer_put(window_writer *ww, out_rec *r) {
     put_span(marker_id(mk), l);
     kputc('\t', l);
     put_span(marker_alleles(mk), l);
-    kputs("\t.\t", l);
-    kputs(r->kind == OUT_PHASED ? "." : "PASS", l);
-    kputc('\t', l);
+    kputs("\t.\tPASS\t", l);
     kputsn(r->info.s, r->info.l, l);
     size_t info_end = l->l;
     kputc('\t', l);
