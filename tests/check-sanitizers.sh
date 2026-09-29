@@ -9,8 +9,8 @@
 # with trace= (parallel_for workers write trace seams). ThreadSanitizer cannot
 # start in the gate's docker leg: it needs an address layout that the x86_64
 # emulation gives only with ASLR off, and docker forbids turning ASLR off.
-# Runs that end in util_exit are not tested: exit leaves memory allocated by
-# design.
+# Output refusal checks also run with leak detection off: util_exit leaves
+# memory allocated by design.
 #
 # Usage: tests/check-sanitizers.sh
 # NTHREADS overrides the thread counts tried (default "1 2").
@@ -23,7 +23,7 @@ SAN="$ROOT/build/san"
 
 mkdir -p "$SAN"
 rsync -a --delete --exclude build "$ROOT/Makefile" "$ROOT/java" "$ROOT/src" "$ROOT/third_party" "$ROOT/tests" "$SAN/"
-SAN_CFLAGS=${SAN_CFLAGS:-"-O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined -fno-sanitize-recover=all"}
+SAN_CFLAGS=${SAN_CFLAGS:-"-O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined,float-cast-overflow -fno-sanitize-recover=all"}
 # make does not rebuild objects when only CFLAGS change.
 make -C "$SAN" clean > /dev/null
 make -C "$SAN" CFLAGS="$SAN_CFLAGS" build/beagle check-bgen-unit check-records check-tracker check-block-reader \
@@ -41,11 +41,17 @@ trap 'rm -rf "$OUT"' EXIT
 
 check_selection "$ROOT/tests/oracle-cases.txt" || exit 1
 fail=0
+if ASAN_OPTIONS=detect_leaks=0 python3 "$ROOT/tests/check_output_failures.py" "$SAN/build/beagle"; then
+  echo "PASS sanitizer output refusals"
+else
+  echo "FAIL sanitizer output refusals"; fail=1
+fi
 while read -r name expect tags args; do
   selected "$name" || continue
   for t in ${NTHREADS:-1 2}; do
     for mode in vcf plink2 phased; do
       [ "$mode" = plink2 ] && has_tag "$tags" nonautosome && continue
+      [ "$mode" = phased ] && has_tag "$tags" nonfinite && continue
       bgen=()
       [ "$mode" = vcf ] || bgen=(bgen="$mode")
       out="$OUT/$name.t$t.$mode"

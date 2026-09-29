@@ -110,8 +110,8 @@ read_case() {  # name
 # The run's row in tests/bgen-hashes.txt must match the SHA-256 prefixes of its
 # .bgen, .sample and .info. Under RECORD=1 the row is collected instead. Sets
 # VERDICT on a mismatch.
-check_hashes() {  # out
-  local f got=() want
+check_hashes() {  # out key
+  local key=$2 f got=() want
   for f in "$1.bgen" "$1.sample" "$1.info"; do got+=("$($SHA "$f" | cut -c1-16)"); done
   if [ -n "${RECORD:-}" ]; then echo "${got[*]} $key" >> "$OUT/hashes"; return; fi
   want=$(awk -v k="$key" '!/^#/ && NF {h = $1 " " $2 " " $3; $1 = $2 = $3 = ""; sub(/^ +/, "")
@@ -136,20 +136,41 @@ run_plink2() {  # vcf out beagle-args...
 }
 
 # bgen=plink2 must write the .bgen and .sample that plink2 writes from the VCF.
-check_match() {  # label out beagle-args...
-  local label=$1 b=$2.beagle p=$2.plink2 got decoded detail=; shift 2
-  case_verdict "$expect" "$args" "$b" $THREADS "$BEAGLE" bgen=plink2 "$@" \
+# shellcheck disable=SC2329  # runs through check_ok as live_$mode
+live_plink2() {  # out beagle-args...
+  local b=$1 p=$1.plink2; shift
+  run_plink2 "$b.vcf.gz" "$p" "$@" || { echo "plink2 exit=$?: $(grep -m1 '^Error' "$p.plink2.log")"; return 1; }
+  if ! cmp "$b.bgen" "$p.bgen" || ! cmp "$b.sample" "$p.sample"; then
+    echo "bgen or sample differs"; return 1
+  fi
+  echo "$(head -c 12 "$b.bgen" | tail -c 4 | od -An -tu4 | tr -d ' ') variants"
+}
+
+# bgen=phased: check_bgen_phased.py finds the BGEN consistent with the VCF,
+# and plink2 loads the BGEN unless the case is nonautosome.
+# shellcheck disable=SC2329  # runs through check_ok as live_$mode
+live_phased() {  # out beagle-args...
+  local b=$1 got
+  got=$(python3 "$ROOT/tests/check_bgen_phased.py" "$b.bgen" "$b.vcf.gz") || { echo "$got"; return 1; }
+  if ! has_tag "$tags" nonautosome; then
+    "$PLINK2" --bgen "$b.bgen" ref-first --sample "$b.sample" --export vcf --out "$b.plink2" > "$b.plink2.log" 2>&1 \
+      || { echo "plink2 --bgen: $(grep -m1 '^Error' "$b.plink2.log")"; return 1; }
+  fi
+  echo "$got"
+}
+
+# A run that must succeed. Live checks run only under BGEN_ORACLE=live.
+check_ok() {  # label out mode key beagle-args...
+  local label=$1 b=$2 mode=$3 key=$4 rows decoded detail=; shift 4
+  case_verdict "$expect" "$args" "$b" $THREADS "$BEAGLE" bgen="$mode" "$@" \
     || { failed "$label beagle $VERDICT $(tail -1 "$b.run.log")"; return; }
   if [ "$ORACLE" = live ]; then
-    run_plink2 "$b.vcf.gz" "$p" "$@" || { failed "$label plink2 exit=$?: $(grep -m1 '^Error' "$p.plink2.log")"; return; }
-    if ! cmp "$b.bgen" "$p.bgen" || ! cmp "$b.sample" "$p.sample"; then
-      failed "$label bgen or sample differs"; return
-    fi
-    got=$(python3 "$ROOT/tests/check_bgen_info.py" "$b.bgen" "$b.info" "$b.vcf.gz") || { failed "$label .info: $got"; return; }
+    detail=$("live_$mode" "$b" "$@") || { failed "$label $detail"; return; }
+    rows=$(python3 "$ROOT/tests/check_bgen_info.py" "$b.bgen" "$b.info" "$b.vcf.gz") || { failed "$label .info: $rows"; return; }
     decoded=$(bgen_reader "$b.bgen") || { failed "$label bgen-reader: $decoded"; return; }
-    detail="$(head -c 12 "$b.bgen" | tail -c 4 | od -An -tu4 | tr -d ' ') variants, .info $got, bgen-reader agrees, "
+    detail="$detail, .info $rows, bgen-reader agrees, "
   fi
-  check_hashes "$b" || { failed "$label $VERDICT"; return; }
+  check_hashes "$b" "$key" || { failed "$label $VERDICT"; return; }
   pass "$label ${detail}hashes as recorded"
 }
 
@@ -166,39 +187,19 @@ check_both_fail() {  # label out message beagle-args...
   pass "$label fails in both: $(grep -m1 -A1 '^Error' "$p.plink2.log" | tr '\n' ' ')"
 }
 
-# bgen=phased: check_bgen_phased.py finds the BGEN consistent with the VCF,
-# and plink2 loads the BGEN unless the case is nonautosome.
-check_phased() {  # label out beagle-args...
-  local label=$1 b=$2.phased rows decoded got detail=; shift 2
-  case_verdict "$expect" "$args" "$b" $THREADS "$BEAGLE" bgen=phased "$@" \
-    || { failed "$label beagle $VERDICT $(tail -1 "$b.run.log")"; return; }
-  if [ "$ORACLE" = live ]; then
-    got=$(python3 "$ROOT/tests/check_bgen_phased.py" "$b.bgen" "$b.vcf.gz") \
-      || { failed "$label: $got"; return; }
-    if ! has_tag "$tags" nonautosome; then
-      "$PLINK2" --bgen "$b.bgen" ref-first --sample "$b.sample" --export vcf --out "$b.plink2" > "$b.plink2.log" 2>&1 \
-        || { failed "$label plink2 --bgen: $(grep -m1 '^Error' "$b.plink2.log")"; return; }
-    fi
-    rows=$(python3 "$ROOT/tests/check_bgen_info.py" "$b.bgen" "$b.info" "$b.vcf.gz") \
-      || { failed "$label .info: $rows"; return; }
-    decoded=$(bgen_reader "$b.bgen") || { failed "$label bgen-reader: $decoded"; return; }
-    detail="$got, .info $rows, bgen-reader agrees, "
-  fi
-  check_hashes "$b" || { failed "$label $VERDICT"; return; }
-  pass "$label ${detail}hashes as recorded"
-}
-
 check_run() {  # name mode outcome beagle-args...
-  local name=$1 mode=$2 outcome=$3 expect tags args label out key; shift 3
+  local name=$1 mode=$2 outcome=$3 expect tags args out; shift 3
   read_case "$name"
-  label="$name${*:+ $*}"
-  key="$name $mode${*:+ $*}"
   out="$OUT/$name$(printf '%s' "$*" | tr -c 'a-z0-9.' '_')"
   case "$mode $outcome" in
-    "plink2 ok") check_match "$label" "$out" "$@" ;;
-    "phased ok") check_phased "$name bgen=phased${*:+ $*}" "$out" "$@" ;;
-    plink2\ *) check_both_fail "$label" "$out" "$outcome" "$@" ;;
-    *) failed "$label: no check for mode $mode with outcome $outcome" ;;
+    "plink2 ok" | "phased ok") check_ok "$name bgen=$mode${*:+ $*}" "$out.$mode" "$mode" "$name $mode${*:+ $*}" "$@" ;;
+    plink2\ *) check_both_fail "$name${*:+ $*}" "$out" "$outcome" "$@" ;;
+    phased\ *)
+      case_run "$args" "$out.phased" $THREADS "$BEAGLE" bgen=phased "$@"
+      refused "$out.phased.run.log" $? "$outcome" "$out.phased.bgen" "$out.phased.info" "$out.phased.sample" \
+        || { failed "$name bgen=phased $VERDICT"; return; }
+      pass "$name bgen=phased fails: $outcome" ;;
+    *) failed "$name${*:+ $*}: no check for mode $mode with outcome $outcome" ;;
   esac
 }
 
@@ -210,7 +211,11 @@ all_runs() {
     else
       echo "$name plink2 | ok"
     fi
-    echo "$name phased | ok"
+    if has_tag "$tags" nonfinite; then
+      echo "$name phased | cannot encode a non-finite allele probability"
+    else
+      echo "$name phased | ok"
+    fi
   done < <(cases "${TABLES[@]}")
   awk '!/^#/ && NF' <<< "$RUNS"
 }

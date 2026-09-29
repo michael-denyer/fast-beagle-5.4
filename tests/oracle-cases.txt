@@ -5,6 +5,8 @@
 # reads the output: nonautosome marks a chromosome that plink2 does not read as
 # an autosome without --chr-set, such as chrX, and multiallelic marks records
 # with more than two alleles, which plink2 imports with --import-max-alleles 2.
+# nonfinite marks imputed probabilities that are NaN, which bgen=phased
+# refuses to encode.
 gt        f1718d9eca3e5c58  -           gt=@test.vcf.gz
 ref       f6441c7a9b1aee8b  -           ref=@ref.vcf.gz gt=@target.vcf.gz
 imp       92e79837e9f08765  -           ref=@ref.vcf.gz gt=@target.thin.vcf.gz
@@ -82,4 +84,4 @@ imp-phased-excls  b93751634d50ae6a  -  ref=@ref.rest.vcf.gz gt=@target.phased.vc
 imp-phased-states b0639a856998ebf2  -  ref=@ref.rest.vcf.gz gt=@target.phased.vcf.gz imp-states=10 map=@map.plateau.map
 # Imputation with err=0 that leaves every state probability 0, so the imputed
 # marker has AF=NaN, which Beagle 5.4 writes as NaN.
-imp-nan           8a9a7816c37a0eaf  -  ref=@ref.nan.vcf.gz gt=@target.nan.vcf.gz err=0
+imp-nan           8a9a7816c37a0eaf  nonfinite  ref=@ref.nan.vcf.gz gt=@target.nan.vcf.gz err=0

@@ -1,0 +1,33 @@
+<banner>
+Copyright (C) 2014-2022 Brian L. Browning
+Start time: <time>
+
+Command line: <program>
+  ref=@/ref.nan.vcf.gz
+  gt=@/target.nan.vcf.gz
+  err=0
+  out=<out>
+  seed=-99999
+  nthreads=2
+
+No genetic map is specified: using 1 cM = 1 Mb
+
+Reference samples:                    2
+Study     samples:                    1
+
+Window 1 [20:1000-3000]
+Reference markers:                    3
+Study     markers:                    2
+
+Imputation time:               <elapsed>
+
+Cumulative Statistics:
+
+Reference markers:                    3
+Study     markers:                    2
+
+Imputation time:               <elapsed>
+Total time:                    <elapsed>
+
+End time: <time>
+<program> finished

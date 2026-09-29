@@ -22,7 +22,7 @@ typedef enum { BGEN_NONE, BGEN_PLINK2, BGEN_PHASED } bgen_mode;
 /* Beagle's command-line parameters, with Java's defaults and ranges. */
 typedef struct {
     /* data parameters; NULL when absent */
-    const char *gt, *ref, *out, *ped, *map, *excludesamples, *excludemarkers;
+    const char *gt, *ref, *out, *ped, *map, *excludesamples, *excludemarkers, *truth;
     bool has_chrom_int;
     chrom_interval chrom_int;
 

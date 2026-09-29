@@ -46,6 +46,9 @@ void phase_data_advance_to_first_phasing_it(phase_data *pd);
 void phase_data_update_p_mismatch(phase_data *pd, float p_mismatch);
 /* PhaseData.updateRecombIntensity: recomputes pRecomb. */
 void phase_data_update_recomb_intensity(phase_data *pd, float recomb_intensity);
+/* PhaseData.ne(): the effective population size the recombination intensity
+ * implies. */
+int64_t phase_data_ne(const phase_data *pd);
 
 /* PhaseData.seed(): the window seed plus the iteration */
 static inline int64_t phase_data_seed(const phase_data *pd) {

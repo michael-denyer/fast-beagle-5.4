@@ -1,0 +1,57 @@
+<banner>
+Copyright (C) 2014-2022 Brian L. Browning
+Start time: <time>
+
+Command line: <program>
+  ref=@/ref.rest.vcf.gz
+  gt=@/target.phased.vcf.gz
+  map=@/map.map
+  window=1.5
+  overlap=0.5
+  out=<out>
+  seed=-99999
+  nthreads=2
+
+Reference samples:                  161
+Study     samples:                   20
+
+Window 1 [22:20000086-20056194]
+Reference markers:                  800
+Study     markers:                   80
+
+Imputation time:               <elapsed>
+
+Window 2 [22:20049939-20068747]
+Reference markers:                  266
+Study     markers:                   26
+
+Imputation time:               <elapsed>
+
+Window 3 [22:20062490-20081160]
+Reference markers:                  246
+Study     markers:                   25
+
+Imputation time:               <elapsed>
+
+Window 4 [22:20075012-20093655]
+Reference markers:                  229
+Study     markers:                   23
+
+Imputation time:               <elapsed>
+
+Window 5 [22:20087473-20099941]
+Reference markers:                  156
+Study     markers:                   15
+
+Imputation time:               <elapsed>
+
+Cumulative Statistics:
+
+Reference markers:                1,356
+Study     markers:                  135
+
+Imputation time:               <elapsed>
+Total time:                    <elapsed>
+
+End time: <time>
+<program> finished

@@ -1,0 +1,130 @@
+<banner>
+Copyright (C) 2014-2022 Brian L. Browning
+Start time: <time>
+
+Command line: <program>
+  ref=@/ref.vcf.gz
+  gt=@/target.thin.vcf.gz
+  map=@/map.plateau2.map
+  window=1.0
+  overlap=0.3
+  out=<out>
+  seed=-99999
+  nthreads=2
+
+Reference samples:                  181
+Study     samples:                   10
+
+Window 1 [22:20000086-20032464]
+Reference markers:                  446
+Study     markers:                   45
+
+Burnin  iteration 1:           <elapsed>
+Burnin  iteration 2:           <elapsed>
+Burnin  iteration 3:           <elapsed>
+
+Estimated ne:                  12025
+Estimated err:                 2.0e-04
+
+Phasing iteration 1:           <elapsed>
+Phasing iteration 2:           <elapsed>
+Phasing iteration 3:           <elapsed>
+Phasing iteration 4:           <elapsed>
+Phasing iteration 5:           <elapsed>
+Phasing iteration 6:           <elapsed>
+Phasing iteration 7:           <elapsed>
+Phasing iteration 8:           <elapsed>
+Phasing iteration 9:           <elapsed>
+Phasing iteration 10:          <elapsed>
+Phasing iteration 11:          <elapsed>
+Phasing iteration 12:          <elapsed>
+Low frequency phasing:         <elapsed>
+
+Imputation time:               <elapsed>
+
+Window 2 [22:20027990-20039501]
+Reference markers:                  151
+Study     markers:                   15
+
+Burnin  iteration 1:           <elapsed>
+
+Estimated ne:                  2111
+Estimated err:                 2.0e-04
+
+Phasing iteration 1:           <elapsed>
+Phasing iteration 2:           <elapsed>
+Phasing iteration 3:           <elapsed>
+Phasing iteration 4:           <elapsed>
+Phasing iteration 5:           <elapsed>
+Phasing iteration 6:           <elapsed>
+Phasing iteration 7:           <elapsed>
+Phasing iteration 8:           <elapsed>
+Phasing iteration 9:           <elapsed>
+Phasing iteration 10:          <elapsed>
+Phasing iteration 11:          <elapsed>
+Phasing iteration 12:          <elapsed>
+Low frequency phasing:         <elapsed>
+
+Imputation time:               <elapsed>
+
+Window 3 [22:20036514-20096068]
+Reference markers:                  807
+Study     markers:                   80
+
+Burnin  iteration 1:           <elapsed>
+
+Estimated ne:                  7073
+Estimated err:                 1.7e-03
+
+Phasing iteration 1:           <elapsed>
+Phasing iteration 2:           <elapsed>
+Phasing iteration 3:           <elapsed>
+Phasing iteration 4:           <elapsed>
+Phasing iteration 5:           <elapsed>
+Phasing iteration 6:           <elapsed>
+Phasing iteration 7:           <elapsed>
+Phasing iteration 8:           <elapsed>
+Phasing iteration 9:           <elapsed>
+Phasing iteration 10:          <elapsed>
+Phasing iteration 11:          <elapsed>
+Phasing iteration 12:          <elapsed>
+Low frequency phasing:         <elapsed>
+
+Imputation time:               <elapsed>
+
+Window 4 [22:20084054-20099941]
+Reference markers:                  194
+Study     markers:                   19
+
+Burnin  iteration 1:           <elapsed>
+
+Estimated ne:                  21927
+Estimated err:                 2.0e-04
+
+Phasing iteration 1:           <elapsed>
+Phasing iteration 2:           <elapsed>
+Phasing iteration 3:           <elapsed>
+Phasing iteration 4:           <elapsed>
+Phasing iteration 5:           <elapsed>
+Phasing iteration 6:           <elapsed>
+Phasing iteration 7:           <elapsed>
+Phasing iteration 8:           <elapsed>
+Phasing iteration 9:           <elapsed>
+Phasing iteration 10:          <elapsed>
+Phasing iteration 11:          <elapsed>
+Phasing iteration 12:          <elapsed>
+Low frequency phasing:         <elapsed>
+
+Imputation time:               <elapsed>
+
+Cumulative Statistics:
+
+Reference markers:                1,356
+Study     markers:                  136
+
+Haplotype phasing time:        <elapsed>
+Imputation time:               <elapsed>
+Total time:                    <elapsed>
+
+End time: <time>
+<program> finished

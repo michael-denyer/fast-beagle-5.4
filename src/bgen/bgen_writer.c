@@ -447,11 +447,10 @@ void bgen_quantise(const float *p, int n, uint32_t max, uint32_t *out) {
     double rem[n];
     uint32_t sum = 0;
     for (int a = 0; a < n; ++a) {
-        /* NaN, from a 0/0 normalisation, is 0 and takes no rounding unit */
-        bool nan = isnan(p[a]);
-        double v = nan ? 0.0 : (double)p[a] * max;
+        if (!isfinite(p[a])) util_exit(PROGRAM ": bgen=phased: cannot encode a non-finite allele probability");
+        double v = (double)p[a] * max;
         q[a] = (uint32_t)v;
-        rem[a] = nan ? -1.0 : v - q[a];
+        rem[a] = v - q[a];
         sum += q[a];
     }
     while (sum < max) {

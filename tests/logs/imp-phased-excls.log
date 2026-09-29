@@ -1,0 +1,33 @@
+<banner>
+Copyright (C) 2014-2022 Brian L. Browning
+Start time: <time>
+
+Command line: <program>
+  ref=@/ref.rest.vcf.gz
+  gt=@/target.phased.vcf.gz
+  excludesamples=@/exclude.rest.samples
+  out=<out>
+  seed=-99999
+  nthreads=2
+
+No genetic map is specified: using 1 cM = 1 Mb
+
+Reference samples:                  138
+Study     samples:                   20
+
+Window 1 [22:20000086-20099941]
+Reference markers:                1,356
+Study     markers:                  135
+
+Imputation time:               <elapsed>
+
+Cumulative Statistics:
+
+Reference markers:                1,356
+Study     markers:                  135
+
+Imputation time:               <elapsed>
+Total time:                    <elapsed>
+
+End time: <time>
+<program> finished

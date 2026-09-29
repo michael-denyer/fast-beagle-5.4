@@ -150,53 +150,51 @@ static char *file_path(char *s) {
     return s;
 }
 
+/* Check log, VCF, BGEN and tabix destinations before their writers open files.
+ * Main.checkOutputPrefix compares only the VCF path with ref=, then gt=; every
+ * other collision is fast-beagle's. stat also detects aliases through
+ * relative paths, symlinks and hard links. */
+static void check_output_file(const par *p, const char *suffix) {
+    size_t size = strlen(p->out) + strlen(suffix) + 1;
+    char *output = util_malloc(size);
+    snprintf(output, size, "%s%s", p->out, suffix);
+    file_path(output);
+    struct stat output_stat;
+    bool exists = stat(output, &output_stat) == 0;
+    bool vcf = strcmp(suffix, ".vcf.gz") == 0;
+    const char *inputs[] = {p->ref, p->gt, p->map, p->excludesamples, p->excludemarkers, p->ped, p->truth};
+    for (size_t j = 0; j < sizeof inputs / sizeof *inputs; ++j) {
+        if (inputs[j] == NULL) continue;
+        char *input = file_path(util_strndup(inputs[j], strlen(inputs[j])));
+        bool same_path = strcmp(output, input) == 0;
+        if (vcf && j < 2 && same_path) util_exit("ERROR: VCF output file equals input file: %s", input);
+        struct stat input_stat;
+        if (same_path || (exists && stat(input, &input_stat) == 0
+                && output_stat.st_dev == input_stat.st_dev && output_stat.st_ino == input_stat.st_ino)) {
+            util_exit(PROGRAM ": output file %s equals input file %s", output, input);
+        }
+        free(input);
+    }
+    free(output);
+}
+
 /* Main.checkOutputPrefix and Main.parameters, after Par has read every argument. */
 static void check_parameters(const par *p) {
     struct stat st;
     if (stat(p->out, &st) == 0 && S_ISDIR(st.st_mode)) {
         util_exit("ERROR: \"out\" parameter cannot be a directory: \"%s\"", p->out);
     }
-    size_t size = strlen(p->out) + sizeof ".vcf.gz";
-    char *vcf_out = util_malloc(size);
-    snprintf(vcf_out, size, "%s.vcf.gz", p->out);
-    file_path(vcf_out);
-    const char *inputs[] = {p->ref, p->gt};
-    for (int j = 0; j < 2; ++j) {
-        if (inputs[j] == NULL) continue;
-        char *input = file_path(util_strndup(inputs[j], strlen(inputs[j])));
-        if (strcmp(vcf_out, input) == 0) util_exit("ERROR: VCF output file equals input file: %s", input);
-        free(input);
+    check_output_file(p, ".vcf.gz");
+    check_output_file(p, ".log");
+    if (p->bgen != BGEN_NONE) {
+        check_output_file(p, ".bgen");
+        check_output_file(p, ".info");
+        check_output_file(p, ".sample");
     }
-    free(vcf_out);
+    if (p->tbi) check_output_file(p, ".vcf.gz.tbi");
     if (p->window < 1.1 * p->overlap) {
         util_exit("ERROR: The \"window\" parameter must be at least 1.1 times the \"overlap\" parameter");
     }
-}
-
-/* fast-beagle only: no enabled output may be an existing input file. Unlike
- * checkOutputPrefix this compares device and inode, so it also catches
- * symlinks, hard links and paths through "." or "..". */
-static void check_output_collisions(const par *p, const char *truth) {
-    const bool bgen = p->bgen != BGEN_NONE;
-    const struct { const char *suffix; bool on; } outputs[] = {
-        {".vcf.gz", true}, {".log", true}, {".vcf.gz.tbi", p->tbi},
-        {".bgen", bgen}, {".sample", bgen}, {".info", bgen},
-    };
-    const char *inputs[] = {p->ref, p->gt, p->map, p->excludesamples, p->excludemarkers, p->ped, truth};
-    size_t size = strlen(p->out) + sizeof ".vcf.gz.tbi";
-    char *output = util_malloc(size);
-    for (size_t j = 0; j < sizeof outputs / sizeof *outputs; ++j) {
-        struct stat out_st, in_st;
-        snprintf(output, size, "%s%s", p->out, outputs[j].suffix);
-        if (!outputs[j].on || stat(output, &out_st) != 0) continue;
-        for (size_t k = 0; k < sizeof inputs / sizeof *inputs; ++k) {
-            if (inputs[k] != NULL && stat(inputs[k], &in_st) == 0
-                    && in_st.st_dev == out_st.st_dev && in_st.st_ino == out_st.st_ino) {
-                util_exit("fast-beagle: output file %s is the input file %s", output, inputs[k]);
-            }
-        }
-    }
-    free(output);
 }
 
 float par_err(const par *p, int n_haps) {
@@ -257,7 +255,7 @@ void par_parse(par *p, int argc, char **argv) {
     p->no_nthreads = raw_nthreads == IMAX;
     p->nthreads = p->no_nthreads ? (n_cpus > 0 ? (int)n_cpus : 1) : raw_nthreads;
 
-    const char *truth = file_arg(&m, "truth", false);
+    p->truth = file_arg(&m, "truth", false);
     p->trace = string_arg(&m, "trace", false);
     const char *bgen = string_arg(&m, "bgen", false);
     if (bgen == NULL) p->bgen = BGEN_NONE;
@@ -299,5 +297,4 @@ void par_parse(par *p, int argc, char **argv) {
     free(m.value);
     free(m.used);
     check_parameters(p);
-    check_output_collisions(p, truth);
 }

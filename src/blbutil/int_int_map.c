@@ -44,7 +44,7 @@ int int_int_map_get(const int_int_map *m, int key, int sentinel) {
 void int_int_map_put(int_int_map *m, int key, int value) {
     int absent;
     khiter_t k = kh_put(int_int, m->h, key, &absent);
-    if (absent < 0) util_exit("fast-beagle: out of memory");
+    if (absent < 0) util_exit(PROGRAM ": out of memory");
     kh_value(m->h, k) = value;
 }
 

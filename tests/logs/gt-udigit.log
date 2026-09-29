@@ -1,0 +1,144 @@
+<banner>
+Copyright (C) 2014-2022 Brian L. Browning
+Start time: <time>
+
+Command line: <program>
+  gt=@/test.udigit.vcf.gz
+  map=@/map.udigit.map
+  window=1.5
+  overlap=0.5
+  out=<out>
+  seed=-99999
+  nthreads=2
+
+Reference samples:                    0
+Study     samples:                  191
+
+Window 1 [22:20000086-20056194]
+Study     markers:                  800
+
+Burnin  iteration 1:           <elapsed>
+Burnin  iteration 2:           <elapsed>
+
+Estimated ne:                  6250
+Estimated err:                 1.4e-03
+
+Phasing iteration 1:           <elapsed>
+Phasing iteration 2:           <elapsed>
+Phasing iteration 3:           <elapsed>
+Phasing iteration 4:           <elapsed>
+Phasing iteration 5:           <elapsed>
+Phasing iteration 6:           <elapsed>
+Phasing iteration 7:           <elapsed>
+Phasing iteration 8:           <elapsed>
+Phasing iteration 9:           <elapsed>
+Phasing iteration 10:          <elapsed>
+Phasing iteration 11:          <elapsed>
+Phasing iteration 12:          <elapsed>
+Low frequency phasing:         <elapsed>
+
+Window 2 [22:20049747-20068747]
+Study     markers:                  269
+
+Burnin  iteration 1:           <elapsed>
+Burnin  iteration 2:           <elapsed>
+Burnin  iteration 3:           <elapsed>
+
+Estimated ne:                  2529
+Estimated err:                 1.9e-03
+
+Phasing iteration 1:           <elapsed>
+Phasing iteration 2:           <elapsed>
+Phasing iteration 3:           <elapsed>
+Phasing iteration 4:           <elapsed>
+Phasing iteration 5:           <elapsed>
+Phasing iteration 6:           <elapsed>
+Phasing iteration 7:           <elapsed>
+Phasing iteration 8:           <elapsed>
+Phasing iteration 9:           <elapsed>
+Phasing iteration 10:          <elapsed>
+Phasing iteration 11:          <elapsed>
+Phasing iteration 12:          <elapsed>
+Low frequency phasing:         <elapsed>
+
+Window 3 [22:20062490-20081160]
+Study     markers:                  246
+
+Burnin  iteration 1:           <elapsed>
+Burnin  iteration 2:           <elapsed>
+Burnin  iteration 3:           <elapsed>
+
+Estimated ne:                  2641
+Estimated err:                 2.0e-03
+
+Phasing iteration 1:           <elapsed>
+Phasing iteration 2:           <elapsed>
+Phasing iteration 3:           <elapsed>
+Phasing iteration 4:           <elapsed>
+Phasing iteration 5:           <elapsed>
+Phasing iteration 6:           <elapsed>
+Phasing iteration 7:           <elapsed>
+Phasing iteration 8:           <elapsed>
+Phasing iteration 9:           <elapsed>
+Phasing iteration 10:          <elapsed>
+Phasing iteration 11:          <elapsed>
+Phasing iteration 12:          <elapsed>
+Low frequency phasing:         <elapsed>
+
+Window 4 [22:20074870-20093655]
+Study     markers:                  230
+
+Burnin  iteration 1:           <elapsed>
+Burnin  iteration 2:           <elapsed>
+Burnin  iteration 3:           <elapsed>
+
+Estimated ne:                  2521
+Estimated err:                 1.7e-03
+
+Phasing iteration 1:           <elapsed>
+Phasing iteration 2:           <elapsed>
+Phasing iteration 3:           <elapsed>
+Phasing iteration 4:           <elapsed>
+Phasing iteration 5:           <elapsed>
+Phasing iteration 6:           <elapsed>
+Phasing iteration 7:           <elapsed>
+Phasing iteration 8:           <elapsed>
+Phasing iteration 9:           <elapsed>
+Phasing iteration 10:          <elapsed>
+Phasing iteration 11:          <elapsed>
+Phasing iteration 12:          <elapsed>
+Low frequency phasing:         <elapsed>
+
+Window 5 [22:20087400-20099941]
+Study     markers:                  158
+
+Burnin  iteration 1:           <elapsed>
+Burnin  iteration 2:           <elapsed>
+Burnin  iteration 3:           <elapsed>
+
+Estimated ne:                  4261
+Estimated err:                 1.0e-03
+
+Phasing iteration 1:           <elapsed>
+Phasing iteration 2:           <elapsed>
+Phasing iteration 3:           <elapsed>
+Phasing iteration 4:           <elapsed>
+Phasing iteration 5:           <elapsed>
+Phasing iteration 6:           <elapsed>
+Phasing iteration 7:           <elapsed>
+Phasing iteration 8:           <elapsed>
+Phasing iteration 9:           <elapsed>
+Phasing iteration 10:          <elapsed>
+Phasing iteration 11:          <elapsed>
+Phasing iteration 12:          <elapsed>
+Low frequency phasing:         <elapsed>
+
+Cumulative Statistics:
+
+Study     markers:                1,356
+
+Haplotype phasing time:        <elapsed>
+Total time:                    <elapsed>
+
+End time: <time>
+<program> finished
