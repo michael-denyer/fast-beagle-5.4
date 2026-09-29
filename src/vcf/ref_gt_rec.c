@@ -171,9 +171,9 @@ int ref_gt_rec_major_allele(const ref_gt_rec *rec) {
 
 const char *ref_gt_rec_class_name(const ref_gt_rec *rec) {
     switch (rec->kind) {
-        case REF_TWO_ALLELE: return "TwoAlleleRefGTRec";
-        case REF_ALLELE: return "AlleleRefGTRec";
-        default: return "HapRefGTRec";
+        case REF_TWO_ALLELE: return "LowMafRefDiallelicGTRec";
+        case REF_ALLELE: return "LowMafRefGTRec";
+        default: return "SeqCodedRefGTRec";
     }
 }
 

@@ -65,11 +65,20 @@ typedef struct {
  * sequence-coded records and release everything buffered, in order. */
 static void flush_compressed(ref_it *it) {
     ref_gt_rec **coded = util_malloc((size_t)(seq_coder3_n_recs(it->coder) + 1) * sizeof *coded);
-    seq_coder3_flush(it->coder, coded);
+    int n_coded = seq_coder3_flush(it->coder, coded);
     int index = 0;
     while (it->low_freq.n > 0) {
         ref_gt_rec *rec = queue_pop(&it->low_freq);
-        queue_push(&it->ready, rec == NULL ? coded[index++] : rec);
+        if (rec == NULL) {
+            /* A record that SeqCoder3 refused left a slot with no coded
+             * record: List.get's exception, or Collections.emptyList's. */
+            if (n_coded == 0) util_exit("java.lang.IndexOutOfBoundsException: Index: 0");
+            if (index == n_coded) {
+                util_exit("java.lang.IndexOutOfBoundsException: Index %d out of bounds for length %d", index, n_coded);
+            }
+            rec = coded[index++];
+        }
+        queue_push(&it->ready, rec);
     }
     it->low_freq.head = 0;
     free(coded);
@@ -109,7 +118,9 @@ static void fill(ref_it *it) {
         } else {
             if (!seq_coder3_add(it->coder, rec)) {
                 flush_compressed(it);
-                if (!seq_coder3_add(it->coder, rec)) util_exit("java.lang.AssertionError: SeqCoder3.add");
+                /* RefIt only asserts that the retry succeeds: without -ea the
+                 * record is dropped and the next flush throws. */
+                if (!seq_coder3_add(it->coder, rec)) ref_gt_rec_release(rec);
             }
             queue_push(&it->low_freq, NULL);
         }

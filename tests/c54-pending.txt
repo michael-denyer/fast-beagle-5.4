@@ -3,14 +3,9 @@
 # count).
 oracle gt
 oracle ref
-oracle imp
-oracle imp-apgp
-oracle imp-bref3
 oracle imp-bref3-excl
 oracle imp-bref3-excls
-oracle imp-bref3-exclr
 oracle imp-bref3-multi
-oracle imp-bref3-end
 oracle imp-chrom
 oracle gt-map
 oracle gt-udigit
@@ -28,7 +23,6 @@ oracle gt-ibs2
 oracle gt-ibs2-miss
 oracle gt-573
 oracle gt-states
-oracle imp-states
 oracle imp-evict
 oracle imp-gap
 oracle gt-common
@@ -43,20 +37,9 @@ oracle imp-plateau
 oracle gt-plateau2
 oracle imp-plateau2
 oracle gt-gap-map
-oracle imp-seqlimit
-oracle imp-phased
-oracle imp-phased-map
-oracle imp-phased-bref3-excls
-oracle imp-phased-excls
-oracle imp-phased-states
-failure imp-gap-map
-failure imp-gap-map-noimp
 log gt
-log imp-bref3-excls
-log imp-bref3-exclr
 log gt-map
 log gt-udigit
-log imp-map
 log gt-miss
 log gt-excl
 log gt-multi
@@ -65,7 +48,6 @@ log gt-ibs2
 log gt-ibs2-miss
 log gt-573
 log gt-states
-log imp-evict
 log gt-common
 log gt-common-map
 log gt-rare
@@ -74,16 +56,9 @@ log gt-end-text
 log gt-ids-dot
 log gt-long
 log gt-plateau
-log imp-plateau
 log gt-plateau2
-log imp-plateau2
 log gt-gap-map
-log imp-phased-map
-log imp-phased-bref3-excls
-fuzz-regression seq-coder-full
-fuzz-regression window-stall
 fuzz
-trace edge-bref3 T1d nthreads=2
 trace edge-bref3 T3b nthreads=2
 trace edge-bref3 T3b1 nthreads=2
 trace edge-bref3 T3e nthreads=2
@@ -122,9 +97,6 @@ trace gt-common T3b1 nthreads=2
 trace gt-common T3c nthreads=2
 trace gt-common T3d nthreads=2
 trace gt-common T3e nthreads=2
-trace gt-common-map T2 nthreads=2
-trace gt-common-map T2b nthreads=2
-trace gt-common-map T3a nthreads=2
 trace gt-common-map T3b nthreads=2
 trace gt-common-map T3b0 nthreads=2
 trace gt-common-map T3b1 nthreads=2
@@ -162,9 +134,6 @@ trace gt-filter-end T4a nthreads=2
 trace gt-filter-end T4b nthreads=2
 trace gt-filter-end T4c nthreads=2
 trace gt-filter-end T4d nthreads=2
-trace gt-gap-map T2 nthreads=2
-trace gt-gap-map T2b nthreads=2
-trace gt-gap-map T3a nthreads=2
 trace gt-gap-map T3b nthreads=2
 trace gt-gap-map T3b0 nthreads=2
 trace gt-gap-map T3b1 nthreads=2
@@ -270,9 +239,6 @@ trace gt-long T4c nthreads=2
 trace gt-long T4d nthreads=1
 trace gt-long T4d nthreads=18
 trace gt-long T4d nthreads=2
-trace gt-map T2 nthreads=2
-trace gt-map T2b nthreads=2
-trace gt-map T3a nthreads=2
 trace gt-map T3b nthreads=2
 trace gt-map T3b0 nthreads=2
 trace gt-map T3b1 nthreads=2
@@ -302,7 +268,6 @@ trace gt-multi T4b nthreads=2
 trace gt-multi T4c nthreads=2
 trace gt-multi T4d nthreads=2
 trace gt-phased T3b1 nthreads=2
-trace gt-plateau T2b nthreads=2
 trace gt-plateau T3b nthreads=2
 trace gt-plateau T3b1 nthreads=2
 trace gt-plateau T3c nthreads=2
@@ -312,9 +277,6 @@ trace gt-plateau T4a nthreads=2
 trace gt-plateau T4b nthreads=2
 trace gt-plateau T4c nthreads=2
 trace gt-plateau T4d nthreads=2
-trace gt-plateau2 T2 nthreads=2
-trace gt-plateau2 T2b nthreads=2
-trace gt-plateau2 T3a nthreads=2
 trace gt-plateau2 T3b nthreads=2
 trace gt-plateau2 T3b0 nthreads=2
 trace gt-plateau2 T3b1 nthreads=2
@@ -339,9 +301,6 @@ trace gt-states T4a nthreads=2
 trace gt-states T4b nthreads=2
 trace gt-states T4c nthreads=2
 trace gt-states T4d nthreads=2
-trace gt-udigit T2 nthreads=2
-trace gt-udigit T2b nthreads=2
-trace gt-udigit T3a nthreads=2
 trace gt-udigit T3b nthreads=2
 trace gt-udigit T3b0 nthreads=2
 trace gt-udigit T3b1 nthreads=2
@@ -360,7 +319,6 @@ trace gt-x T4a nthreads=2
 trace gt-x T4b nthreads=2
 trace gt-x T4c nthreads=2
 trace gt-x T4d nthreads=2
-trace imp T1d nthreads=2
 trace imp T3b nthreads=2
 trace imp T3b1 nthreads=2
 trace imp T3d nthreads=2
@@ -368,10 +326,6 @@ trace imp T3e nthreads=2
 trace imp T4a nthreads=2
 trace imp T4b nthreads=2
 trace imp T4d nthreads=2
-trace imp T5a nthreads=2
-trace imp T5c nthreads=2
-trace imp T5d nthreads=2
-trace imp-apgp T1d nthreads=2
 trace imp-apgp T3b nthreads=2
 trace imp-apgp T3b1 nthreads=2
 trace imp-apgp T3d nthreads=2
@@ -379,15 +333,10 @@ trace imp-apgp T3e nthreads=2
 trace imp-apgp T4a nthreads=2
 trace imp-apgp T4b nthreads=2
 trace imp-apgp T4d nthreads=2
-trace imp-apgp T5a nthreads=2
-trace imp-apgp T5c nthreads=2
-trace imp-apgp T5d nthreads=2
-trace imp-bigref T1d nthreads=2
 trace imp-bigref T3b nthreads=2
 trace imp-bigref T3b1 nthreads=2
 trace imp-bigref T3d nthreads=2
 trace imp-bigref T3e nthreads=2
-trace imp-bref3 T1d nthreads=2
 trace imp-bref3 T3b nthreads=2
 trace imp-bref3 T3b1 nthreads=2
 trace imp-bref3 T3d nthreads=2
@@ -395,9 +344,6 @@ trace imp-bref3 T3e nthreads=2
 trace imp-bref3 T4a nthreads=2
 trace imp-bref3 T4b nthreads=2
 trace imp-bref3 T4d nthreads=2
-trace imp-bref3 T5c nthreads=2
-trace imp-bref3 T5d nthreads=2
-trace imp-bref3-end T1d nthreads=2
 trace imp-bref3-end T3b nthreads=2
 trace imp-bref3-end T3b1 nthreads=2
 trace imp-bref3-end T3d nthreads=2
@@ -405,9 +351,6 @@ trace imp-bref3-end T3e nthreads=2
 trace imp-bref3-end T4a nthreads=2
 trace imp-bref3-end T4b nthreads=2
 trace imp-bref3-end T4d nthreads=2
-trace imp-bref3-end T5c nthreads=2
-trace imp-bref3-end T5d nthreads=2
-trace imp-bref3-excl T1d nthreads=2
 trace imp-bref3-excl T3b nthreads=2
 trace imp-bref3-excl T3b1 nthreads=2
 trace imp-bref3-excl T3d nthreads=2
@@ -419,30 +362,15 @@ trace imp-bref3-excl T5a nthreads=2
 trace imp-bref3-excl T5b nthreads=2
 trace imp-bref3-excl T5c nthreads=2
 trace imp-bref3-excl T5d nthreads=2
-trace imp-bref3-exclr T1b nthreads=2
-trace imp-bref3-exclr T1d nthreads=2
-trace imp-bref3-exclr T2b nthreads=2
-trace imp-bref3-exclr T3a nthreads=2
 trace imp-bref3-exclr T3b nthreads=2
 trace imp-bref3-exclr T3b1 nthreads=2
-trace imp-bref3-exclr T3c nthreads=2
 trace imp-bref3-exclr T3d nthreads=2
 trace imp-bref3-exclr T3e nthreads=2
 trace imp-bref3-exclr T4a nthreads=2
 trace imp-bref3-exclr T4b nthreads=2
 trace imp-bref3-exclr T4d nthreads=2
-trace imp-bref3-exclr T5a nthreads=2
-trace imp-bref3-exclr T5b nthreads=2
-trace imp-bref3-exclr T5c nthreads=2
-trace imp-bref3-exclr T5d nthreads=2
-trace imp-bref3-excls T1b nthreads=2
-trace imp-bref3-excls T1d nthreads=2
-trace imp-bref3-excls T2b nthreads=2
-trace imp-bref3-excls T3a nthreads=2
 trace imp-bref3-excls T3b nthreads=2
-trace imp-bref3-excls T3b0 nthreads=2
 trace imp-bref3-excls T3b1 nthreads=2
-trace imp-bref3-excls T3c nthreads=2
 trace imp-bref3-excls T3d nthreads=2
 trace imp-bref3-excls T3e nthreads=2
 trace imp-bref3-excls T4a nthreads=2
@@ -452,7 +380,6 @@ trace imp-bref3-excls T5a nthreads=2
 trace imp-bref3-excls T5b nthreads=2
 trace imp-bref3-excls T5c nthreads=2
 trace imp-bref3-excls T5d nthreads=2
-trace imp-bref3-multi T1d nthreads=2
 trace imp-bref3-multi T3b nthreads=2
 trace imp-bref3-multi T3b1 nthreads=2
 trace imp-bref3-multi T3d nthreads=2
@@ -464,7 +391,6 @@ trace imp-bref3-multi T5a nthreads=2
 trace imp-bref3-multi T5b nthreads=2
 trace imp-bref3-multi T5c nthreads=2
 trace imp-bref3-multi T5d nthreads=2
-trace imp-chrom T1d nthreads=2
 trace imp-chrom T3b nthreads=2
 trace imp-chrom T3b1 nthreads=2
 trace imp-chrom T3d nthreads=2
@@ -477,7 +403,6 @@ trace imp-chrom T5a nthreads=2
 trace imp-chrom T5b nthreads=2
 trace imp-chrom T5c nthreads=2
 trace imp-chrom T5d nthreads=2
-trace imp-chroms T1d nthreads=2
 trace imp-chroms T3b nthreads=2
 trace imp-chroms T3b1 nthreads=2
 trace imp-chroms T3c nthreads=2
@@ -490,8 +415,6 @@ trace imp-chroms T5a nthreads=2
 trace imp-chroms T5b nthreads=2
 trace imp-chroms T5c nthreads=2
 trace imp-chroms T5d nthreads=2
-trace imp-chroms-noimpute T1d nthreads=2
-trace imp-chroms-noimpute T2 nthreads=2
 trace imp-chroms-noimpute T3b nthreads=2
 trace imp-chroms-noimpute T3b1 nthreads=2
 trace imp-chroms-noimpute T3d nthreads=2
@@ -499,14 +422,8 @@ trace imp-chroms-noimpute T3e nthreads=2
 trace imp-chroms-noimpute T4a nthreads=2
 trace imp-chroms-noimpute T4b nthreads=2
 trace imp-chroms-noimpute T4d nthreads=2
-trace imp-evict T1d nthreads=2
-trace imp-evict T2 nthreads=2
-trace imp-evict T2b nthreads=2
-trace imp-evict T3a nthreads=2
 trace imp-evict T3b nthreads=2
-trace imp-evict T3b0 nthreads=2
 trace imp-evict T3b1 nthreads=2
-trace imp-evict T3c nthreads=2
 trace imp-evict T3d nthreads=2
 trace imp-evict T3e nthreads=2
 trace imp-evict T4a nthreads=2
@@ -517,7 +434,6 @@ trace imp-evict T5a nthreads=2
 trace imp-evict T5b nthreads=2
 trace imp-evict T5c nthreads=2
 trace imp-evict T5d nthreads=2
-trace imp-excl T1d nthreads=2
 trace imp-excl T3b nthreads=2
 trace imp-excl T3b1 nthreads=2
 trace imp-excl T3d nthreads=2
@@ -529,7 +445,6 @@ trace imp-excl T5a nthreads=2
 trace imp-excl T5b nthreads=2
 trace imp-excl T5c nthreads=2
 trace imp-excl T5d nthreads=2
-trace imp-gap T1d nthreads=2
 trace imp-gap T3b nthreads=2
 trace imp-gap T3b1 nthreads=2
 trace imp-gap T3d nthreads=2
@@ -540,14 +455,8 @@ trace imp-gap T5a nthreads=2
 trace imp-gap T5b nthreads=2
 trace imp-gap T5c nthreads=2
 trace imp-gap T5d nthreads=2
-trace imp-map T1d nthreads=2
-trace imp-map T2 nthreads=2
-trace imp-map T2b nthreads=2
-trace imp-map T3a nthreads=2
 trace imp-map T3b nthreads=2
-trace imp-map T3b0 nthreads=2
 trace imp-map T3b1 nthreads=2
-trace imp-map T3c nthreads=2
 trace imp-map T3d nthreads=2
 trace imp-map T3e nthreads=2
 trace imp-map T4a nthreads=2
@@ -558,7 +467,6 @@ trace imp-map T5a nthreads=2
 trace imp-map T5b nthreads=2
 trace imp-map T5c nthreads=2
 trace imp-map T5d nthreads=2
-trace imp-miss T1d nthreads=2
 trace imp-miss T3b nthreads=2
 trace imp-miss T3b1 nthreads=2
 trace imp-miss T3d nthreads=2
@@ -571,7 +479,6 @@ trace imp-miss T5a nthreads=2
 trace imp-miss T5b nthreads=2
 trace imp-miss T5c nthreads=2
 trace imp-miss T5d nthreads=2
-trace imp-multi T1d nthreads=2
 trace imp-multi T3b nthreads=2
 trace imp-multi T3b1 nthreads=2
 trace imp-multi T3d nthreads=2
@@ -583,43 +490,13 @@ trace imp-multi T5a nthreads=2
 trace imp-multi T5b nthreads=2
 trace imp-multi T5c nthreads=2
 trace imp-multi T5d nthreads=2
-trace imp-phased T1d nthreads=2
 trace imp-phased T3b1 nthreads=2
-trace imp-phased T5a nthreads=2
-trace imp-phased T5c nthreads=2
-trace imp-phased T5d nthreads=2
-trace imp-phased-bref3-excls T1b nthreads=2
-trace imp-phased-bref3-excls T1d nthreads=2
-trace imp-phased-bref3-excls T2b nthreads=2
-trace imp-phased-bref3-excls T3a nthreads=2
-trace imp-phased-bref3-excls T3b0 nthreads=2
 trace imp-phased-bref3-excls T3b1 nthreads=2
-trace imp-phased-bref3-excls T5a nthreads=2
-trace imp-phased-bref3-excls T5b nthreads=2
-trace imp-phased-bref3-excls T5c nthreads=2
-trace imp-phased-bref3-excls T5d nthreads=2
-trace imp-phased-excls T1d nthreads=2
 trace imp-phased-excls T3b1 nthreads=2
-trace imp-phased-excls T5a nthreads=2
-trace imp-phased-excls T5b nthreads=2
-trace imp-phased-excls T5c nthreads=2
-trace imp-phased-excls T5d nthreads=2
-trace imp-phased-map T1d nthreads=2
-trace imp-phased-map T2 nthreads=2
 trace imp-phased-map T3b1 nthreads=2
-trace imp-phased-map T5a nthreads=2
-trace imp-phased-map T5d nthreads=2
-trace imp-phased-states T1d nthreads=2
-trace imp-phased-states T2b nthreads=2
 trace imp-phased-states T3b1 nthreads=2
-trace imp-phased-states T5a nthreads=2
-trace imp-phased-states T5c nthreads=2
-trace imp-phased-states T5d nthreads=2
-trace imp-plateau T1d nthreads=2
-trace imp-plateau T2b nthreads=2
 trace imp-plateau T3b nthreads=2
 trace imp-plateau T3b1 nthreads=2
-trace imp-plateau T3c nthreads=2
 trace imp-plateau T3d nthreads=2
 trace imp-plateau T3e nthreads=2
 trace imp-plateau T4a nthreads=2
@@ -630,31 +507,19 @@ trace imp-plateau T5a nthreads=2
 trace imp-plateau T5b nthreads=2
 trace imp-plateau T5c nthreads=2
 trace imp-plateau T5d nthreads=2
-trace imp-plateau2 T1d nthreads=2
-trace imp-plateau2 T2 nthreads=2
-trace imp-plateau2 T2b nthreads=2
 trace imp-plateau2 T3b nthreads=2
 trace imp-plateau2 T3b1 nthreads=2
-trace imp-plateau2 T3c nthreads=2
 trace imp-plateau2 T3d nthreads=2
 trace imp-plateau2 T3e nthreads=2
 trace imp-plateau2 T4a nthreads=2
 trace imp-plateau2 T4b nthreads=2
-trace imp-plateau2 T4c nthreads=2
 trace imp-plateau2 T4d nthreads=2
 trace imp-plateau2 T5a nthreads=2
 trace imp-plateau2 T5b nthreads=2
 trace imp-plateau2 T5c nthreads=2
 trace imp-plateau2 T5d nthreads=2
-trace imp-seqlimit T1d nthreads=2
 trace imp-seqlimit T3b1 nthreads=2
-trace imp-seqlimit T5a nthreads=2
-trace imp-seqlimit T5b nthreads=2
-trace imp-seqlimit T5c nthreads=2
-trace imp-seqlimit T5d nthreads=2
-trace imp-seqlimit-bref3 T1d nthreads=2
 trace imp-seqlimit-bref3 T3b1 nthreads=2
-trace imp-states T1d nthreads=2
 trace imp-states T3b nthreads=2
 trace imp-states T3b1 nthreads=2
 trace imp-states T3d nthreads=2
@@ -662,10 +527,6 @@ trace imp-states T3e nthreads=2
 trace imp-states T4a nthreads=2
 trace imp-states T4b nthreads=2
 trace imp-states T4d nthreads=2
-trace imp-states T5a nthreads=2
-trace imp-states T5c nthreads=2
-trace imp-states T5d nthreads=2
-trace imp-x T1d nthreads=2
 trace imp-x T3b nthreads=2
 trace imp-x T3b1 nthreads=2
 trace imp-x T3d nthreads=2
@@ -676,7 +537,6 @@ trace imp-x T5a nthreads=2
 trace imp-x T5b nthreads=2
 trace imp-x T5c nthreads=2
 trace imp-x T5d nthreads=2
-trace ref T1d nthreads=2
 trace ref T3b nthreads=2
 trace ref T3b1 nthreads=2
 trace ref T3d nthreads=2

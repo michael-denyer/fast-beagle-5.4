@@ -199,13 +199,13 @@ The live checks need `PLINK2` naming the pinned plink2 binary, and fail without 
 
 `tests/check_fuzz.py` runs differential fuzzing with [Hypothesis](https://hypothesis.readthedocs.io/).
 
-- It generates small target VCFs. Some examples also get a reference panel, a genetic map and options (windows, iterations, states, imputation, `gp`/`ap`, and `bgen=` for the C run). It runs the release jar and `build/beagle` with the same seed. Both must fail, or both must write the same VCF. Where Java repeats without end a window that cannot advance, `build/beagle` must instead exit with its "does not advance" error.
+- It generates small target VCFs. Some examples also get a reference panel, a genetic map and options (windows, iterations, states, imputation, `gp`/`ap`, and `bgen=` for the C run). It runs the release jar and `build/beagle` with the same seed. Both must fail, or both must write the same VCF.
 - Invalid-parameter examples then change one parameter of a generated input so that Beagle refuses it. Both tools must exit 1 with the same message and leave the inputs unchanged. Java may prefix the message with the exception class. The change is one of:
   - `out` naming an input or a directory
   - `window` below 1.1 times `overlap`
   - a value out of bounds or not a number
   - an unknown parameter
-- The script shrinks a failure to a small input and saves it in `build/fuzz-fail` with both commands. Inputs from past failures go in `tests/fuzz-regressions/`, which runs first. Each one's `expect.txt` holds the C result recorded from Beagle 5.4: an exit code and a message, or exit code 0 and the VCF hash. Beagle 5.4 finishes `window-stall`, which Beagle 5.5 repeats without end. `seq-coder-full` is a reference record whose allele count reaches the sequence limit of a 3-sample panel: Beagle 5.4 throws at 1 thread and hangs after throwing at 2.
+- The script shrinks a failure to a small input and saves it in `build/fuzz-fail` with both commands. Inputs from past failures go in `tests/fuzz-regressions/`, which runs first. Each one's `expect.txt` holds the C result recorded from Beagle 5.4: an exit code and a message, or exit code 0 and the VCF hash. Beagle 5.4 finishes `window-stall`, which Beagle 5.5 repeats without end. `seq-coder-full` is a reference record whose allele count reaches the sequence limit of a 3-sample panel: Beagle 5.4 throws at 1 thread and hangs after throwing at 2. `seq-coder-last` ends the reference with that record, so no coded record is left to take its place and Beagle 5.4 throws a different exception.
 - The full tier runs a fixed set of 200 examples (about 30 s per 100 on an M5) and 2 for each invalid-parameter change. The nightly CI run fuzzes 200 new examples. `uv run --python 3.12 --script tests/check_fuzz.py --examples 1000 --random` tries new ones.
 
 ## Model check the pipelined writer

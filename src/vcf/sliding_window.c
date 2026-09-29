@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2014-2021 Brian L. Browning
- * Ported to C from Beagle 5.5 (27Feb25) vcf/SlidingWindow.java,
+ * Ported to C from Beagle 5.4 (29Oct24) vcf/SlidingWindow.java,
  * vcf/RefTargSlidingWindow.java, vcf/TargSlidingWindow.java and
  * vcf/Window.java; modified 2026.
  *
@@ -71,7 +71,7 @@ static sample_file_it ref_file_it_open(const char *path, const str_set *exclude_
         fprintf(stderr, "\nERROR: unrecognized reference filename extension: \n"
                 "       Expected \".bref3\", \".vcf\", \".vcf.gz\", or \".vcf.bgz\"\n\n");
     }
-    return bref3 ? bref3_it_open(path, exclude_samples, exclude_markers)
+    return bref3 ? bref3_it_open(path, exclude_markers)
             : ref_it_open(path, exclude_samples, exclude_markers, n_threads);
 }
 
@@ -81,7 +81,7 @@ struct sliding_window {
     sample_file_it ref_it;   /* ref_gt_rec records; ops is NULL without a reference */
     genetic_map *gen_map;
     float window_cm, overlap_cm;
-    int window_markers, overlap_markers;
+    double end_cm;
     bool impute;
     ref_gt_rec *ref_peek;    /* a record read by a hasNext() check */
     gt_rec *next_targ;
@@ -89,19 +89,16 @@ struct sliding_window {
     targ_list targ_recs, targ_overlap;
     ref_list ref_recs, ref_overlap;
     int window_index;
-    int64_t n_read;          /* records taken from both iterators */
     bool started, done;
 };
 
 /* Java's `it.hasNext() ? it.next() : null`. A true hasNext() is always
  * followed by next(), so reading the record here consumes the same records. */
 static gt_rec *targ_next(sliding_window *sw) {
-    ++sw->n_read;
     return sample_file_it_next(sw->targ_it);
 }
 
 static ref_gt_rec *ref_next(sliding_window *sw) {
-    ++sw->n_read;
     if (sw->ref_peek != NULL) {
         ref_gt_rec *rec = sw->ref_peek;
         sw->ref_peek = NULL;
@@ -129,9 +126,7 @@ sliding_window *sliding_window_open(const par *p) {
     }
     sw->gen_map = genetic_map_open(p->map, interval);
     sw->window_cm = p->window;
-    sw->window_markers = 4000000;
     sw->overlap_cm = p->overlap;
-    sw->overlap_markers = 4000000 >> 2;
     sw->impute = p->impute;
     return sw;
 }
@@ -181,13 +176,12 @@ static int first_index_with_pos(const marker *const *m, int index) {
 }
 
 /* The overlap start of a window whose markers are m[0..n): the first marker at
- * or after the base position overlap= cM before end_gen_pos, searching only
- * the last overlap_markers markers. */
+ * or after the base position overlap= cM before end_gen_pos. */
 static int overlap_start(const sliding_window *sw, const marker *const *m, int n, double end_gen_pos) {
     int chrom = m[n - 1]->chrom_index;
     double start_gen_pos = end_gen_pos - sw->overlap_cm;
     int32_t key = genetic_map_base_pos(sw->gen_map, chrom, start_gen_pos);
-    int low = n - sw->overlap_markers > 0 ? n - sw->overlap_markers : 0;
+    int low = 0;
     int high = n - 1;
     while (low <= high) {
         int mid = (int)((unsigned)(low + high) >> 1);
@@ -226,30 +220,27 @@ static const marker **ref_markers(ref_gt_rec **recs, int n) {
     return m;
 }
 
-/* A window that read no new record and carries all of its records into the
- * next window leaves the input and the overlap unchanged, so every later window
- * would be the same one. Java Beagle repeats it without end; exit instead. */
-static void check_advances(const sliding_window *sw, int64_t n_read_before, int ov_start, bool last, int chrom,
-        int32_t end_pos) {
-    if (!last && ov_start == 0 && sw->n_read == n_read_before) {
-        util_exit("The window ending at %s:%d does not advance: its overlap with the next window is the whole\n"
-                "window. Increase the window parameter or decrease the overlap parameter.", chrom_ids_id(chrom), end_pos);
+/* nextEndCm: a window without overlap ends window= cM after the marker m; each
+ * later window ends window-overlap cM after the previous end. */
+static double next_end_cm(sliding_window *sw, bool overlap_empty, const marker *m) {
+    if (overlap_empty) {
+        sw->end_cm = genetic_map_gen_pos(sw->gen_map, m->chrom_index, m->pos) + sw->window_cm;
+    } else {
+        sw->end_cm += sw->window_cm - sw->overlap_cm;
     }
+    return sw->end_cm;
 }
 
 /* TargSlidingWindow.Reader: one window of target records. */
 static window *next_targ_window(sliding_window *sw) {
     int chrom = sw->next_targ->marker.chrom_index;
-    double end_cm = genetic_map_gen_pos(sw->gen_map, chrom, sw->next_targ->marker.pos);
-    end_cm += sw->targ_overlap.n == 0 ? (double)sw->window_cm : (double)(sw->window_cm - sw->overlap_cm);
+    double end_cm = next_end_cm(sw, sw->targ_overlap.n == 0, &sw->next_targ->marker);
     int32_t end_pos = genetic_map_base_pos(sw->gen_map, chrom, end_cm);
 
-    int64_t n_read_before = sw->n_read;
     int overlap_end = sw->targ_overlap.n;
     targ_list recs = sw->targ_overlap;
     sw->targ_overlap = (targ_list){0};
-    while (sw->next_targ != NULL && sw->next_targ->marker.chrom_index == chrom && sw->next_targ->marker.pos < end_pos
-            && recs.n < sw->window_markers) {
+    while (sw->next_targ != NULL && sw->next_targ->marker.chrom_index == chrom && sw->next_targ->marker.pos < end_pos) {
         targ_add(&recs, sw->next_targ);
         sw->next_targ = targ_next(sw);
     }
@@ -260,7 +251,6 @@ static window *next_targ_window(sliding_window *sw) {
     int ov_start = chrom_end ? recs.n
             : overlap_start(sw, m, recs.n, genetic_map_gen_pos(sw->gen_map, m[recs.n - 1]->chrom_index, m[recs.n - 1]->pos));
     free(m);
-    check_advances(sw, n_read_before, ov_start, last, chrom, end_pos);
     window *w = make_window(++sw->window_index, last, recs.v, recs.n, NULL, 0);
     marker_indices_init_targ(&w->indices, overlap_end, ov_start, recs.n);
     if (trace_on()) trace_window(w, end_cm, end_pos);
@@ -290,19 +280,16 @@ static window *next_ref_window(sliding_window *sw) {
         ref_gt_rec_release(sw->next_ref);
         sw->next_ref = ref_next(sw);
     }
-    double end_cm = genetic_map_gen_pos(sw->gen_map, sw->next_ref->marker.chrom_index, sw->next_ref->marker.pos);
-    end_cm += sw->ref_overlap.n == 0 ? (double)sw->window_cm : (double)(sw->window_cm - sw->overlap_cm);
+    double end_cm = next_end_cm(sw, sw->ref_overlap.n == 0, &sw->next_ref->marker);
     int32_t end_pos = genetic_map_base_pos(sw->gen_map, chrom, end_cm);
 
     /* readWindow */
-    int64_t n_read_before = sw->n_read;
     int ref_overlap_end = sw->ref_overlap.n;
     targ_list targ = sw->targ_overlap;
     ref_list ref = sw->ref_overlap;
     sw->targ_overlap = (targ_list){0};
     sw->ref_overlap = (ref_list){0};
-    while (sw->next_targ != NULL && sw->next_targ->marker.chrom_index == chrom && sw->next_targ->marker.pos < end_pos
-            && ref.n < sw->window_markers) {
+    while (sw->next_targ != NULL && sw->next_targ->marker.chrom_index == chrom && sw->next_targ->marker.pos < end_pos) {
         const marker *tm = &sw->next_targ->marker;
         while (sw->next_ref != NULL && sw->next_ref->marker.chrom_index == chrom
                 && (sw->next_ref->marker.pos < tm->pos
@@ -321,8 +308,7 @@ static window *next_ref_window(sliding_window *sw) {
         sw->next_targ = targ_next(sw);
     }
     if (sw->impute) {
-        while (sw->next_ref != NULL && sw->next_ref->marker.chrom_index == chrom && sw->next_ref->marker.pos < end_pos
-                && ref.n < sw->window_markers) {
+        while (sw->next_ref != NULL && sw->next_ref->marker.chrom_index == chrom && sw->next_ref->marker.pos < end_pos) {
             ref_add(&ref, sw->next_ref, false);
             sw->next_ref = ref_next(sw);
         }
@@ -340,7 +326,6 @@ static window *next_ref_window(sliding_window *sw) {
     int ov_start = chrom_end ? ref.n
             : overlap_start(sw, rm, ref.n, genetic_map_gen_pos(sw->gen_map, rm[ref.n - 1]->chrom_index, end_pos - 1));
     free(rm);
-    check_advances(sw, n_read_before, ov_start, last, chrom, end_pos);
     window *w = make_window(++sw->window_index, last, targ.v, targ.n, ref.v, ref.n);
     marker_indices_init(&w->indices, ref.in_targ, ref.n, ref_overlap_end, ov_start);
     if (trace_on()) trace_window(w, end_cm, end_pos);
