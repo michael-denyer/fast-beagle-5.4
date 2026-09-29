@@ -94,6 +94,7 @@ full_step core jcompat make check-jcompat
 step core tracker make check-tracker
 step core interval make check-interval
 step core block-reader make check-block-reader
+step core snv-perms make check-snv-perms
 full_step java oracle-jar tests/check-oracle.sh java -ea -jar data/beagle.29Oct24.c8e.jar
 full_step java failures-jar tests/check-failures.sh java -ea -jar data/beagle.29Oct24.c8e.jar
 full_step java log-jar tests/check-log.sh java -ea -jar data/beagle.29Oct24.c8e.jar
