@@ -14,6 +14,10 @@ extend-exclude = [
     "tests/bgen-hashes.txt",
 ]
 
+[default]
+# SHA-256 prefixes (16 hex digits) in the case tables, not words.
+extend-ignore-re = ["\\b[0-9a-f]{16}\\b"]
+
 [default.extend-words]
 # Genetics abbreviation for homozygous, and Beagle's own identifiers
 # (homRefField, DEFAULT_HOM_REF_FIELDS) that the C port mirrors.
