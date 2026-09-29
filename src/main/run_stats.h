@@ -14,7 +14,6 @@
 #include <stdio.h>
 
 #include "main/par.h"
-#include "phase/fixed_phase_data.h"
 #include "phase/phase_data.h"
 #include "vcf/sliding_window.h"
 

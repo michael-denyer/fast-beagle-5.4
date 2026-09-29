@@ -139,15 +139,14 @@ static void read_header(bref3_it *it) {
         util_exit("java.lang.NegativeArraySizeException: %d", (int)((unsigned)n_ids << 2));
     }
     char **ids = util_malloc((size_t)(n_ids > 0 ? n_ids : 1) * sizeof *ids);
-    int n = n_ids;
-    for (int j = 0; j < n; ++j) {
+    for (int j = 0; j < n_ids; ++j) {
         read_utf(it, &it->str);
         ids[j] = util_strndup(it->str.s, it->str.l);
     }
-    bool *is_diploid = util_malloc((size_t)n * sizeof *is_diploid);
-    for (int j = 0; j < n; ++j) is_diploid[j] = true;
-    samples_init(&it->samples, n, ids, is_diploid);
-    it->n_haps = n << 1;
+    bool *is_diploid = util_malloc((size_t)n_ids * sizeof *is_diploid);
+    for (int j = 0; j < n_ids; ++j) is_diploid[j] = true;
+    samples_init(&it->samples, n_ids, ids, is_diploid);
+    it->n_haps = n_ids << 1;
 }
 
 static void buf_add(bref3_it *it, ref_gt_rec *rec) {
