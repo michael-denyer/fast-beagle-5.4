@@ -244,6 +244,8 @@ static window *next_targ_window(sliding_window *sw) {
         targ_add(&recs, sw->next_targ);
         sw->next_targ = targ_next(sw);
     }
+    /* BasicGT rejects an empty window before its markers are inspected. */
+    if (recs.n == 0) util_exit("java.lang.ArrayIndexOutOfBoundsException: Index 0 out of bounds for length 0");
     const marker **m = targ_markers(recs.v, recs.n);
     markers_check(m, recs.n);
     bool last = sw->next_targ == NULL;

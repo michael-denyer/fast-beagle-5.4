@@ -138,36 +138,40 @@ static bool boolean_arg(args_map *m, const char *key, bool def) {
     util_exit("%s is not \"true\" or \"false\"", v);
 }
 
-/* java.io.File's path, normalized in place: repeated slashes become one and a
- * trailing slash is dropped. File.equals compares these paths. */
-static char *file_path(char *s) {
-    size_t k = 0;
-    for (size_t j = 0; s[j] != '\0'; ++j) {
-        if (s[j] != '/' || k == 0 || s[k - 1] != '/') s[k++] = s[j];
+/* Compare existing files by identity, including symlinks and hard links.
+ * Check every output before the log or any other output is opened. */
+static void check_output(const par *p, const char *truth, const char *suffix, const char *kind) {
+    size_t size = strlen(p->out) + strlen(suffix) + 1;
+    char *output = util_malloc(size);
+    snprintf(output, size, "%s%s", p->out, suffix);
+    struct stat out_st;
+    if (stat(output, &out_st) == 0) {
+        const char *inputs[] = {p->ref, p->gt, p->map, p->excludesamples, p->excludemarkers, p->ped, truth};
+        for (size_t j = 0; j < sizeof inputs / sizeof *inputs; ++j) {
+            struct stat in_st;
+            if (inputs[j] != NULL && stat(inputs[j], &in_st) == 0
+                    && out_st.st_dev == in_st.st_dev && out_st.st_ino == in_st.st_ino) {
+                util_exit("ERROR: %s output file equals input file: %s", kind, inputs[j]);
+            }
+        }
     }
-    if (k > 1 && s[k - 1] == '/') --k;
-    s[k] = '\0';
-    return s;
+    free(output);
 }
 
 /* Main.checkOutputPrefix and Main.parameters, after Par has read every argument. */
-static void check_parameters(const par *p) {
+static void check_parameters(const par *p, const char *truth) {
     struct stat st;
     if (stat(p->out, &st) == 0 && S_ISDIR(st.st_mode)) {
         util_exit("ERROR: \"out\" parameter cannot be a directory: \"%s\"", p->out);
     }
-    size_t size = strlen(p->out) + sizeof ".vcf.gz";
-    char *vcf_out = util_malloc(size);
-    snprintf(vcf_out, size, "%s.vcf.gz", p->out);
-    file_path(vcf_out);
-    const char *inputs[] = {p->ref, p->gt};
-    for (int j = 0; j < 2; ++j) {
-        if (inputs[j] == NULL) continue;
-        char *input = file_path(util_strndup(inputs[j], strlen(inputs[j])));
-        if (strcmp(vcf_out, input) == 0) util_exit("ERROR: VCF output file equals input file: %s", input);
-        free(input);
+    check_output(p, truth, ".vcf.gz", "VCF");
+    check_output(p, truth, ".log", "log");
+    if (p->tbi) check_output(p, truth, ".vcf.gz.tbi", "tabix");
+    if (p->bgen != BGEN_NONE) {
+        check_output(p, truth, ".bgen", "BGEN");
+        check_output(p, truth, ".sample", "sample");
+        check_output(p, truth, ".info", "info");
     }
-    free(vcf_out);
     if (p->window < 1.1 * p->overlap) {
         util_exit("ERROR: The \"window\" parameter must be at least 1.1 times the \"overlap\" parameter");
     }
@@ -231,7 +235,7 @@ void par_parse(par *p, int argc, char **argv) {
     p->no_nthreads = raw_nthreads == IMAX;
     p->nthreads = p->no_nthreads ? (n_cpus > 0 ? (int)n_cpus : 1) : raw_nthreads;
 
-    file_arg(&m, "truth", false);
+    const char *truth = file_arg(&m, "truth", false);
     p->trace = string_arg(&m, "trace", false);
     const char *bgen = string_arg(&m, "bgen", false);
     if (bgen == NULL) p->bgen = BGEN_NONE;
@@ -272,5 +276,5 @@ void par_parse(par *p, int argc, char **argv) {
     free(m.key);
     free(m.value);
     free(m.used);
-    check_parameters(p);
+    check_parameters(p, truth);
 }

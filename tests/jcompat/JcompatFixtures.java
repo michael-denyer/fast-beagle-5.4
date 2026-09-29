@@ -54,6 +54,8 @@ public class JcompatFixtures {
         }
         // DecimalFormat inputs in Beagle: j/100.0, and floats in [0, 1] widened to double.
         java.util.List<Double> formatted = new java.util.ArrayList<>();
+        formatted.addAll(java.util.List.of(Double.NaN, Double.longBitsToDouble(0xfff8000000000000L),
+                Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY, -0.0));
         for (int j = 0; j <= 200; ++j) formatted.add(j/100.0);
         for (int k = 0; k <= 1 << 16; ++k) formatted.add((double) (k / 65536f));
         for (int i = 0; i < 20000; ++i) formatted.add((double) r.nextFloat());

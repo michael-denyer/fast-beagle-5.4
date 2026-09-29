@@ -146,11 +146,13 @@ static void *parse_batches(void *arg) {
         --r->n_read;
         pthread_mutex_unlock(&r->mutex);
         parse_batch(r, b);
+        /* The consumer may recycle b as soon as it is published. */
+        bool at_end = b->n == 0;
         pthread_mutex_lock(&r->mutex);
         r->full[(r->full_head + r->n_full++) % BLOCK_READER_SLOTS] = b;
         pthread_cond_broadcast(&r->changed);
         pthread_mutex_unlock(&r->mutex);
-        if (b->n == 0) return NULL;
+        if (at_end) return NULL;
     }
 }
 

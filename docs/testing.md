@@ -130,6 +130,8 @@ The check builds `build/beagle-piece1` with one marker per work item. It runs `b
 
 - `make check-jcompat` compares each Java library reproduction in `src/jcompat/` against output printed by real Java (`tests/jcompat/JcompatFixtures.java`).
 - `make check-interval` tests `src/vcf/interval_it.c` over an in-memory record source (`tests/vcf/interval_it_test.c`).
+- `make check-block-reader` forces a published batch to be consumed and refilled with EOF before the parser resumes. The parser must still publish the EOF sentinel.
+- `make check-edge-cases` checks that output path aliases leave inputs unchanged, tiny empty windows exit with Java's error, and zero-error imputation preserves Java's `NaN` spelling. It includes log, BGEN and tabix output collisions with target, reference and auxiliary inputs. Both gate tiers run these checks; the sanitizer checks run them too.
 - `make check-records`: `tests/output/record_fixture.c` writes phased, imputed, genotyped, haploid and multiallelic records through the window writer with no BGEN and in both `bgen=` modes. `tests/check_records.py` requires the same VCF from all three runs and the expected VCF fields. It also requires phased BGEN probabilities captured before the VCF rounds them.
 - `make check-tracker` tests the composite haplotype tracker in `src/beagleutil/comp_hap_queue.c` through the interface every caller uses (`tests/beagleutil/tracker_test.c`).
 - `make check-bgen-unit` tests:
