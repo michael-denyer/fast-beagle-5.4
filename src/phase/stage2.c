@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2014-2021 Brian L. Browning
- * Ported to C from Beagle 5.5 (27Feb25) phase/HmmStateProbs.java,
+ * Ported to C from Beagle 5.4 (29Oct24) phase/HmmStateProbs.java,
  * phase/Stage2Baum.java, phase/Stage2Haps.java and PhaseLS.runStage2;
  * modified 2026.
  *

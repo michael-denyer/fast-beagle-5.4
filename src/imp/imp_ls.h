@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2014-2021 Brian L. Browning
- * Ported to C from Beagle 5.5 (27Feb25) imp/ImpLS.java, imp/ImpStates.java,
+ * Ported to C from Beagle 5.4 (29Oct24) imp/ImpLS.java, imp/ImpStates.java,
  * imp/ImpLSBaum.java, imp/StateProbsFactory.java and imp/StateProbs.java;
  * modified 2026.
  *

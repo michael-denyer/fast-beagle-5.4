@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2014-2021 Brian L. Browning
- * Ported to C from Beagle 5.5 (27Feb25) beagleutil/CompHapSegment.java, with
+ * Ported to C from Beagle 5.4 (29Oct24) beagleutil/CompHapSegment.java, with
  * the priority queue operations Beagle uses on it, and the queue
  * state and updateHeadOfQ that phase/BasicPhaseStates.java,
  * phase/LowFreqPhaseStates.java and imp/ImpStates.java each repeat;

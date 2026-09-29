@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2014-2021 Brian L. Browning
- * Ported to C from Beagle 5.5 (27Feb25) vcf/VcfRecGTParser.java (hapListRep),
+ * Ported to C from Beagle 5.4 (29Oct24) vcf/VcfRecGTParser.java (hapListRep),
  * vcf/VcfIt.java (TO_LOWMEM_GT_REC), vcf/LowMafDiallelicGTRec.java,
  * vcf/LowMafGTRec.java and vcf/BitArrayGTRec.java; modified 2026.
  *

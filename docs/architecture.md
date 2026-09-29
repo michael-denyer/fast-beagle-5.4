@@ -1,6 +1,6 @@
 # Architecture and source layout
 
-fast-beagle is a file-by-file C port of Beagle 5.4 (29Oct24). Each source file names the Java file it was ported from: a Beagle 5.4 file, or a Beagle 5.5 (27Feb25) file for the files ported from that release. The [checks](testing.md) hold every file's behaviour to Beagle 5.4's. [CONTEXT.md](../CONTEXT.md) defines the domain terms.
+fast-beagle is a file-by-file C port of Beagle 5.4 (29Oct24). Each ported source file names the Beagle 5.4 Java file whose behaviour it implements. The [checks](testing.md) hold every file's behaviour to Beagle 5.4's. [CONTEXT.md](../CONTEXT.md) defines the domain terms.
 
 ## Each window runs through four stages
 
