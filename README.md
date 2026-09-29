@@ -1,4 +1,4 @@
-# fast-beagle
+# Fast Beagle v5.4
 
 ![C11](https://img.shields.io/badge/C-C11-00599C?logo=c&logoColor=white)
 ![Python test scripts](https://img.shields.io/badge/Python-test_scripts-3776AB?logo=python&logoColor=white)
