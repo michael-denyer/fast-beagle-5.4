@@ -1,0 +1,26 @@
+<banner>
+Copyright (C) 2014-2022 Brian L. Browning
+Start time: <time>
+
+Command line: <program>
+  gt=@/ref.vcf.gz
+  out=<out>
+  seed=-99999
+  nthreads=2
+
+No genetic map is specified: using 1 cM = 1 Mb
+
+Reference samples:                    0
+Study     samples:                  181
+
+Window 1 [22:20000086-20099941]
+Study     markers:                1,356
+
+Cumulative Statistics:
+
+Study     markers:                1,356
+
+Total time:                    <elapsed>
+
+End time: <time>
+<program> finished

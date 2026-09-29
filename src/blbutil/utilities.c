@@ -10,17 +10,23 @@
 #include "blbutil/utilities.h"
 
 #include <stdarg.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 static FILE *exit_log;
+static atomic_flag exiting = ATOMIC_FLAG_INIT;
 
 void util_exit_log(FILE *log) {
     exit_log = log;
 }
 
 void util_exit(const char *fmt, ...) {
+    if (atomic_flag_test_and_set(&exiting)) {
+        for (;;) pause();
+    }
     fflush(stdout);   /* progress lines first, as Java's autoflushed System.out */
     va_list ap;
     va_start(ap, fmt);
@@ -31,7 +37,6 @@ void util_exit(const char *fmt, ...) {
     if (exit_log != NULL) {
         vfprintf(exit_log, fmt, ap2);
         fputc('\n', exit_log);
-        fclose(exit_log);
     }
     va_end(ap2);
     va_end(ap);

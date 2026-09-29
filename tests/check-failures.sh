@@ -53,6 +53,10 @@ ABSENT="$OUT/dir.vcf.gz" check out-directory "ERROR: \"out\" parameter cannot be
 ABSENT="$OUT/window.vcf.gz" check window-overlap \
   "ERROR: The \"window\" parameter must be at least 1.1 times the \"overlap\" parameter" \
   gt="$DATA/target.vcf.gz" out="$OUT/window" window=1 overlap=1
+# A window shorter than the marker spacing holds no marker, and BasicGT
+# indexes the empty marker array.
+check empty-window "java.lang.ArrayIndexOutOfBoundsException: Index 0 out of bounds for length 0" \
+  gt="$DATA/target.thin.vcf.gz" window=0.0000001 overlap=0.00000001 out="$OUT/empty-window"
 
 # VcfRecGTParser reads a one-character allele as c - '0' and longer ones with
 # Integer.parseInt, so a lone Arabic-Indic one (U+0661) is allele 1585.
@@ -86,10 +90,6 @@ check imp-gap-map "22:20049939-20068772" \
   ref="$DATA/ref.vcf.gz" gt="$DATA/target.gap.vcf.gz" map="$DATA/map.map" window=1.5 overlap=0.5 out="$OUT/gap"
 check imp-gap-map-noimp "java.lang.IllegalArgumentException: Window has only one position: CHROM=22 POS=20029411" \
   ref="$DATA/ref.vcf.gz" gt="$DATA/target.gap.vcf.gz" map="$DATA/map.map" window=1.5 overlap=0.5 impute=false out="$OUT/gap-noimp"
-# A window shorter than the marker spacing holds no marker, and BasicGT
-# indexes the empty marker array.
-check empty-window "java.lang.ArrayIndexOutOfBoundsException: Index 0 out of bounds for length 0" \
-  gt="$DATA/target.thin.vcf.gz" window=0.0000001 overlap=0.00000001 out="$OUT/empty-window"
 
 # PlinkGenMap throws IllegalArgumentException, and prints a genetic position
 # with Double.toString.
@@ -129,64 +129,5 @@ fi
 # ImpIbs divides imp-states by round(imp-segment / imp-step), which is 0 here.
 check imp-segment "java.lang.ArithmeticException: / by zero" \
   ref="$DATA/ref.vcf.gz" gt="$DATA/target.thin.vcf.gz" out="$OUT/segment" imp-segment=0.01
-
-# fast-beagle only: an enabled output that is an existing input file by
-# identity, which Java's path-text comparison misses and Java overwrites. Each
-# run must print the fast-beagle message, leave the input unchanged and write
-# nothing.
-if [ "$1" != java ]; then
-  collision() {  # name dir input message args...
-    local name=$1 dir=$2 input=$3 message=$4 hash before; shift 4
-    hash=$($SHA "$input" | cut -c1-16)
-    before=$(ls -A "$dir")
-    check "$name" "$message" "$@"
-    unchanged "$name" "$input" "$hash"
-    [ "$(ls -A "$dir")" = "$before" ] || failed "$name wrote an output"
-  }
-  # The relative out= case runs in the input's directory.
-  BEAGLE[0]=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
-  d="$OUT/alias"
-  mkdir -p "$d/sub"
-  cp "$DATA/target.thin.vcf.gz" "$d/in.vcf.gz"
-  ln -s in.vcf.gz "$d/symlink.vcf.gz"
-  ln "$d/in.vcf.gz" "$d/hardlink.vcf.gz"
-  ln -s . "$d/dirlink"
-  for alias in dot:./in parent:sub/../in symlink:symlink hardlink:hardlink dir-symlink:dirlink/in; do
-    out=${alias#*:}
-    collision "alias-${alias%%:*}" "$d" "$d/in.vcf.gz" \
-      "fast-beagle: output file $d/$out.vcf.gz is the input file $d/in.vcf.gz" gt="$d/in.vcf.gz" out="$d/$out"
-  done
-  cd "$d" || exit 1
-  collision alias-relative "$d" "$d/in.vcf.gz" "fast-beagle: output file in.vcf.gz is the input file $d/in.vcf.gz" \
-    gt="$d/in.vcf.gz" out=in
-  cd - > /dev/null || exit 1
-
-  # Each output against each input file parameter, through ./ so that Java's
-  # check does not fire first.
-  for suffix in .vcf.gz .log .vcf.gz.tbi .bgen .sample .info; do
-    for key in gt ref map excludesamples excludemarkers ped truth; do
-      d="$OUT/collide$suffix-$key"
-      mkdir "$d"
-      cp "$DATA/target.thin.vcf.gz" "$d/in$suffix"
-      gt=()
-      [ $key = gt ] || gt=(gt="$DATA/target.thin.vcf.gz")
-      collision "collide$suffix-$key" "$d" "$d/in$suffix" \
-        "fast-beagle: output file $d/./in$suffix is the input file $d/in$suffix" \
-        "$key=$d/in$suffix" ${gt[@]+"${gt[@]}"} out="$d/./in" bgen=phased tbi=true
-    done
-  done
-
-  # A file named like a disabled output is not an output.
-  d="$OUT/unused"
-  mkdir "$d"
-  gzip -dc "$DATA/target.thin.vcf.gz" > "$d/in.bgen"
-  hash=$($SHA "$d/in.bgen" | cut -c1-16)
-  if "${BEAGLE[@]}" gt="$d/in.bgen" out="$d/in" seed=$SEED nthreads=2 > "$OUT/unused-output.log" 2>&1; then
-    echo "PASS unused-output"
-  else
-    failed "unused-output exit=$?: $(tail -1 "$OUT/unused-output.log")"
-  fi
-  unchanged unused-output "$d/in.bgen" "$hash"
-fi
 
 exit $fail

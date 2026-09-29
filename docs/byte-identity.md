@@ -19,7 +19,7 @@ Each check below runs in the pre-merge gate, `tests/gate-steps.sh`, except the c
 | [Oracle hashes](#oracle-hashes) | The VCF hash of each case against the hash that the jar writes | 53 cases, each at 1, 2 and 18 threads, for the jar, a build of the Java source, the Java trace build and fast-beagle | `tests/check-oracle.sh build/beagle` |
 | [Trace seams](#trace-seams) | Intermediate values at 21 points in the pipeline, against an instrumented Java build | 60 cases at 2 threads, and 10 seams again at 1 and 18 threads on the 3 thread-dependent cases | `tests/check-trace.sh T1a T1b ... T5d` |
 | [Differential fuzzing](#differential-fuzzing) | Generated inputs and options run through the jar and fast-beagle | 200 examples at 1, 2, 3 or 5 threads, plus 2 examples for each of 42 invalid-parameter changes, plus 4 saved regressions | `uv run --python 3.12 --script tests/check_fuzz.py --examples 200` |
-| [Refused inputs](#refused-inputs) | Inputs that Beagle rejects, with the exit code and Java's message | 26 cases for fast-beagle, 25 of them also on the jar, and 49 fast-beagle-only output collision checks | `tests/check-failures.sh build/beagle` |
+| [Refused inputs](#refused-inputs) | Inputs that Beagle rejects, with the exit code and Java's message | 26 cases for fast-beagle, 25 of them also on the jar, and 107 fast-beagle-only output collision runs | `tests/check-failures.sh build/beagle`, `python3 tests/check_output_failures.py build/beagle` |
 | [Java library fixtures](#java-library-fixtures) | C reproductions of the Java library behaviour that Beagle depends on, against a real JVM | 8 fixture sets | `make check-jcompat` |
 | [Thread safety and ordering](#thread-safety-and-ordering) | Memory errors, undefined behaviour and data races on the oracle cases, the ordered writer protocol, and the imputation work-item size | Sanitizers on 53 cases, TLC on 8 model sizes, piece size on 30 cases at 2 and 18 threads | `tests/check-sanitizers.sh`, `tests/check-tla.sh`, `make check-piece-size` |
 | [Platforms](#platforms) | The whole gate on two operating systems and two CPU architectures | macOS arm64 and Linux x86_64 | `tests/check-local.sh` |
@@ -75,7 +75,7 @@ The full gate runs a fixed set of 200 examples and 2 examples per invalid-parame
 
 The gate runs the script on the jar and on fast-beagle. The bref3 sample-count case runs for fast-beagle only, because the jar's result depends on its heap size.
 
-On fast-beagle only, the script also runs 49 checks of the [output collision refusal](beagle-divergences.md#errors-and-exit-status), which Beagle does not have. In 48 runs an output is an existing input file: through `./`, `..`, a relative path, a symlink, a hard link and a directory symlink, and each output file against each input file parameter. Each run must print the `fast-beagle:` message, leave the input unchanged and write no file. The 49th run names an input like an output that is not enabled, and must succeed.
+`tests/check_output_failures.py` runs 107 checks of the [output collision refusal](beagle-divergences.md#errors-and-exit-status) on fast-beagle, which Beagle does not have. In 103 runs an output is an existing input file: each output file against each input file parameter in both BGEN modes, the log without BGEN output, and each output through a relative path, a symlink and a hard link. Each run must exit 1 with the `fast-beagle:` message, or with Beagle's message for a VCF output path equal to the `gt=` or `ref=` path, leave the input unchanged and write no other output. In the other 4 runs an input is named like an output that is not enabled, and the run must succeed.
 
 ### Java library fixtures
 
@@ -83,7 +83,7 @@ Beagle's output depends on the exact behaviour of Java library code. `src/jcompa
 
 - `random`: `java.util.Random` sequences for 10 seeds and 14 bounds
 - `math`: `StrictMath.log`, `log10`, `pow` and `expm1` from the fdlibm 5.3 port, on special values and 20,000 random inputs, and each Beagle call site of `Math.log`, `Math.log10`, `Math.pow` and `Math.expm1` evaluated as Beagle evaluates it
-- `numbers`: `Math.round` edges, `double` and `float` casts to `int` and `long`, `DecimalFormat` patterns, `Double.toString` and `Float.toString`
+- `numbers`: `Math.round` edges, `double` and `float` casts to `int` and `long`, `DecimalFormat` patterns including NaN and the infinities, `Double.toString` and `Float.toString`
 - `parse`: `Double.parseDouble`
 - `parseint`: `Integer.parseInt`, including digits in other scripts
 - `utf8`: Java's UTF-8 decoding of byte strings

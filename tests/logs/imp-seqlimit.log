@@ -1,0 +1,32 @@
+<banner>
+Copyright (C) 2014-2022 Brian L. Browning
+Start time: <time>
+
+Command line: <program>
+  ref=@/ref.seqlimit.vcf.gz
+  gt=@/target.seqlimit.vcf.gz
+  out=<out>
+  seed=-99999
+  nthreads=2
+
+No genetic map is specified: using 1 cM = 1 Mb
+
+Reference samples:                   10
+Study     samples:                    3
+
+Window 1 [22:20000000-20059000]
+Reference markers:                   60
+Study     markers:                   20
+
+Imputation time:               <elapsed>
+
+Cumulative Statistics:
+
+Reference markers:                   60
+Study     markers:                   20
+
+Imputation time:               <elapsed>
+Total time:                    <elapsed>
+
+End time: <time>
+<program> finished

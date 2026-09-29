@@ -1,0 +1,55 @@
+<banner>
+Copyright (C) 2014-2022 Brian L. Browning
+Start time: <time>
+
+Command line: <program>
+  ref=@/ref.bref3
+  gt=@/target.thin.vcf.gz
+  excludesamples=@/exclude.samples
+  out=<out>
+  seed=-99999
+  nthreads=2
+
+No genetic map is specified: using 1 cM = 1 Mb
+
+Reference samples:                  181
+Study     samples:                    9
+
+Window 1 [22:20000086-20099941]
+Reference markers:                1,356
+Study     markers:                  136
+
+Burnin  iteration 1:           <elapsed>
+Burnin  iteration 2:           <elapsed>
+Burnin  iteration 3:           <elapsed>
+
+Estimated ne:                  87823
+Estimated err:                 2.3e-04
+
+Phasing iteration 1:           <elapsed>
+Phasing iteration 2:           <elapsed>
+Phasing iteration 3:           <elapsed>
+Phasing iteration 4:           <elapsed>
+Phasing iteration 5:           <elapsed>
+Phasing iteration 6:           <elapsed>
+Phasing iteration 7:           <elapsed>
+Phasing iteration 8:           <elapsed>
+Phasing iteration 9:           <elapsed>
+Phasing iteration 10:          <elapsed>
+Phasing iteration 11:          <elapsed>
+Phasing iteration 12:          <elapsed>
+Low frequency phasing:         <elapsed>
+
+Imputation time:               <elapsed>
+
+Cumulative Statistics:
+
+Reference markers:                1,356
+Study     markers:                  136
+
+Haplotype phasing time:        <elapsed>
+Imputation time:               <elapsed>
+Total time:                    <elapsed>
+
+End time: <time>
+<program> finished

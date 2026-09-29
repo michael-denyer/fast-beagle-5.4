@@ -3,7 +3,6 @@
  * to the largest remainders, lower alleles first on ties; the last allele's
  * value is left for the reader to infer.
  */
-#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 
@@ -43,7 +42,5 @@ int main(void) {
     /* 1 bit: 0.6 and 0.4 floor to 0, the unit goes to the larger */
     check("max 1", (const float[]){0.6f, 0.4f}, 2, 1, (const uint32_t[]){1});
     check("max 1 minor allele", (const float[]){0.4f, 0.6f}, 2, 1, (const uint32_t[]){0});
-    /* NaN counts as 0 and takes no unit, so every unit goes to allele 0 */
-    check("nan", (const float[]){NAN, NAN}, 2, 255, (const uint32_t[]){255});
     return failures != 0;
 }

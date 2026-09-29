@@ -34,6 +34,11 @@ int64_t jnum_round_d(double x);
 void jnum_format_fixed(char *buf, size_t size, double x, int digits);
 void jnum_format_hash2(char *buf, size_t size, double x);
 
+/* String.format("%1$7.1e", x) in Locale.US for finite x >= 0. Java's Formatter
+ * rounds the shortest decimal digits of x half up, where printf rounds the
+ * exact binary value half to even. */
+void jnum_format_sci1(char *buf, size_t size, double x);
+
 /* Double.parseDouble and Float.parseFloat: surrounding characters <= ' ' are
  * ignored; the text is an optional sign and then "NaN", "Infinity", a decimal
  * number with optional exponent, or a hex number with a required binary

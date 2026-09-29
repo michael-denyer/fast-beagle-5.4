@@ -29,6 +29,7 @@ int main(void) {
             if (strcmp(op, "hash2") == 0) jnum_format_hash2(buf, sizeof buf, x);
             else if (strcmp(op, "fixed2") == 0) jnum_format_fixed(buf, sizeof buf, x, 2);
             else if (strcmp(op, "fixed4") == 0) jnum_format_fixed(buf, sizeof buf, x, 4);
+            else if (strcmp(op, "sci1") == 0) jnum_format_sci1(buf, sizeof buf, x);
             else if (strcmp(op, "tostring") == 0) jnum_double_to_string(buf, x);
             else if (strcmp(op, "ftostring") == 0) jnum_float_to_string(buf, fx);
             else {

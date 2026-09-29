@@ -1,0 +1,46 @@
+<banner>
+Copyright (C) 2014-2022 Brian L. Browning
+Start time: <time>
+
+Command line: <program>
+  gt=@/test.ibs2.vcf.gz
+  map=@/map.steep.map
+  out=<out>
+  seed=-99999
+  nthreads=2
+
+Reference samples:                    0
+Study     samples:                  194
+
+Window 1 [22:20000086-20099941]
+Study     markers:                1,356
+
+Burnin  iteration 1:           <elapsed>
+Burnin  iteration 2:           <elapsed>
+
+Estimated ne:                  549
+Estimated err:                 1.5e-03
+
+Phasing iteration 1:           <elapsed>
+Phasing iteration 2:           <elapsed>
+Phasing iteration 3:           <elapsed>
+Phasing iteration 4:           <elapsed>
+Phasing iteration 5:           <elapsed>
+Phasing iteration 6:           <elapsed>
+Phasing iteration 7:           <elapsed>
+Phasing iteration 8:           <elapsed>
+Phasing iteration 9:           <elapsed>
+Phasing iteration 10:          <elapsed>
+Phasing iteration 11:          <elapsed>
+Phasing iteration 12:          <elapsed>
+Low frequency phasing:         <elapsed>
+
+Cumulative Statistics:
+
+Study     markers:                1,356
+
+Haplotype phasing time:        <elapsed>
+Total time:                    <elapsed>
+
+End time: <time>
+<program> finished

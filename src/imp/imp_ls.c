@@ -240,8 +240,7 @@ static void keep_state_probs(imp_ls_baum *b, int n_states, int targ_hap, state_p
         total += (size_t)kept;
     }
     kept_state *block = util_malloc(total * sizeof *block);
-    /* With no kept states, b->buf can still be NULL, and memcpy from NULL is
-     * undefined even for 0 bytes. */
+    /* With no kept states buf may still be NULL, which memcpy may not receive. */
     if (total > 0) memcpy(block, b->buf, total * sizeof *block);
     for (int m = 0; m < n; ++m) {
         cps[m].s = block;

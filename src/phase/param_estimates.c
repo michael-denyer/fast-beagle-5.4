@@ -64,7 +64,8 @@ static int compare_recomb(const void *a, const void *b) {
 }
 
 float param_estimates_p_mismatch(param_estimates *pe) {
-    qsort(pe->mismatch, (size_t)pe->n_mismatch, sizeof *pe->mismatch, compare_mismatch);
+    /* No estimates leaves mismatch NULL, which qsort may not receive. */
+    if (pe->n_mismatch > 0) qsort(pe->mismatch, (size_t)pe->n_mismatch, sizeof *pe->mismatch, compare_mismatch);
     int64_t sum_markers = 0;
     double sum_p_mismatch = 0.0;
     for (int j = 0; j < pe->n_mismatch; ++j) {
@@ -75,7 +76,7 @@ float param_estimates_p_mismatch(param_estimates *pe) {
 }
 
 float param_estimates_recomb_intensity(param_estimates *pe) {
-    qsort(pe->recomb, (size_t)pe->n_recomb, sizeof *pe->recomb, compare_recomb);
+    if (pe->n_recomb > 0) qsort(pe->recomb, (size_t)pe->n_recomb, sizeof *pe->recomb, compare_recomb);
     double sum_switches = 0.0;
     double sum_distances = 0.0;
     for (int j = 0; j < pe->n_recomb; ++j) {

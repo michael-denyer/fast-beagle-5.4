@@ -167,8 +167,8 @@ block_reader *block_reader_open(line_reader *reader, kstring_t line, const vcf_h
     pthread_mutex_init(&r->mutex, NULL);
     pthread_cond_init(&r->changed, NULL);
     for (int j = 0; j < BLOCK_READER_SLOTS; ++j) r->free_slots[r->n_free++] = &r->slots[j];
-    if (pthread_create(&r->reader_thread, NULL, read_batches, r) != 0) util_exit("fast-beagle: cannot create thread");
-    if (pthread_create(&r->parser_thread, NULL, parse_batches, r) != 0) util_exit("fast-beagle: cannot create thread");
+    if (pthread_create(&r->reader_thread, NULL, read_batches, r) != 0) util_exit(PROGRAM ": cannot create thread");
+    if (pthread_create(&r->parser_thread, NULL, parse_batches, r) != 0) util_exit(PROGRAM ": cannot create thread");
     return r;
 }
 

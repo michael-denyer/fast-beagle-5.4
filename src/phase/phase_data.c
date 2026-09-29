@@ -133,7 +133,7 @@ void phase_data_free(phase_data *pd) {
 
 void phase_data_update_p_mismatch(phase_data *pd, float p_mismatch) {
     if (p_mismatch < 0.0 || p_mismatch > 1.0 || !isfinite(p_mismatch)) {
-        util_exit("fast-beagle: mismatch probability %g outside [0, 1]", (double)p_mismatch);
+        util_exit(PROGRAM ": mismatch probability %g outside [0, 1]", (double)p_mismatch);
     }
     pd->p_mismatch = p_mismatch;
 }
@@ -142,6 +142,10 @@ void phase_data_update_recomb_intensity(phase_data *pd, float recomb_intensity) 
     free(pd->p_recomb);
     pd->recomb_intensity = recomb_intensity;
     pd->p_recomb = p_recomb(&pd->fpd->stage1_map, recomb_intensity);
+}
+
+int64_t phase_data_ne(const phase_data *pd) {
+    return jnum_d2l(ceil(25 * pd->recomb_intensity * pd->fpd->n_haps));
 }
 
 void phase_data_increment_it(phase_data *pd) {

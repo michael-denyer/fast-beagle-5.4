@@ -51,6 +51,10 @@ int sliding_window_n_ref_samples(const sliding_window *sw);
 const genetic_map *sliding_window_gen_map(const sliding_window *sw);
 /* The next window, or NULL after the last. The caller frees it with window_free. */
 window *sliding_window_next(sliding_window *sw);
+/* SlidingWindow.cumTargMarkers and cumMarkers: the target and all markers of
+ * the windows returned so far, each counted once. */
+int64_t sliding_window_cum_targ_markers(const sliding_window *sw);
+int64_t sliding_window_cum_markers(const sliding_window *sw);
 void window_free(window *w);
 void sliding_window_close(sliding_window *sw);
 

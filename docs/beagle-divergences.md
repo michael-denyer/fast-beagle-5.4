@@ -8,7 +8,9 @@ fast-beagle is a C port of Java Beagle 5.4 (`beagle.29Oct24.c8e.jar`). Run with 
 |---|---|---|
 | VCF text | The reference output | Byte-identical at the same `nthreads=` |
 | `.vcf.gz` file bytes | BGZF from Beagle's own writer | BGZF from htslib, so the compressed bytes differ |
+| `<out>.log` and standard output | Beagle's progress report | The same report, naming fast-beagle, with `CPU time:` and `Max memory:` added and a failed run's error at the end of the log. See [Log file and console output](usage.md#log-file-and-console-output). |
 | No arguments | Prints the usage text and exits 0 | Prints `missing gt argument` and exits 1 |
+| Error output | The message, often with the exception class, a stack trace, the usage text or the banner | The message only |
 | Exit status on error | 1, or no exit after some input errors | 1 |
 | Output of a failed run | The records written before the error | An empty or truncated `.vcf.gz` |
 | `ped=` | Read, reported in the log and otherwise ignored | Refused |
@@ -36,15 +38,21 @@ With no arguments, Beagle prints its usage text and exits with status 0. fast-be
 
 ## Errors and exit status
 
-Both tools exit with status 1 when they refuse a run.
+Both tools exit with status 1 when they refuse a run. fast-beagle prints the same message text as Beagle, on standard error. It leaves out the lines Beagle adds around that message:
 
-Beagle refuses an `out=` whose VCF path names the `gt=` or `ref=` file after `java.io.File` normalizes the path text, and fast-beagle prints the same message. fast-beagle then also refuses any output that is an existing input file, even through `./`, `..`, a relative path, a symlink or a hard link, and prints `fast-beagle: output file <output> is the input file <input>`. Beagle overwrites the input in these cases. The check compares the VCF, log, and enabled BGEN and tabix outputs with every input file parameter before any output is opened.
+- For a parameter error, Beagle prints the message after `Exception in thread "main" java.lang.IllegalArgumentException:` and follows it with a stack trace.
+- For an input file that does not exist, Beagle adds `java.lang.Throwable: File does not exist` and a stack trace.
+- For an unrecognized parameter, a missing input file and several input errors, Beagle ends with a blank line and `Terminating program.`
+- For an `out=` that is a directory or names an input file, Beagle prints the full usage text before the message.
+- For a `window=` less than 1.1 times `overlap=`, Beagle prints its banner before the message and `Exiting program.` after it.
+
+Beagle refuses an `out=` whose VCF path names the `gt=` or `ref=` file after `java.io.File` normalizes the path text, and fast-beagle prints the same message. fast-beagle then also refuses any output that is an existing input file, even through `./`, `..`, a relative path, a symlink or a hard link, and prints `fast-beagle: output file <output> equals input file <input>`. Beagle overwrites the input in these cases. The check compares the VCF, log, and enabled BGEN and tabix outputs with every input file parameter before any output is opened.
+
+When an input file has several malformed records, both tools report one of them. At `nthreads=` above 1, the parse threads race, so the record named can change from run to run and can differ between the tools.
 
 When a command line has more than one unrecognized parameter, both tools list them in one message. Beagle lists them in hash-map order. fast-beagle lists them in the order you gave them.
 
-Beagle parses VCF records on several threads, so when a file has more than one malformed record, the record its message names can vary between runs. fast-beagle names the first malformed record in the file.
-
-A few errors exist only in fast-beagle, such as a refused `ped=` or a failure to start a thread. Their messages start with `fast-beagle:`.
+A few errors exist only in fast-beagle, such as a refused `ped=` or a failure to start a thread. Their messages start with `fast-beagle:`. So do its refusals of nonfinite probabilities in phased BGEN output and of log, VCF, BGEN and tabix output destinations that are input files, including symbolic and hard-link aliases. The one exception is a VCF output path equal to the `gt=` or `ref=` path, which both tools refuse with Beagle's message. [Failed runs](usage.md#failed-runs) describes these checks.
 
 ### A failed run leaves a partial VCF
 

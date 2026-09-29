@@ -17,7 +17,6 @@
 #include "main/run_stats.h"
 
 #include <htslib/kstring.h>
-#include <math.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
@@ -29,7 +28,7 @@
 
 /* The first two lines of Main.SHORT_HELP, naming this program. Beagle's third
  * line points to a usage text that this program does not print. */
-static const char BANNER[] = "fast-beagle: a C port of beagle.29Oct24.c8e.jar (version 5.4)\n"
+static const char BANNER[] = PROGRAM ": a C port of beagle.29Oct24.c8e.jar (version 5.4)\n"
                              "Copyright (C) 2014-2022 Brian L. Browning\n";
 
 int64_t run_stats_nanos(void) {
@@ -102,50 +101,6 @@ static void print_nanos(run_stats *rs, const char *message, int64_t nanos) {
     duo_print(rs, "%-31s%s\n", message, elapsed(buf, sizeof buf, nanos));
 }
 
-/* String.format("%1$7.1e", (double)x) for x >= 0. Java's Formatter rounds the
- * shortest decimal digits of the double half up, where printf rounds the
- * exact binary value half to even. */
-static const char *sci1(char *buf, size_t size, float x) {
-    char s[JNUM_DOUBLE_STRING_SIZE];
-    jnum_double_to_string(s, x);
-    char *e = strchr(s, 'E');
-    int exp10 = 0;
-    if (e != NULL) {
-        exp10 = atoi(e + 1);
-        *e = '\0';
-    }
-    char dig[JNUM_DOUBLE_STRING_SIZE + 2] = {0};
-    int n_dig = 0, n_seen = 0, point = -1, first = -1;
-    for (const char *c = s; *c != '\0'; ++c) {
-        if (*c == '.') {
-            point = n_seen;
-            continue;
-        }
-        if (first < 0 && *c != '0') first = n_seen;
-        if (first >= 0) dig[n_dig++] = *c;
-        ++n_seen;
-    }
-    if (point < 0) point = n_seen;
-    if (first < 0) {
-        snprintf(buf, size, "%7s", "0.0e+00");
-        return buf;
-    }
-    exp10 += point - first - 1;
-    int d0 = dig[0] - '0';
-    int d1 = n_dig > 1 ? dig[1] - '0' : 0;
-    if (n_dig > 2 && dig[2] >= '5' && ++d1 == 10) {
-        d1 = 0;
-        if (++d0 == 10) {
-            d0 = 1;
-            ++exp10;
-        }
-    }
-    char t[16];
-    snprintf(t, sizeof t, "%d.%de%c%02d", d0, d1, exp10 < 0 ? '-' : '+', abs(exp10));
-    snprintf(buf, size, "%7s", t);
-    return buf;
-}
-
 void run_stats_open(run_stats *rs, const par *p, const char *program) {
     *rs = (run_stats){.par = p, .start_nanos = run_stats_nanos()};
     kstring_t path = KS_INITIALIZE;
@@ -200,12 +155,11 @@ void run_stats_window_update(run_stats *rs, const window *w) {
 void run_stats_stage1(run_stats *rs, const phase_data *pd, int64_t nanos) {
     const par *p = rs->par;
     if (pd->it == p->burnin && p->em) {
-        /* PhaseData.ne() */
-        int64_t ne = (int64_t)ceil(25 * pd->recomb_intensity * pd->fpd->n_haps);
         char err[16];
+        jnum_format_sci1(err, sizeof err, pd->p_mismatch);
         duo_print(rs, "\n");
-        duo_print(rs, "%-31s%lld\n", "Estimated ne:", (long long)ne);
-        duo_print(rs, "%-31s%s\n", "Estimated err:", sci1(err, sizeof err, pd->p_mismatch));
+        duo_print(rs, "%-31s%lld\n", "Estimated ne:", (long long)phase_data_ne(pd));
+        duo_print(rs, "%-31s%s\n", "Estimated err:", err);
     }
     rs->total_phase_nanos += nanos;
     bool burnin = pd->it < p->burnin;
@@ -260,7 +214,7 @@ void run_stats_close(run_stats *rs, int64_t n_targ_markers, int64_t n_markers) {
     duo_print(rs, "%-31s%s MB\n", "Max memory:", grouped(buf, max_rss_bytes(&ru) / (1024 * 1024)));
     char ts[64];
     duo_print(rs, "\nEnd time: %s\n", time_stamp(ts, sizeof ts));
-    duo_print(rs, "fast-beagle finished\n");
+    duo_print(rs, PROGRAM " finished\n");
     util_exit_log(NULL);
     if (fclose(rs->log) != 0) util_exit("Error writing %s.log", rs->par->out);
 }

@@ -89,6 +89,7 @@ struct sliding_window {
     targ_list targ_recs, targ_overlap;
     ref_list ref_recs, ref_overlap;
     int window_index;
+    int64_t cum_targ_markers, cum_markers;
     bool started, done;
 };
 
@@ -113,7 +114,7 @@ static bool ref_has_next(sliding_window *sw) {
 }
 
 sliding_window *sliding_window_open(const par *p) {
-    if (p->ped != NULL) util_exit("fast-beagle: the ped= parameter is not supported");
+    if (p->ped != NULL) util_exit(PROGRAM ": the ped= parameter is not supported");
     sliding_window *sw = util_malloc(sizeof *sw);
     *sw = (sliding_window){0};
     const chrom_interval *interval = p->has_chrom_int ? &p->chrom_int : NULL;
@@ -361,7 +362,18 @@ window *sliding_window_next(sliding_window *sw) {
         }
     }
     if (sw->done) return NULL;
-    return sw->ref_it.ops == NULL ? next_targ_window(sw) : next_ref_window(sw);
+    window *w = sw->ref_it.ops == NULL ? next_targ_window(sw) : next_ref_window(sw);
+    sw->cum_targ_markers += w->indices.n_targ_markers - w->indices.targ_overlap_end;
+    sw->cum_markers += w->indices.n_markers - w->indices.overlap_end;
+    return w;
+}
+
+int64_t sliding_window_cum_targ_markers(const sliding_window *sw) {
+    return sw->cum_targ_markers;
+}
+
+int64_t sliding_window_cum_markers(const sliding_window *sw) {
+    return sw->cum_markers;
 }
 
 void window_free(window *w) {

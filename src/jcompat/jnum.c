@@ -39,11 +39,15 @@ int64_t jnum_round_d(double x) {
     return jnum_d2l(round_half_up(x));
 }
 
-/* printf rounds the exact binary value, ties to even, as DecimalFormat does. */
+/* DecimalFormat has its own nonfinite strings. For finite values, printf
+ * rounds the exact binary value, ties to even, as DecimalFormat does. */
 void jnum_format_fixed(char *buf, size_t size, double x, int digits) {
-    if (isnan(x)) snprintf(buf, size, "NaN");
-    else if (isinf(x)) snprintf(buf, size, "%s\xe2\x88\x9e", signbit(x) ? "-" : "");
-    else snprintf(buf, size, "%.*f", digits, x);
+    if (!isfinite(x)) {
+        const char *s = isnan(x) ? "NaN" : x < 0 ? "-\xe2\x88\x9e" : "\xe2\x88\x9e";
+        snprintf(buf, size, "%s", s);
+    } else {
+        snprintf(buf, size, "%.*f", digits, x);
+    }
 }
 
 void jnum_format_hash2(char *buf, size_t size, double x) {
@@ -51,6 +55,46 @@ void jnum_format_hash2(char *buf, size_t size, double x) {
     char *end = buf + strlen(buf);
     while (end[-1] == '0') *--end = '\0';
     if (end[-1] == '.') end[-1] = '\0';
+}
+
+void jnum_format_sci1(char *buf, size_t size, double x) {
+    char s[JNUM_DOUBLE_STRING_SIZE];
+    jnum_double_to_string(s, x);
+    char *e = strchr(s, 'E');
+    int exp10 = 0;
+    if (e != NULL) {
+        exp10 = atoi(e + 1);
+        *e = '\0';
+    }
+    char dig[JNUM_DOUBLE_STRING_SIZE + 2] = {0};
+    int n_dig = 0, n_seen = 0, point = -1, first = -1;
+    for (const char *c = s; *c != '\0'; ++c) {
+        if (*c == '.') {
+            point = n_seen;
+            continue;
+        }
+        if (first < 0 && *c != '0') first = n_seen;
+        if (first >= 0) dig[n_dig++] = *c;
+        ++n_seen;
+    }
+    if (point < 0) point = n_seen;
+    if (first < 0) {
+        snprintf(buf, size, "%7s", "0.0e+00");
+        return;
+    }
+    exp10 += point - first - 1;
+    int d0 = dig[0] - '0';
+    int d1 = n_dig > 1 ? dig[1] - '0' : 0;
+    if (n_dig > 2 && dig[2] >= '5' && ++d1 == 10) {
+        d1 = 0;
+        if (++d0 == 10) {
+            d0 = 1;
+            ++exp10;
+        }
+    }
+    char t[16];
+    snprintf(t, sizeof t, "%d.%de%c%02d", d0, d1, exp10 < 0 ? '-' : '+', abs(exp10));
+    snprintf(buf, size, "%7s", t);
 }
 
 /* Checks Java's FloatingDecimal grammar and copies the number, without its

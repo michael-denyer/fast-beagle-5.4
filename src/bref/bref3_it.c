@@ -108,7 +108,7 @@ static void read_utf(bref3_it *it, kstring_t *out) {
     out->l = 0;
     for (int j = 0; j < n_units; ++j) {
         unsigned u = units[j];
-        if (u == 0) util_exit("fast-beagle: a string in %s contains a NUL character", it->path);
+        if (u == 0) util_exit(PROGRAM ": a string in %s contains a NUL character", it->path);
         if (u >= 0xd800 && u <= 0xdbff && j + 1 < n_units && units[j + 1] >= 0xdc00 && units[j + 1] <= 0xdfff) {
             put_code_point(out, 0x10000 + ((u - 0xd800) << 10) + (units[j + 1] - 0xdc00));
             ++j;
@@ -225,19 +225,19 @@ static seq_group *read_hap_to_seq(bref3_it *it, int n_seq) {
     seq_group *g = seq_group_new(it->n_haps, n_seq);
     for (int k = 0; k < it->n_haps; ++k) {
         g->hap_to_seq[k] = it->bytes[2 * k] << 8 | it->bytes[2 * k + 1];
-        if (n_seq > 0 && g->hap_to_seq[k] >= n_seq) util_exit("fast-beagle: inconsistent data in %s", it->path);
+        if (n_seq > 0 && g->hap_to_seq[k] >= n_seq) util_exit(PROGRAM ": inconsistent data in %s", it->path);
     }
     return g;
 }
 
 /* Bref3Reader.readHapRecord */
 static void read_hap_record(bref3_it *it, ref_gt_rec *rec, seq_group *g) {
-    if (g->n_seq == 0) util_exit("fast-beagle: inconsistent data in %s", it->path);
+    if (g->n_seq == 0) util_exit(PROGRAM ": inconsistent data in %s", it->path);
     int n_alleles = marker_n_alleles(&rec->marker);
     uint8_t *seq_to_allele = util_malloc((size_t)g->n_seq);
     read_fully(it, seq_to_allele, (size_t)g->n_seq);
     for (int s = 0; s < g->n_seq; ++s) {
-        if (seq_to_allele[s] >= n_alleles) util_exit("fast-beagle: inconsistent data in %s", it->path);
+        if (seq_to_allele[s] >= n_alleles) util_exit(PROGRAM ": inconsistent data in %s", it->path);
     }
     ref_gt_rec_set_seq_coded(rec, g, seq_to_allele);
 }
