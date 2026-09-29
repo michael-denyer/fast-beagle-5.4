@@ -372,6 +372,23 @@ gzip -dc test.vcf.gz | awk 'BEGIN {OFS="\t"} /^##/ {print; next} /^#CHROM/ {prin
     if (n % 5 == 0 || n % 7 == 0) for (i = 1; i <= 4; i++) { b = substr("ACGT", i, 1); if (b != $4 && b != $5) alt = alt "," b }
     print $1, $2, $3, $4, alt, $6, $7, $8, "GT", (n % 5 == 0 ? "1/2" : "1/1"), (n % 7 == 0 ? "0/3" : "0/0") }' | gzip > test.lone.vcf.gz
 
+# Imputation with err=0 where no reference haplotype carries the target's ALT
+# alleles: every state probability is 0, so Beagle 5.4 writes the imputed
+# marker at 2000 with AF=NaN.
+{
+  printf '##fileformat=VCFv4.2\n##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">\n'
+  printf '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tS1\n'
+  printf '20\t1000\t.\tA\tC\t.\tPASS\t.\tGT\t1|1\n'
+  printf '20\t3000\t.\tA\tC\t.\tPASS\t.\tGT\t1|1\n'
+} | gzip > target.nan.vcf.gz
+{
+  printf '##fileformat=VCFv4.2\n##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">\n'
+  printf '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tR1\tR2\n'
+  printf '20\t1000\t.\tA\tC\t.\tPASS\t.\tGT\t0|0\t0|0\n'
+  printf '20\t2000\t.\tA\tC\t.\tPASS\t.\tGT\t0|1\t1|0\n'
+  printf '20\t3000\t.\tA\tC\t.\tPASS\t.\tGT\t0|0\t0|0\n'
+} | gzip > ref.nan.vcf.gz
+
 # Paths relative to the checkout let a complete cache move between worktrees.
 # Publish only after every generator and checksum above has succeeded.
 (cd "$ROOT" && shasum -a 256 tests/fetch-fixtures.sh tests/oracle-cases.txt tests/trace-cases.txt tests/bgen-cases.txt \

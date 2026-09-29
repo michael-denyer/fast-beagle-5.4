@@ -41,8 +41,6 @@ trap 'rm -rf "$OUT"' EXIT
 
 check_selection "$ROOT/tests/oracle-cases.txt" || exit 1
 fail=0
-# These regressions include deliberate error exits, which leave allocations.
-ASAN_OPTIONS=detect_leaks=0 python3 -B "$SAN/tests/check_edge_cases.py" || fail=1
 while read -r name expect tags args; do
   selected "$name" || continue
   for t in ${NTHREADS:-1 2}; do

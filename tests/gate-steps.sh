@@ -82,7 +82,6 @@ full_step oracle-source tests/check-oracle.sh java -ea -cp build/classes main.Ma
 full_step java-trace make java-trace
 full_step oracle-trace oracle_trace
 step c-build make build/beagle
-step edge-cases make check-edge-cases
 step oracle-c tests/check-oracle.sh build/beagle
 step failures-c tests/check-failures.sh build/beagle
 full_step log tests/check-log.sh

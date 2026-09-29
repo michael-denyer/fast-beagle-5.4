@@ -38,7 +38,7 @@ With no arguments, Beagle prints its usage text and exits with status 0. fast-be
 
 Both tools exit with status 1 when they refuse a run.
 
-fast-beagle rejects an output file that aliases an input, including relative paths, symlinks and hard links. It checks the VCF, log and enabled BGEN and tabix outputs against the target, reference and auxiliary input files before opening any of those outputs. Java's check only compares the VCF output path text with the target and reference paths.
+Beagle refuses an `out=` whose VCF path names the `gt=` or `ref=` file after `java.io.File` normalizes the path text, and fast-beagle prints the same message. fast-beagle then also refuses any output that is an existing input file, even through `./`, `..`, a relative path, a symlink or a hard link, and prints `fast-beagle: output file <output> is the input file <input>`. Beagle overwrites the input in these cases. The check compares the VCF, log, and enabled BGEN and tabix outputs with every input file parameter before any output is opened.
 
 When a command line has more than one unrecognized parameter, both tools list them in one message. Beagle lists them in hash-map order. fast-beagle lists them in the order you gave them.
 

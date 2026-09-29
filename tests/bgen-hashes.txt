@@ -103,6 +103,8 @@ e26c2af32ec4076f a23fa985fc083b96 2dba7eb7f935e2f7 imp-miss plink2
 53823e3b5c9b6646 a23fa985fc083b96 c577172e70e75b73 imp-multi phased
 52685c64157bb411 a23fa985fc083b96 c577172e70e75b73 imp-multi phased bgen-bits=1
 41cfc4f6a0af6752 a23fa985fc083b96 623f5443c8210407 imp-multi plink2
+ab5debe6f6ba4ac6 cf8e277369afa7b8 4ad0aaab69c05105 imp-nan phased
+80a651524623bc79 cf8e277369afa7b8 4ad0aaab69c05105 imp-nan plink2
 d8b024730a5cfe94 c59ff0b6dd98512a 5535042798bf42c4 imp-phased phased
 da0f4efcec27f252 c59ff0b6dd98512a 5535042798bf42c4 imp-phased plink2
 d8b024730a5cfe94 c59ff0b6dd98512a 5535042798bf42c4 imp-phased-bref3-excls phased
