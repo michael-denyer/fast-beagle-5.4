@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2014-2021 Brian L. Browning
- * Ported to C from Beagle 5.5 (27Feb25) vcf/GeneticMap.java,
+ * Ported to C from Beagle 5.4 (29Oct24) vcf/GeneticMap.java,
  * vcf/PositionMap.java and vcf/PlinkGenMap.java; modified 2026.
  *
  * This file is part of fast-beagle, a C port of Beagle. It is free software:

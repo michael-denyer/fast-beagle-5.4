@@ -1,8 +1,9 @@
 /*
  * Copyright (C) 2014-2021 Brian L. Browning
- * Ported to C from Beagle 5.5 (27Feb25) vcf/RefGTRec.java,
- * vcf/TwoAlleleRefGTRec.java, vcf/AlleleRefGTRec.java, vcf/HapRefGTRec.java and
- * vcf/VcfRecGTParser.java (phasedAlleles, nonMajRefIndices); modified 2026.
+ * Ported to C from Beagle 5.4 (29Oct24) vcf/RefGTRec.java,
+ * vcf/LowMafRefDiallelicGTRec.java, vcf/LowMafRefGTRec.java,
+ * vcf/SeqCodedRefGTRec.java and vcf/VcfRecGTParser.java (phasedAlleles,
+ * nonMajRefIndices); modified 2026.
  *
  * This file is part of fast-beagle, a C port of Beagle. It is free software:
  * you can redistribute it and/or modify it under the terms of the GNU General
@@ -18,8 +19,9 @@
 #include "vcf/marker.h"
 #include "vcf/vcf_header.h"
 
-/* The haplotype-to-sequence map that SeqCoder3 shares between the HapRefGTRec
- * records of one group. Later stages compare groups by identity. */
+/* The haplotype-to-sequence map that SeqCoder3 shares between the
+ * SeqCodedRefGTRec records of one group. Later stages compare groups by
+ * identity. */
 typedef struct {
     int refs;
     int n_haps;
