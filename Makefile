@@ -22,7 +22,7 @@ JCOMPAT_FIXTURES := random math numbers utf8 parse parseint pqueue search
 LIBDEFLATE_OBJ := $(patsubst %.c,build/obj/%.o,$(wildcard third_party/libdeflate/lib/*.c third_party/libdeflate/lib/*/*.c))
 BEAGLE_OBJ := $(sort $(patsubst src/%.c,build/obj/%.o,$(wildcard src/*/*.c)) $(JCOMPAT_OBJ) $(LIBDEFLATE_OBJ))
 
-.PHONY: all check-jcompat check-bgen-unit check-records check-vcf-index check-tbi check-tracker check-interval check-piece-size java-trace clean
+.PHONY: all check-jcompat check-bgen-unit check-records check-vcf-index check-tbi check-tracker check-interval check-block-reader check-piece-size java-trace clean
 .SECONDARY:
 .DELETE_ON_ERROR:
 all: build/beagle
@@ -102,6 +102,15 @@ build/beagleutil/tracker_test: tests/beagleutil/tracker_test.c build/obj/beagleu
 
 check-interval: build/vcf/interval_it_test
 	./build/vcf/interval_it_test
+
+check-block-reader: build/vcf/block_reader_test
+	./build/vcf/block_reader_test
+
+# The scheduling test includes the implementation to interpose unlock.
+# It links the engine without main.o, since the test defines its own main.
+build/vcf/block_reader_test: tests/vcf/block_reader_test.c src/vcf/block_reader.c $(filter-out build/obj/main/main.o build/obj/vcf/block_reader.o,$(BEAGLE_OBJ))
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(filter-out src/vcf/block_reader.c,$^) -lhts $(LDLIBS)
 
 build/vcf/interval_it_test: tests/vcf/interval_it_test.c build/obj/vcf/interval_it.o \
         build/obj/beagleutil/chrom_interval.o build/obj/beagleutil/chrom_ids.o build/obj/blbutil/str_set.o \

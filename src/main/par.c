@@ -173,6 +173,32 @@ static void check_parameters(const par *p) {
     }
 }
 
+/* fast-beagle only: no enabled output may be an existing input file. Unlike
+ * checkOutputPrefix this compares device and inode, so it also catches
+ * symlinks, hard links and paths through "." or "..". */
+static void check_output_collisions(const par *p, const char *truth) {
+    const bool bgen = p->bgen != BGEN_NONE;
+    const struct { const char *suffix; bool on; } outputs[] = {
+        {".vcf.gz", true}, {".log", true}, {".vcf.gz.tbi", p->tbi},
+        {".bgen", bgen}, {".sample", bgen}, {".info", bgen},
+    };
+    const char *inputs[] = {p->ref, p->gt, p->map, p->excludesamples, p->excludemarkers, p->ped, truth};
+    size_t size = strlen(p->out) + sizeof ".vcf.gz.tbi";
+    char *output = util_malloc(size);
+    for (size_t j = 0; j < sizeof outputs / sizeof *outputs; ++j) {
+        struct stat out_st, in_st;
+        snprintf(output, size, "%s%s", p->out, outputs[j].suffix);
+        if (!outputs[j].on || stat(output, &out_st) != 0) continue;
+        for (size_t k = 0; k < sizeof inputs / sizeof *inputs; ++k) {
+            if (inputs[k] != NULL && stat(inputs[k], &in_st) == 0
+                    && in_st.st_dev == out_st.st_dev && in_st.st_ino == out_st.st_ino) {
+                util_exit("fast-beagle: output file %s is the input file %s", output, inputs[k]);
+            }
+        }
+    }
+    free(output);
+}
+
 float par_err(const par *p, int n_haps) {
     return p->err >= 0 ? p->err : par_li_stephens_p_mismatch(n_haps);
 }
@@ -231,7 +257,7 @@ void par_parse(par *p, int argc, char **argv) {
     p->no_nthreads = raw_nthreads == IMAX;
     p->nthreads = p->no_nthreads ? (n_cpus > 0 ? (int)n_cpus : 1) : raw_nthreads;
 
-    file_arg(&m, "truth", false);
+    const char *truth = file_arg(&m, "truth", false);
     p->trace = string_arg(&m, "trace", false);
     const char *bgen = string_arg(&m, "bgen", false);
     if (bgen == NULL) p->bgen = BGEN_NONE;
@@ -273,4 +299,5 @@ void par_parse(par *p, int argc, char **argv) {
     free(m.value);
     free(m.used);
     check_parameters(p);
+    check_output_collisions(p, truth);
 }

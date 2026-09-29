@@ -26,7 +26,7 @@ rsync -a --delete --exclude build "$ROOT/Makefile" "$ROOT/java" "$ROOT/src" "$RO
 SAN_CFLAGS=${SAN_CFLAGS:-"-O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined -fno-sanitize-recover=all"}
 # make does not rebuild objects when only CFLAGS change.
 make -C "$SAN" clean > /dev/null
-make -C "$SAN" CFLAGS="$SAN_CFLAGS" build/beagle check-bgen-unit check-records check-tracker \
+make -C "$SAN" CFLAGS="$SAN_CFLAGS" build/beagle check-bgen-unit check-records check-tracker check-block-reader \
   > "$SAN/make.log" 2>&1 || { echo "FAIL sanitizer build or BGEN unit test ($SAN/make.log)"; exit 1; }
 echo "PASS sanitizer build and BGEN unit tests"
 
@@ -72,7 +72,7 @@ TSAN="$ROOT/build/tsan"
 mkdir -p "$TSAN"
 rsync -a --delete --exclude build "$ROOT/Makefile" "$ROOT/java" "$ROOT/src" "$ROOT/third_party" "$ROOT/tests" "$TSAN/"
 make -C "$TSAN" clean > /dev/null
-make -C "$TSAN" CFLAGS="-O1 -g -fno-omit-frame-pointer -fsanitize=thread" build/beagle \
+make -C "$TSAN" CFLAGS="-O1 -g -fno-omit-frame-pointer -fsanitize=thread" build/beagle check-block-reader \
   > "$TSAN/make.log" 2>&1 || { echo "FAIL ThreadSanitizer build ($TSAN/make.log)"; exit 1; }
 echo "PASS ThreadSanitizer build"
 while read -r name expect _ args; do

@@ -41,7 +41,9 @@ int64_t jnum_round_d(double x) {
 
 /* printf rounds the exact binary value, ties to even, as DecimalFormat does. */
 void jnum_format_fixed(char *buf, size_t size, double x, int digits) {
-    snprintf(buf, size, "%.*f", digits, x);
+    if (isnan(x)) snprintf(buf, size, "NaN");
+    else if (isinf(x)) snprintf(buf, size, "%s\xe2\x88\x9e", signbit(x) ? "-" : "");
+    else snprintf(buf, size, "%.*f", digits, x);
 }
 
 void jnum_format_hash2(char *buf, size_t size, double x) {
