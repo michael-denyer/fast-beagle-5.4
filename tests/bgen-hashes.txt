@@ -25,6 +25,8 @@ a745df6b307d94ef 8eb8347cc1cc011e b162271d1b13eb1c gt-ibs2 phased
 5aa39fc1ed0f4114 8eb8347cc1cc011e b162271d1b13eb1c gt-ibs2-miss plink2
 6d1fa4067856de48 131c1dd8db5030f8 95dcaf09e8ca3b46 gt-ids-dot phased
 34e9a6416509b7a5 131c1dd8db5030f8 95dcaf09e8ca3b46 gt-ids-dot plink2
+8dabe2e7eaa244f1 ccc91649d4a6bfde bae74e1201f5a122 gt-lone phased
+5c6a5d2a6c34c49c ccc91649d4a6bfde 7e1c8cf772c6a0bf gt-lone plink2
 98da7dfb749394e8 131c1dd8db5030f8 b162271d1b13eb1c gt-long phased
 5b696a9f02d342ab 131c1dd8db5030f8 b162271d1b13eb1c gt-long plink2
 e444386ded0959a1 131c1dd8db5030f8 b162271d1b13eb1c gt-map phased

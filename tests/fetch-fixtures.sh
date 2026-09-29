@@ -362,6 +362,16 @@ bref3 ref.seqlimit.vcf.gz > ref.seqlimit.bref3
   done
 } | gzip > target.seqlimit.vcf.gz
 
+# Two samples on the first 400 SNVs: A is homozygous ALT except 1/2 at every
+# 5th record, B homozygous REF except 0/3 at every 7th, and those records
+# carry all four bases as alleles. Stage 2 finds no IBS haplotype for either,
+# so BasicPhaseStates falls back to random haplotypes.
+gzip -dc test.vcf.gz | awk 'BEGIN {OFS="\t"} /^##/ {print; next} /^#CHROM/ {print $1, $2, $3, $4, $5, $6, $7, $8, $9, "A", "B"; next}
+  length($4) == 1 && length($5) == 1 && ++n <= 400 {
+    alt = $5
+    if (n % 5 == 0 || n % 7 == 0) for (i = 1; i <= 4; i++) { b = substr("ACGT", i, 1); if (b != $4 && b != $5) alt = alt "," b }
+    print $1, $2, $3, $4, alt, $6, $7, $8, "GT", (n % 5 == 0 ? "1/2" : "1/1"), (n % 7 == 0 ? "0/3" : "0/0") }' | gzip > test.lone.vcf.gz
+
 # Paths relative to the checkout let a complete cache move between worktrees.
 # Publish only after every generator and checksum above has succeeded.
 (cd "$ROOT" && shasum -a 256 tests/fetch-fixtures.sh tests/oracle-cases.txt tests/trace-cases.txt tests/bgen-cases.txt \

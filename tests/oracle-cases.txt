@@ -49,6 +49,9 @@ imp-gap   3afce42669edf7b8  -           ref=@ref.vcf.gz gt=@target.gap.vcf.gz
 gt-common 9f6ce7a2ff6a5d96  -           gt=@test.common.vcf.gz
 gt-common-map 1429129f7da14c29  -           gt=@test.common.vcf.gz map=@map.map window=0.6 overlap=0.2
 gt-rare   aa621cfe94bf5c71  -           gt=@test.rare.vcf.gz
+# Two samples with no IBS haplotype for stage 2, so BasicPhaseStates fills
+# the states with random haplotypes.
+gt-lone   c6e693aa31af022a  multiallelic gt=@test.lone.vcf.gz
 # Beagle 5.4's marker and record text: FILTER written as PASS and END= as an
 # integer (gt-filter-end), END= with leading zeros or given twice, the last
 # kept (gt-end-text), and an ID list with a . entry (gt-ids-dot).

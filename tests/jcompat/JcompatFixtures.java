@@ -272,17 +272,6 @@ public class JcompatFixtures {
                         .append(f((float) Math.pow(cnt, -1.0/it))).append('\n');
             }
         }
-        // phase/PhaseData.lrThreshold
-        for (float lr : new float[] {1f, 3f, 1000f, 100_000f, 1e6f, 12345.678f}) {
-            for (int nItsM1 = 1; nItsM1 <= 40; ++nItsM1) {
-                for (int k = 1; k < nItsM1; ++k) {
-                    double exp = (double) (nItsM1 - k) / nItsM1;
-                    double base = lr/4.0;
-                    sb.append("site-lr ").append(d(base)).append(' ').append(d(exp)).append(' ')
-                            .append(f((float) (4.0*Math.pow(base, exp)))).append('\n');
-                }
-            }
-        }
         // imp/ImpData.pRecomb and vcf/MarkerMap.pRecomb
         for (int i = 0; i < 20000; ++i) {
             double c = -(0.04*(float) (1 + r.nextInt(1_000_000))/(2 + r.nextInt(2_000_000)));
