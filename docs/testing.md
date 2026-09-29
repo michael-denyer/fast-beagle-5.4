@@ -72,8 +72,6 @@ Every case table row holds a name, the expected outcome, tags and Beagle's argum
 
 ## Compare trace seams
 
-`java/trace.patch` holds trace hooks for the Beagle 5.5 Java source and does not apply to the Beagle 5.4 source in `java/src/`. Until it is rebased, the gate prints `skip  <step> (5.4 trace patch pending)` for `java-trace`, `oracle-trace`, `trace` and `trace-threads`.
-
 `java/trace.patch` holds trace hooks for the Java source. `make java-trace` applies the patch to a copy in `build/java-trace/`. When that build runs with `-Dbeagle.trace=<dir>`, it writes each trace seam to `<dir>/<seam>.txt`. To change the hooks, edit a patched copy and regenerate the patch with `diff -ruN` against `java/src`.
 
 - `tests/run-trace.sh` runs an implementation on every case with tracing on, so two runs can be compared with `diff -r`.
@@ -228,7 +226,7 @@ The model represents condition-variable waits with wait sets and spurious wakeup
 
 ## Parity ratchet
 
-`tests/c54-pending.txt` lists the checks of `build/beagle` whose result still differs from Beagle 5.4's, one key per line: `oracle <case>`, `failure <case>`, `log <case>`, `fuzz-regression <directory>`, `fuzz` for the generated examples, and `fuzz-invalid <change>`. `tests/c54-ratchet.sh` holds the one rule that `tests/check-oracle.sh`, `tests/check-failures.sh`, `tests/check-log.sh` and `tests/check_fuzz.py` apply to such a result:
+`tests/c54-pending.txt` lists the checks of `build/beagle` whose result still differs from Beagle 5.4's, one key per line: `oracle <case>`, `failure <case>`, `log <case>`, `trace <case> <seam> nthreads=<n>`, `fuzz-regression <directory>`, `fuzz` for the generated examples, and `fuzz-invalid <change>`. `tests/c54-ratchet.sh` holds the one rule that `tests/check-oracle.sh`, `tests/check-failures.sh`, `tests/check-log.sh`, `tests/check-trace.sh` and `tests/check_fuzz.py` apply to such a result:
 
 - A key that is not listed must match, as before.
 - A listed key that differs prints `pending <key>` and passes.
