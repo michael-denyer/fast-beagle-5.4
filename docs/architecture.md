@@ -1,6 +1,6 @@
 # Architecture and source layout
 
-fast-beagle is a file-by-file C port of Beagle 5.5 (27Feb25), being ported to Beagle 5.4 (29Oct24). The oracle cases (`tests/check-oracle.sh build/beagle`) record Beagle 5.4's output, and the C engine matches every one. [CONTEXT.md](../CONTEXT.md) defines the domain terms.
+fast-beagle is a file-by-file C port of Beagle 5.4 (29Oct24). Each source file names the Java file it was ported from: a Beagle 5.4 file, or a Beagle 5.5 (27Feb25) file for the files ported from that release. The [checks](testing.md) hold every file's behaviour to Beagle 5.4's. [CONTEXT.md](../CONTEXT.md) defines the domain terms.
 
 ## Each window runs through four stages
 
@@ -38,7 +38,7 @@ The port reads both input files and splits them into overlapping windows along t
 The port threads the loops that dominate run time:
 
 - reference record parsing per block
-- the initial PBWT phase per window and per block of samples
+- the initial PBWT phase per sub-window and per block of samples
 - step coding per step
 - stage-1 phasing and parameter estimation per sample
 - stage 2 per sample
@@ -59,7 +59,7 @@ The imputation writer splits a long cluster into work items of at most `PIECE_RE
 - `src/bgen/`: the BGEN writer for `bgen=plink2` and `bgen=phased` ([BGEN output](usage.md#bgen-output)).
 - `src/main/vcf_index.c`: the tabix index writer for `tbi=true`.
 - `third_party/libdeflate/`: the files of libdeflate 1.25 (MIT, `COPYING`) that zlib compression needs. They come from plink2's source tree at tag v2.0.0-a.7.8. plink2 compresses BGEN with this library at level 6. zlib's own deflate gives different bytes.
-- `java/src/`: the unmodified Beagle 5.5 Java source, used as the oracle.
+- `java/src/`: the unmodified Beagle 5.4 Java source, used as the oracle.
 - `java/trace.patch`: trace hooks for the Java source ([trace seams](testing.md#compare-trace-seams)).
 - `tests/`: the checks ([checks and the pre-merge gate](testing.md)).
 - `tla/`: the TLA+ model of the pipelined imputed writer.

@@ -1,16 +1,17 @@
-# How fast-beagle differs from Beagle 5.5
+# How fast-beagle differs from Beagle 5.4
 
-fast-beagle is a C port of Java Beagle 5.5 (`beagle.27Feb25.75f.jar`). Run with the same arguments and the same `nthreads=`, it writes a VCF whose text is byte-identical to Beagle's, header lines included. Everything else on this page is a difference you can see when you switch. It refuses `ped=` and runs without a JVM or a heap limit. It also adds BGEN output, a tabix index and a trace parameter.
+fast-beagle is a C port of Java Beagle 5.4 (`beagle.29Oct24.c8e.jar`). Run with the same arguments and the same `nthreads=`, it writes a VCF whose text is byte-identical to Beagle's, header lines included. Everything else on this page is a difference you can see when you switch. It refuses `ped=` and runs without a JVM or a heap limit. It also adds BGEN output, a tabix index and a trace parameter.
 
 ## Differences at a glance
 
-| Area | Java Beagle 5.5 | fast-beagle |
+| Area | Java Beagle 5.4 | fast-beagle |
 |---|---|---|
 | VCF text | The reference output | Byte-identical at the same `nthreads=` |
 | `.vcf.gz` file bytes | BGZF from Beagle's own writer | BGZF from htslib, so the compressed bytes differ |
 | No arguments | Prints the usage text and exits 0 | Prints `missing gt argument` and exits 1 |
-| Exit status on error | 1 | 1 |
-| `ped=` | Accepted and ignored | Refused |
+| Exit status on error | 1, or no exit after some input errors | 1 |
+| Output of a failed run | The records written before the error | An empty or truncated `.vcf.gz` |
+| `ped=` | Read, reported in the log and otherwise ignored | Refused |
 | Added parameters | None | `bgen=`, `bgen-bits=`, `bgen-min-dr2=`, `bgen-min-maf=`, `bgen-chr-set=`, `tbi=`, `trace=` |
 | Default `nthreads=` | The processor count the JVM reports | The processor count `sysconf` reports |
 | Memory limit | The JVM heap size (`-Xmx`) | None |
@@ -21,7 +22,7 @@ fast-beagle is a C port of Java Beagle 5.5 (`beagle.27Feb25.75f.jar`). Run with 
 
 ### The VCF
 
-The decompressed VCF is byte-identical to Beagle's when both run with the same arguments and `nthreads=`. The header is the same too. fast-beagle writes `##source="beagle.27Feb25.75f.jar"`, and `##filedate=` holds the run date in both tools. A downstream tool therefore cannot tell from the header which program wrote the file.
+The decompressed VCF is byte-identical to Beagle's when both run with the same arguments and `nthreads=`. The header is the same too. fast-beagle writes `##source="beagle.29Oct24.c8e.jar"`, and `##filedate=` holds the run date in both tools. A downstream tool therefore cannot tell from the header which program wrote the file.
 
 The compressed `.vcf.gz` files differ byte for byte. Beagle compresses with its own BGZF writer and fast-beagle compresses with htslib. Both files are valid BGZF, and `bgzip -t` accepts both. Compare the decompressed text, not the `.vcf.gz` bytes.
 
@@ -39,11 +40,30 @@ Both tools exit with status 1 when they refuse a run.
 
 When a command line has more than one unrecognized parameter, both tools list them in one message. Beagle lists them in hash-map order. fast-beagle lists them in the order you gave them.
 
+Beagle parses VCF records on several threads, so when a file has more than one malformed record, the record its message names can vary between runs. fast-beagle names the first malformed record in the file.
+
 A few errors exist only in fast-beagle, such as a refused `ped=` or a failure to start a thread. Their messages start with `fast-beagle:`.
+
+### A failed run leaves a partial VCF
+
+Do not use the output of a run that exits with an error, from either tool. The two tools leave different files behind:
+
+- Beagle writes each window's records as it finishes the window. A run that fails in a later window leaves `<out>.vcf.gz` with the header and the records of the earlier windows.
+- fast-beagle leaves `<out>.vcf.gz` empty, or holding the compressed blocks it wrote before the error without the BGZF end-of-file block.
+
+### Beagle can report an error from the next window
+
+Beagle reads the next window on a separate thread while it phases the current one. When both windows hold an error, such as a window with one position followed by a window where the reference and target share no marker, either error can reach the log first. fast-beagle reads the windows in order and always reports the error of the first failing window. Both tools exit with status 1.
+
+### Beagle can hang after a reference-file error
+
+Beagle parses reference VCF records on worker threads. A malformed record in the `ref=` file, such as an empty `END=` value or a `POS` too large for an `int`, makes the main thread throw. Beagle prints the exception, but a worker thread that is not a daemon keeps the JVM alive, so the run does not exit. fast-beagle prints the exception's cause, for example `java.lang.NumberFormatException: For input string: ""`, and exits with status 1.
 
 ## Parameters
 
-fast-beagle accepts every parameter that Beagle's parser accepts, with the same default, the same valid range and the same meaning. That includes the parameters Beagle's usage text leaves out (`initial-lr`, `step-scale`, `rare`, `imp-segment`, `imp-step`, `imp-nsteps`, `buffer` and `truth`). The one exception is `ped=`. Beagle checks that the file exists and then ignores it. fast-beagle stops with `fast-beagle: the ped= parameter is not supported`. Remove `ped=` from a Beagle command line before you run it with fast-beagle.
+fast-beagle accepts every parameter that Beagle's parser accepts, with the same default, the same valid range and the same meaning. That includes the parameters Beagle's usage text leaves out (`step-scale`, `rare`, `imp-segment`, `imp-step`, `imp-nsteps`, `buffer` and `truth`). Both tools refuse `initial-lr=` and `window-markers=`, which are Beagle 5.5 parameters, as unrecognized.
+
+The one exception is `ped=`. Beagle reads the pedigree file, prints a warning that it does not model duos or trios, and logs the counts of singles, duos and trios. It then phases every sample as unrelated, so `ped=` does not change the VCF. fast-beagle stops with `fast-beagle: the ped= parameter is not supported`. Remove `ped=` from a Beagle command line before you run it with fast-beagle.
 
 fast-beagle adds these parameters. Beagle refuses each of them as an unrecognized parameter.
 
@@ -55,7 +75,7 @@ fast-beagle adds these parameters. Beagle refuses each of them as an unrecognize
 
 ## Threads
 
-Beagle's output depends on `nthreads=` when a window is longer than 4 cM. fast-beagle reproduces that dependence, so its VCF matches Beagle's run with the same `nthreads=`, and a run at another thread count can differ from both. See [Thread count](usage.md#thread-count).
+Beagle's output depends on `nthreads=` when the markers of a window span more than 4.5 cM. fast-beagle reproduces that dependence, so its VCF matches Beagle's run with the same `nthreads=`, and a run at another thread count can differ from both. See [Thread count](usage.md#thread-count).
 
 Without `nthreads=`, both tools use the processor count. Beagle reads it from the JVM and fast-beagle reads it from `sysconf`. To reproduce a Beagle run exactly, set `nthreads=` to the value in the Beagle log's command line.
 
@@ -63,10 +83,10 @@ Without `nthreads=`, both tools use the processor count. Beagle reads it from th
 
 fast-beagle is a native program. It needs no Java runtime and no `-Xmx` setting. The build needs a C11 compiler, `make` and htslib, and the binary links to htslib at run time. See [Install](../README.md#install). The [pre-merge gate](testing.md#run-the-pre-merge-gate) builds and tests it on macOS arm64 and on Linux x86_64.
 
-The JVM's maximum heap caps Beagle's memory. Without `-Xmx`, the JVM sets the cap itself. On a 64 GB machine it chose 16 GB, and Beagle's log showed the command line as `java -Xmx16384m`. fast-beagle has no such cap. [Performance](perf-baseline.md) compares the two tools' wall time, CPU time and max memory, from a 321-sample benchmark to an imputation of about 100,000 samples.
+The JVM's maximum heap caps Beagle's memory. Without `-Xmx`, the JVM sets the cap itself. On a 64 GB machine it chose 16 GB, and Beagle's log showed the command line as `java -Xmx16384m`. fast-beagle has no such cap. [Performance](perf-baseline.md) compares the two tools' wall time, CPU time and max memory.
 
 ## Input files
 
-fast-beagle opens `gt=` and `ref=` files with Beagle's rules. The rules cover gzip and BGZF detection, bref3 references and the reference file-name extensions. A bref3 reference can give different imputed values than a VCF of the same panel in both tools. See [Reference panels in bref3 format](usage.md#reference-panels-in-bref3-format).
+fast-beagle opens `gt=` and `ref=` files with Beagle's rules. The rules cover gzip and BGZF detection, bref3 references and the reference file-name extensions. A bref3 reference can give different imputed values than a VCF of the same panel in both tools. Beagle 5.4 does not apply `excludesamples=` to a bref3 reference, and fast-beagle keeps every bref3 sample too. See [Reference panels in bref3 format](usage.md#reference-panels-in-bref3-format).
 
-fast-beagle has no bref3 writer. To convert a VCF reference to bref3, use Beagle's `bref3.27Feb25.75f.jar`.
+fast-beagle has no bref3 writer. To convert a VCF reference to bref3, use Beagle's `bref3.29Oct24.c8e.jar`.

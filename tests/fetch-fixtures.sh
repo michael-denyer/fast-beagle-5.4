@@ -143,7 +143,7 @@ gzip -dc ref.vcf.gz | awk 'BEGIN {OFS="\t"} /^#/ {print; next} {
 # Several chromosomes: the reference adds chromosome 21 (absent from the
 # target) before 22, and 23 after it. The target adds one marker absent from
 # the reference and changes the ALT allele of another, so both are dropped.
-# With impute=false Beagle 5.5 fails on this file: the unread reference-only
+# With impute=false Beagle 5.4 fails on this file: the unread reference-only
 # record at the end of chromosome 22 keeps window 1 from ending the
 # chromosome, so window 2 spans two chromosomes (tests/trace-cases.txt).
 relabel() {  # in.vcf.gz chrom first-n-records
@@ -338,7 +338,7 @@ gzip -dc ref.rest.vcf.gz | awk '/^#CHROM/ {for (c = 10; c <= NF; c += 7) print $
 # allows floor(2^(2*log10(10)+1)) = 8 sequences. Record r gives the ALT allele
 # to both haplotypes of sample r mod 10 (and of sample (r+3) mod 10 on every
 # 4th record), so each record adds one sequence and the 7th reaches exactly 8:
-# Beagle 5.4 starts a new block there, Beagle 5.5 one record later.
+# Beagle 5.4 starts a new block there.
 {
   printf '##fileformat=VCFv4.2\n##contig=<ID=22>\n##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">\n'
   printf '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT'

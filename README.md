@@ -4,16 +4,16 @@
 
 ![C11](https://img.shields.io/badge/C-C11-00599C?logo=c&logoColor=white)
 ![Python test scripts](https://img.shields.io/badge/Python-test_scripts-3776AB?logo=python&logoColor=white)
-![Beagle 5.5 byte-identical](https://img.shields.io/badge/Beagle_5.5-byte--identical-2E7D32)
+![Beagle 5.4 byte-identical](https://img.shields.io/badge/Beagle_5.4-byte--identical-2E7D32)
 ![macOS](https://img.shields.io/badge/macOS-supported-D32F2F?logo=apple&logoColor=white)
 ![Linux](https://img.shields.io/badge/Linux-supported-FCC624?logo=linux&logoColor=black)
 ![License GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue)
 
 **1.7× faster, with 2.0× less CPU time and 3.2× less memory than Java Beagle 5.4**, and byte-identical output, on a public 1000 Genomes chr20 benchmark with 321 target samples. [Performance](docs/perf-baseline.md) has the runs and the command that repeats them.
 
-fast-beagle is a standalone C port of [Beagle 5.5](https://faculty.washington.edu/browning/beagle/beagle.html) (27Feb25), the genotype phasing and imputation tool. Its output is byte-identical to the Java release run with the same `nthreads=`. It adds BGEN v1.2 output and a tabix index written in the same pass as the VCF.
+fast-beagle is a standalone C port of [Beagle 5.4](https://faculty.washington.edu/browning/beagle/beagle.html) (29Oct24), the genotype phasing and imputation tool. Its output is byte-identical to the Java release `beagle.29Oct24.c8e.jar` run with the same `nthreads=`. It adds BGEN v1.2 output and a tabix index written in the same pass as the VCF.
 
-This repository is porting fast-beagle to Beagle 5.4 (29Oct24). The checks compare it with the Beagle 5.4 release, and the C engine passes all of them. Some pages still describe the Beagle 5.5 port.
+This repository is the Beagle 5.4 edition of [fast-beagle](https://github.com/michael-denyer/fast-beagle), which ports Beagle 5.5 (27Feb25). The two editions share their design, their checks and the outputs they add. Each one writes the output of its own Beagle release, and Beagle 5.4 and 5.5 phase differently. Use the edition that matches the Beagle version whose output you need.
 
 ## How it works
 
@@ -26,10 +26,10 @@ Beagle phases each target sample's genotypes into two haplotypes, then imputes t
 Build fast-beagle from source. It needs a C11 compiler, `make` and htslib.
 
 ```bash
-git clone https://github.com/michael-denyer/fast-beagle.git
+git clone https://github.com/michael-denyer/fast-beagle-5.4.git
 brew install htslib              # macOS
 sudo apt-get install libhts-dev  # Debian and Ubuntu
-make -C fast-beagle
+make -C fast-beagle-5.4
 ```
 
 `make` builds the binary `build/beagle`.
@@ -47,10 +47,10 @@ The run writes `result.vcf.gz`. Without `ref=` it phases the target only. Add `b
 ## Details
 
 - [Parameters and output files](docs/usage.md)
-- [How fast-beagle differs from Beagle 5.5](docs/beagle-divergences.md)
+- [How fast-beagle differs from Beagle 5.4](docs/beagle-divergences.md)
 - [Architecture and source layout](docs/architecture.md)
 - [Checks and the pre-merge gate](docs/testing.md)
-- [Byte identity with Beagle 5.5](docs/byte-identity.md)
+- [Byte identity with Beagle 5.4](docs/byte-identity.md)
 - [Performance](docs/perf-baseline.md)
 - [Domain terms](CONTEXT.md)
 
@@ -60,4 +60,4 @@ Bug reports and pull requests are welcome. Before you open a pull request, run t
 
 ## License
 
-fast-beagle is licensed under [GPL-3.0-or-later](LICENSE), the same license as Beagle, because it is a derivative work of Beagle 5.5 (Copyright (C) 2014-2024 Brian L. Browning). [NOTICE.md](NOTICE.md) lists the third-party code in this repository and its licenses.
+fast-beagle is licensed under [GPL-3.0-or-later](LICENSE), the same license as Beagle, because it is a derivative work of Beagle 5.4 and 5.5 (Copyright (C) 2014-2024 Brian L. Browning). [NOTICE.md](NOTICE.md) lists the third-party code in this repository and its licenses.

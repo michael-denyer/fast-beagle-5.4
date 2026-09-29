@@ -130,14 +130,14 @@ OUT_OF_BOUNDS = [
     ("imp-segment", "0"),
     ("imp-step", "0"),
     ("imp-nsteps", "0"),
-    ("initial-lr", "0.5"),
+    ("initial-lr", "0.5"),  # Beagle 5.5 only: Beagle 5.4 refuses it as unknown
     ("step-scale", "0"),
     ("rare", "0.6"),
     ("cluster", "-0.5"),
     ("ne", "0"),
     ("err", "-1"),
     ("nthreads", "0"),
-    ("window-markers", "99999"),
+    ("window-markers", "99999"),  # Beagle 5.5 only, as initial-lr
     ("seed", "1e3"),
     ("window", "abc"),
     ("nthreads", "2.5"),
@@ -254,9 +254,6 @@ TIMEOUT = 120  # seconds; every generated input runs in a few
 # Java Beagle can keep running after its main thread throws, while another
 # thread is still alive; that counts as exit code 1.
 MAIN_THREW = 'Exception in thread "main"'
-# Java prints each window's bounds; the same bounds three times in a row is
-# a window that cannot advance.
-WINDOW_LINE = re.compile(r"^Window \d+ (\[.*\])$", re.MULTILINE)
 # Java reports a failure on an exception line or an "ERROR" line.
 JAVA_ERROR = re.compile(r"^.*(?:\bERROR\b|Exception).*$", re.MULTILINE)
 # Par also refuses an unknown parameter with an "Error:" line.
@@ -279,11 +276,6 @@ def run(cmd, out):
                 proc.kill()
                 proc.wait()
                 return 1, None, text[-2000:]
-            windows = WINDOW_LINE.findall(text[-4000:])
-            if len(windows) >= 3 and windows[-1] == windows[-2] == windows[-3]:
-                proc.kill()
-                proc.wait()
-                return None, None, f"repeats window {windows[-1]} without end\n{text[-2000:]}"
             if time.monotonic() - start > TIMEOUT:
                 proc.kill()
                 proc.wait()
@@ -408,6 +400,17 @@ time.sleep(10)
         rc, _, log = run([sys.executable, "-c", child], Path(tmp) / "partial-exception")
         assert rc == 1 and message in log, f"runner truncated the exception: {log!r}"
     print("PASS runner waits for the complete Java exception line")
+    # Beagle 5.4 can print the same window bounds several times in a row.
+    child = """
+import time
+for w in (3, 4, 5):
+    print(f"Window {w} [20:1000-2000]", flush=True)
+    time.sleep(0.3)
+"""
+    with tempfile.TemporaryDirectory() as tmp:
+        rc, _, log = run([sys.executable, "-c", child], Path(tmp) / "repeated-window")
+        assert rc == 0, f"runner stopped a run that repeats window bounds: {log!r}"
+    print("PASS runner lets a run repeat window bounds")
 
 
 def check_regressions():

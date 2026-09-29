@@ -75,9 +75,8 @@ check window-markers "Error: unrecognized parameter: window-markers=100000" \
   gt="$DATA/target.vcf.gz" out="$OUT/window-markers" window-markers=100000
 
 # A 2.5 cM gap in the target markers, longer than the window. Imputing, Beagle
-# 5.4 fails on the window 22:20049939-20068772, which has no target markers
-# (Beagle 5.5 ends that window elsewhere). Phasing only, it fails on a window
-# with one position.
+# 5.4 fails on the window 22:20049939-20068772, which has no target markers.
+# Phasing only, it fails on a window with one position.
 check imp-gap-map "22:20049939-20068772" \
   ref="$DATA/ref.vcf.gz" gt="$DATA/target.gap.vcf.gz" map="$DATA/map.map" window=1.5 overlap=0.5 out="$OUT/gap"
 check imp-gap-map-noimp "java.lang.IllegalArgumentException: Window has only one position: CHROM=22 POS=20029411" \
