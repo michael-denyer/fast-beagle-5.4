@@ -12,6 +12,7 @@
  */
 #include "bgen/bgen_writer.h"
 
+#include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -446,9 +447,11 @@ void bgen_quantise(const float *p, int n, uint32_t max, uint32_t *out) {
     double rem[n];
     uint32_t sum = 0;
     for (int a = 0; a < n; ++a) {
-        double v = (double)p[a] * max;
+        /* NaN, from a 0/0 normalisation, is 0 and takes no rounding unit */
+        bool nan = isnan(p[a]);
+        double v = nan ? 0.0 : (double)p[a] * max;
         q[a] = (uint32_t)v;
-        rem[a] = v - q[a];
+        rem[a] = nan ? -1.0 : v - q[a];
         sum += q[a];
     }
     while (sum < max) {
