@@ -1,12 +1,27 @@
 # Performance
 
-This page compares `build/beagle` with Java Beagle 5.4 (`beagle.29Oct24.c8e.jar`). Both tools write the same VCF, so the comparison is of time and memory only.
+This page compares `build/beagle` with Java Beagle 5.4 (`beagle.29Oct24.c8e.jar`). Both tools write the same VCF, so the comparison is of time and memory only. The gain grows with the size of the imputation.
 
 | Run | Target samples | Threads | Faster | Less CPU time | Less max memory |
 |---|---|---|---|---|---|
 | [1000 Genomes chr20](#1000-genomes-chr20-benchmark) | 321 | 18 | 1.7× | 2.0× | 3.2× |
+| [Production scale](#production-scale-run) | about 100,000 | 60 | 2.8× | 2.1× | 4.4× |
 
-Each figure is the ratio of the Java median to the C median over 6 runs per tool on one day. The benchmark uses public data, so anyone can rerun it.
+The chr20 figures are the ratio of the Java median to the C median over 6 runs per tool on one day. The chr20 benchmark uses public data, so anyone can rerun it.
+
+## Production-scale run
+
+This run imputed one chromosome for about 100,000 target samples from a bref3 reference. It ran on a Databricks node of type `Standard_E64ds_v6`, which has 64 vCPUs (Intel Xeon Platinum 8573C) and 512 GiB of memory, with Databricks Runtime 16.4 LTS on Ubuntu 24.04. Both tools ran with `nthreads=60`, and both wrote the same VCF. The C build was commit `c7e7aa8`, built in an `ubuntu:24.04` container. Java ran with `-Xmx500g`. The figures cover the Beagle step alone, one run per tool on 2026-09-29, taken from each process's resource usage. The input data is not public, so this run cannot be reproduced from this repository.
+
+| | Java | C | Java / C |
+|---|---|---|---|
+| Wall time | 773 s | 277 s | 2.8× faster |
+| CPU time | 27,251 s | 13,219 s | 2.1× less |
+| Max memory | 367.5 GB | 83.9 GB | 4.4× less |
+
+Java kept about 60 cores busy for its first 480 s, then spent about 285 s on 1 to 3 cores.
+
+The C run did not write BGEN. With BGEN output added, the same step took 336 s and 17,097 s of CPU time at 138.8 GB max memory, wrote the same VCF, and wrote an 8.2 GB `.bgen` file.
 
 ## 1000 Genomes chr20 benchmark
 
