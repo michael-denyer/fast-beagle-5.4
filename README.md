@@ -9,7 +9,7 @@
 ![Linux](https://img.shields.io/badge/Linux-supported-FCC624?logo=linux&logoColor=black)
 ![License GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue)
 
-**1.5× to over 3× faster, with over 2× less CPU time and up to 3.5× less memory than Java Beagle 5.5**, and byte-identical output. The gain grows with scale, from a 321-sample public benchmark to a production imputation of about 100,000 samples. [Performance](docs/perf-baseline.md) has both runs.
+**1.7× faster, with 2.0× less CPU time and 3.2× less memory than Java Beagle 5.4**, and byte-identical output, on a public 1000 Genomes chr20 benchmark with 321 target samples. [Performance](docs/perf-baseline.md) has the runs and the command that repeats them.
 
 fast-beagle is a standalone C port of [Beagle 5.5](https://faculty.washington.edu/browning/beagle/beagle.html) (27Feb25), the genotype phasing and imputation tool. Its output is byte-identical to the Java release run with the same `nthreads=`. It adds BGEN v1.2 output and a tabix index written in the same pass as the VCF.
 
