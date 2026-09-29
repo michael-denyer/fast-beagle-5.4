@@ -1,0 +1,61 @@
+cff-version: 1.2.0
+message: >-
+  If you use fast-beagle, cite this software and the Beagle papers
+  listed under references.
+type: software
+title: "fast-beagle 5.4"
+abstract: >-
+  Fast standalone C port of Beagle 5.4 genotype phasing and imputation,
+  with output byte-identical to the Java release run with the same
+  nthreads. Adds BGEN v1.2 output and a tabix index written in the same
+  pass as the VCF.
+authors:
+  - family-names: Denyer
+    given-names: Michael
+version: 5.4.1
+date-released: 2026-09-30
+license: GPL-3.0-or-later
+repository-code: "https://github.com/michael-denyer/fast-beagle-5.4"
+keywords:
+  - bioinformatics
+  - genomics
+  - phasing
+  - imputation
+  - beagle
+  - vcf
+  - bgen
+references:
+  - type: article
+    title: "Fast two-stage phasing of large-scale sequence data"
+    authors:
+      - family-names: Browning
+        given-names: Brian L.
+      - family-names: Tian
+        given-names: Xiaowen
+      - family-names: Zhou
+        given-names: Ying
+      - family-names: Browning
+        given-names: Sharon R.
+    journal: "The American Journal of Human Genetics"
+    volume: 108
+    issue: 10
+    start: 1880
+    end: 1890
+    year: 2021
+    doi: 10.1016/j.ajhg.2021.08.005
+  - type: article
+    title: "A One-Penny Imputed Genome from Next-Generation Reference Panels"
+    authors:
+      - family-names: Browning
+        given-names: Brian L.
+      - family-names: Zhou
+        given-names: Ying
+      - family-names: Browning
+        given-names: Sharon R.
+    journal: "The American Journal of Human Genetics"
+    volume: 103
+    issue: 3
+    start: 338
+    end: 348
+    year: 2018
+    doi: 10.1016/j.ajhg.2018.07.015
