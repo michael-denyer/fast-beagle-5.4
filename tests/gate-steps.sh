@@ -2,7 +2,7 @@
 # The gate's checks, in order, run in the checkout <root>. tests/check-local.sh
 # runs them natively and on Linux x86_64 in docker, and CI runs them on each
 # runner. Prints one pass or FAIL line per check; each check's output goes to
-# build/check-<name>.log.
+# build/check-<name>.log, or build/check-c-<name>.log in the C tier.
 #
 # Usage: [GATE_TIER=c] [GATE_FUZZ=random] tests/gate-steps.sh <root>
 # Needs Java 21, htslib and uv; the full tier also needs PLINK2 naming the
@@ -17,18 +17,18 @@
 # shellcheck disable=SC2329  # java_build, oracle_trace and trace_threads run through step
 set -uo pipefail
 cd "$1" || exit 1
-SEAMS="T1a T1b T1c T1d T2 T2b T3a T3b0 T3b1 T3b T3c T3d T4a T4b T4c T4d T5a T5b T5c T5d"
+SEAMS="T1a T1b T1c T1d T2 T2b T3a T3b0 T3b1 T3b T3c T3d T3e T4a T4b T4c T4d T5a T5b T5c T5d"
 # Seams whose content depends on nthreads, rechecked at 1 and 18 threads on the
 # cases whose windows are long enough for the thread count to split them: the
 # cases with per-thread hashes.
-THREAD_SEAMS="T3b0 T3b1 T3b T3c T3d T4a T4b T4c T4d"
+THREAD_SEAMS="T3b0 T3b1 T3b T3c T3d T3e T4a T4b T4c T4d"
 
 mkdir -p build
 fail=0
 tier=${GATE_TIER:-full}
 case $tier in full|c) ;; *) echo "GATE_TIER must be full or c, not $tier"; exit 2 ;; esac
-bgen_oracle=live
-[ "$tier" = c ] && bgen_oracle=recorded
+bgen_oracle=live logs=build/check-
+[ "$tier" = c ] && bgen_oracle=recorded logs=build/check-c-
 fuzz_args=(--examples 200)
 case ${GATE_FUZZ:-fixed} in
   fixed) ;;
@@ -37,19 +37,14 @@ case ${GATE_FUZZ:-fixed} in
 esac
 step() {  # name command...
   local name=$1; shift
-  if "$@" > "build/check-$name.log" 2>&1; then
+  if "$@" > "$logs$name.log" 2>&1; then
     echo "  pass  $name"
   else
-    echo "  FAIL  $name (build/check-$name.log)"; fail=1
+    echo "  FAIL  $name ($logs$name.log)"; fail=1
   fi
 }
 full_step() {  # name command...: runs only in the full tier
   if [ "$tier" = full ]; then step "$@"; else echo "  skip  $1 (full tier only)"; fi
-}
-# java/trace.patch applies to Beagle 5.5, not to the 5.4 oracle in java/src.
-# The checks that need the Java trace build skip until the patch is rebased.
-trace_step() {  # name command...
-  echo "  skip  $1 (5.4 trace patch pending)"
 }
 
 java_build() {
@@ -83,8 +78,8 @@ full_step oracle-jar tests/check-oracle.sh java -ea -jar data/beagle.29Oct24.c8e
 full_step failures-jar tests/check-failures.sh java -ea -jar data/beagle.29Oct24.c8e.jar
 full_step java-build java_build
 full_step oracle-source tests/check-oracle.sh java -ea -cp build/classes main.Main
-trace_step java-trace make java-trace
-trace_step oracle-trace oracle_trace
+full_step java-trace make java-trace
+full_step oracle-trace oracle_trace
 step c-build make build/beagle
 step oracle-c tests/check-oracle.sh build/beagle
 step failures-c tests/check-failures.sh build/beagle
@@ -96,12 +91,12 @@ step vcf-index make check-vcf-index
 step tbi make check-tbi
 step bgen env BGEN_ORACLE="$bgen_oracle" tests/check-bgen.sh
 # shellcheck disable=SC2086  # the seam list splits into arguments
-trace_step trace tests/check-trace.sh $SEAMS
+full_step trace tests/check-trace.sh $SEAMS
 full_step sanitizers tests/check-sanitizers.sh
 full_step tla tests/check-tla.sh
 full_step fuzz uv run --python 3.12 --script tests/check_fuzz.py "${fuzz_args[@]}"
 if [ "$tier" = c ]; then
   step fuzz-regressions uv run --python 3.12 --script tests/check_fuzz.py --examples 0 --invalid-examples 0
 fi
-trace_step trace-threads trace_threads
+full_step trace-threads trace_threads
 exit $fail

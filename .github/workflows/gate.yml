@@ -47,7 +47,7 @@ jobs:
           case $EVENT in
             pull_request)
               if gh api --paginate "repos/$REPO/pulls/$PR/files" --jq '.[].filename' \
-                  | grep -E '^(java/|src/jcompat/|tla/|\.github/workflows/gate\.yml$|tests/(jcompat/|fuzz-regressions/|oracle-cases\.txt|trace-cases\.txt|fetch-fixtures\.sh|cases\.sh|gate-steps\.sh|check-oracle\.sh|check-failures\.sh|check-trace\.sh|run-trace\.sh|check-sanitizers\.sh|check-tla\.sh|check-log\.sh|check_fuzz\.py|check_cases\.py|check-bgen\.sh|bgen-cases\.txt|bgen-hashes\.txt|check_bgen_[a-z]+\.py))'; then
+                  | grep -E '^(java/|src/jcompat/|tla/|\.github/workflows/gate\.yml$|tests/(jcompat/|fuzz-regressions/|oracle-cases\.txt|trace-cases\.txt|fetch-fixtures\.sh|cases\.sh|c54-ratchet\.sh|c54-pending\.txt|gate-steps\.sh|check-oracle\.sh|check-failures\.sh|check-trace\.sh|run-trace\.sh|check-sanitizers\.sh|check-tla\.sh|check-log\.sh|check_fuzz\.py|check_cases\.py|check-bgen\.sh|bgen-cases\.txt|bgen-hashes\.txt|check_bgen_[a-z]+\.py))'; then
                 tier=full
               fi ;;
             workflow_dispatch) tier=full fuzz=random ;;
