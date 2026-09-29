@@ -84,7 +84,7 @@ public class TargSlidingWindow implements SlidingWindow {
     }
 
     private static SampleFileIt<GTRec> targIt(Par par) {
-        int nBufferedBlocks = par.nthreads() << 2;
+        int nBufferedBlocks = par.nthreads() << 3;
         FileIt<String> it = InputIt.fromBGZipFile(par.gt(), nBufferedBlocks);
         Filter<String> sFilter = FilterUtil.sampleFilter(par.excludesamples());
         Filter<Marker> mFilter = FilterUtil.markerFilter(par.excludemarkers());
@@ -158,9 +158,7 @@ public class TargSlidingWindow implements SlidingWindow {
 
         private final GeneticMap genMap;
         private final float windowCM;
-        private final int windowMarkers;
         private final float overlapCM;
-        private final int overlapMarkers;
         private final SampleFileIt<GTRec> targIt;
         private final BlockingQueue<Window> q;
 
@@ -172,9 +170,7 @@ public class TargSlidingWindow implements SlidingWindow {
                 BlockingQueue<Window> q) {
             this.genMap = genMap;
             this.windowCM = par.window();
-            this.windowMarkers = par.window_markers();
             this.overlapCM = par.overlap();
-            this.overlapMarkers = windowMarkers >> 2;
             this.targIt = it;
             this.q = q;
 
@@ -190,10 +186,11 @@ public class TargSlidingWindow implements SlidingWindow {
                 }
                 nextRec = targIt.next();
                 int windowIndex = 0;
+                double endCm = Double.NaN;
                 while (nextRec!=null) {
                     int chromIndex = nextRec.marker().chromIndex();
-                    double nextEndCm = nextEndCm(nextRec.marker());
-                    int endPos = genMap.basePos(chromIndex, nextEndCm);
+                    endCm = nextEndCm(endCm);
+                    int endPos = genMap.basePos(nextRec.marker().chromIndex(), endCm);
                     Window window = readWindow(chromIndex, endPos, ++windowIndex);
                     SlidingWindow.addToQ(q, window);
                     int overlapStart = window.indices().overlapStart();
@@ -205,10 +202,9 @@ public class TargSlidingWindow implements SlidingWindow {
             }
         }
 
-        private double nextEndCm(Marker nextMarker) {
-            double endCm = genMap.genPos(nextMarker);
+        private double nextEndCm(double endCm) {
             if (overlap.isEmpty()) {
-                endCm += windowCM;
+                endCm = genMap.genPos(nextRec.marker()) + windowCM;
             } else {
                 endCm += (windowCM - overlapCM);
             }
@@ -222,8 +218,7 @@ public class TargSlidingWindow implements SlidingWindow {
             overlap.clear();
             while (nextRec!=null
                     && nextRec.marker().chromIndex()==chromIndex
-                    && nextRec.marker().pos()<endPos
-                    && recs.size()<windowMarkers) {
+                    && nextRec.marker().pos()<endPos) {
                 recs.add(nextRec);
                 nextRec = targIt.hasNext() ? targIt.next() : null;
             }
@@ -235,14 +230,15 @@ public class TargSlidingWindow implements SlidingWindow {
             boolean lastWindow = (nextRec==null);
             boolean chromEnd = nextRec==null
                     || nextRec.marker().chromIndex()!=chromIndex;
-            int overlapStart = targOverlapStart(targGT, chromEnd);
+            int overlapStart = targOverlapStart(targGT, chromEnd, overlapCM);
             MarkerIndices markerIndices = new MarkerIndices(overlapEnd,
                     overlapStart, targGT.nMarkers());
             return new Window(genMap, windowIndex, lastWindow, markerIndices,
                     null, targGT);
         }
 
-        private int targOverlapStart(BasicGT targGT, boolean chromEnd) {
+        private int targOverlapStart(BasicGT targGT, boolean chromEnd,
+                float overlapCM) {
             if (chromEnd) {
                 return targGT.nMarkers();
             }
@@ -252,7 +248,7 @@ public class TargSlidingWindow implements SlidingWindow {
                 double endGenPos = genMap.genPos(marker);
                 double startGenPos = endGenPos - overlapCM;
                 int key = genMap.basePos(marker.chromIndex(), startGenPos);
-                int low = Math.max(0, targGT.nMarkers()-overlapMarkers);
+                int low = 0;
                 int high = nMarkersM1;
                 while (low <= high) {
                     int mid = (low + high) >>> 1;

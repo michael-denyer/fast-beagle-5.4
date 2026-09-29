@@ -96,8 +96,7 @@ public final class Ibs2Sets {
         int[] missCnt = new int[nTargSamples];
         for (int m : stepMarkers) {
             for (int s=0; s<nTargSamples; ++s) {
-                int hap1 = s <<1;
-                if (targGT.allele(m, hap1)==-1 || targGT.allele(m, hap1 | 0b1)==-1) {
+                if (targGT.allele1(m, s)==-1 || targGT.allele2(m, s)==-1) {
                     ++missCnt[s];
                 }
             }
@@ -143,9 +142,8 @@ public final class Ibs2Sets {
     }
 
     private static int getGT(int m, int s, GT targGT) {
-        int hap1 = s << 1;
-        int a1 = targGT.allele(m, hap1);
-        int a2 = targGT.allele(m, hap1 | 0b1);
+        int a1 = targGT.allele1(m, s);
+        int a2 = targGT.allele2(m, s);
         if (a1<0 || a2<0) {
             return -1;
         }

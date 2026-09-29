@@ -52,7 +52,7 @@ public final class BasicPhaseStates {
     private final int maxStates;
     private final int minSteps;
 
-    private final IntIntMap hapToLastIbsStep;
+    private final IntIntMap hapToEnd;
     private final PriorityQueue<CompHapSegment> q;
 
     private final BitArray[] compHaps;
@@ -78,7 +78,7 @@ public final class BasicPhaseStates {
         this.maxStates = maxStates;
         float phaseStep = phaseData.fpd().ibsStep();
         this.minSteps = Math.max(200, (int) Math.ceil(1.0f/phaseStep)); // 200 steps and 1 cM
-        this.hapToLastIbsStep = new IntIntMap(maxStates);
+        this.hapToEnd = new IntIntMap(maxStates);
         this.q = new PriorityQueue<>(maxStates);
 
         int nBits = markers.sumHapBits();
@@ -113,19 +113,20 @@ public final class BasicPhaseStates {
 
     /**
      * Stores the Li and Stephens HMM for the specified target sample in
-     * the specified arrays.The {@code nMismatches} parameter is an array of
+     * the specified arrays.  The {@code nMismatches} parameter is an array of
      * three two-dimensional arrays: {@code nMismatches[0]} stores
      * stores the allele mismatch data between the reference haplotypes and
      * the haplotype composed of homozygous target genotypes,
      * {@code nMismatches[1]} stores the allele mismatch data between
      * the reference haplotypes and the first target haplotype, and
      * {@code nMismatches[2]} stores the allele mismatch data between
-     * the reference haplotypes and the first target haplotype.  Each
-     * two-dimensional array must have at least {@code mc.nClusters()}
+     * the reference haplotypes and the first target haplotype.
+     * Each two-dimensional array must have at least {@code mc.nClusters()}
      * rows, and a column for each HMM state. An element of the
      * two-dimensional array is 0 if the target and reference allele match
      * and is 1 otherwise.
      *
+     * @param sample the target sample index
      * @param mc the marker clusters
      * @param refAtMissingGT a list of arrays in which HMM state alleles
      * at markers for which one or both target haplotypes have a missing allele
@@ -146,13 +147,13 @@ public final class BasicPhaseStates {
      * is less than the number of model states for any {@code j}
      * that indexes the missing genotypes
      * @throws NullPointerException if
-     * {@code (samplePhase == null || mc == null || refAtMissingGT == null)}
-     * or if any array is {@code null}
+     * {@code (mc == null || refAtMissingGT == null)} or if any array is
+     * {@code null}
      */
-    public int ibsStates(MarkerCluster mc, List<int[]> refAtMissingGT,
-            byte[][][] nMismatches) {
-        int nCompHaps = setCompRefHaps(mc.samplePhase().sample());
-        copyData(mc, nCompHaps, refAtMissingGT, nMismatches);
+    public int ibsStates(int sample, MarkerCluster mc,
+            List<int[]> refAtMissingGT, byte[][][] nMismatches) {
+        int nCompHaps = setCompRefHaps(sample);
+        copyData(sample, mc, nCompHaps, refAtMissingGT, nMismatches);
         return nCompHaps;
     }
 
@@ -190,7 +191,7 @@ public final class BasicPhaseStates {
         int h1 = sample << 1;
         int h2 = (h1 | 0b1);
         q.clear();
-        hapToLastIbsStep.clear();
+        hapToEnd.clear();
         for (int step=0, n=steps.size(); step<n; ++step) {
             int ibsHap1 = ibsHaps.ibsHap(h1, step);
             if (ibsHap1>=0) {
@@ -209,16 +210,16 @@ public final class BasicPhaseStates {
     }
 
     private void addIbsHap(int ibsHap, int step) {
-        if (hapToLastIbsStep.get(ibsHap, NIL)==NIL) { // hap not currently in q
+        if (hapToEnd.get(ibsHap, NIL)==NIL) { // hap not currently in q
             updateHeadOfQ();
             if (q.size()==maxStates
-                    || (q.isEmpty()==false && step - q.peek().lastIbsStep() >= minSteps)) {
+                    || (q.isEmpty()==false && step - q.peek().ibsStep() >= minSteps)) {
                 CompHapSegment head = q.poll();
                 int index = head.compHapIndex();
                 int prevHap = head.hap();
                 int prevStart = head.startMarker();
-                int nextStart = steps.start((head.lastIbsStep() + step) >>> 1);
-                hapToLastIbsStep.remove(head.hap());
+                int nextStart = steps.start((head.ibsStep() + step) >>> 1);
+                hapToEnd.remove(head.hap());
                 allHaps.copyTo(prevHap, prevStart, nextStart, compHaps[index]);
 
                 head.updateSegment(ibsHap, nextStart, step);
@@ -230,19 +231,19 @@ public final class BasicPhaseStates {
                 q.offer(new CompHapSegment(ibsHap, start, step, index));
             }
         }
-        hapToLastIbsStep.put(ibsHap, step);
+        hapToEnd.put(ibsHap, step);
     }
 
     private void updateHeadOfQ() {
         CompHapSegment head = q.peek();
         if (head!=null) {
-            int lastIbsStep = hapToLastIbsStep.get(head.hap(), NIL);
-            while (head.lastIbsStep()!=lastIbsStep) {
+            int latestEnd = hapToEnd.get(head.hap(), NIL);
+            while (head.ibsStep()!=latestEnd) {
                 head = q.poll();
-                head.setLastIbsStep(lastIbsStep);
+                head.updateStep(latestEnd);
                 q.offer(head);
                 head = q.peek();
-                lastIbsStep = hapToLastIbsStep.get(head.hap(), NIL);
+                latestEnd = hapToEnd.get(head.hap(), NIL);
             }
         }
     }
@@ -260,9 +261,9 @@ public final class BasicPhaseStates {
         return nCompHaps;
     }
 
-    private void copyData(MarkerCluster mc, int nCompHaps,
+    private void copyData(int sample, MarkerCluster mc, int nCompHaps,
             List<int[]> refAtMissingGT, byte[][][] nMismatches) {
-        SamplePhase phase = mc.samplePhase();
+        SamplePhase phase = phaseData.estPhase().get(sample);
         BitArray hap1 = phase.hap1();
         BitArray hap2 = phase.hap2();
         int missIndex = 0;
@@ -273,7 +274,7 @@ public final class BasicPhaseStates {
             Arrays.fill(nMismatches[2][c], 0, nCompHaps, (byte) 0);
             int mStart = mc.clusterStart(c);
             int mEnd = mc.clusterEnd(c);
-            if (mc.isMissingGtOrMaskedHet(c)) {
+            if (mc.clustHasMissingGT(c)) {
                 assert mEnd-mStart==1;
                 int[] refAlleles = refAtMissingGT.get(missIndex++);
                 for (int j=0; j<nCompHaps; ++j) {
@@ -333,18 +334,13 @@ public final class BasicPhaseStates {
         }
         else {
             Random rand = new Random(phaseData.seed() + sample);
-            int ibsStep = 0;
-            int startMarker = 0;
-            int compHapIndex = 0;
-            for (int j=0; j<nStates; ++j) {
+            int step = steps.size()-1;
+            for (int i=0; i<nStates; ++i) {
                 int h = rand.nextInt(nHaps);
                 while ((h>>1)==sample) {
                     h = rand.nextInt(nHaps);
                 }
-                if (hapToLastIbsStep.get(h, NIL)==NIL) {
-                    q.add(new CompHapSegment(h, startMarker, ibsStep, compHapIndex++));
-                    hapToLastIbsStep.put(h, startMarker);
-                }
+                q.add(new CompHapSegment(h, 0, step, i));
             }
         }
     }

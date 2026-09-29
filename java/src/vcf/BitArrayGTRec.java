@@ -19,6 +19,7 @@
 package vcf;
 
 import blbutil.BitArray;
+import java.util.stream.IntStream;
 
 /**
  * <p>Class {@code BitArrayGT} represents genotypes for a list of samples
@@ -135,6 +136,16 @@ public final class BitArrayGTRec implements GTRec {
     }
 
     @Override
+    public int allele1(int sample) {
+        return isMissing.get(sample) ? -1 : allele(sample<<1);
+    }
+
+    @Override
+    public int allele2(int sample) {
+        return isMissing.get(sample) ? -1 : allele((sample<<1) | 0b1);
+    }
+
+    @Override
     public int get(int hap) {
         return isMissing.get(hap>>1) ? -1 : allele(hap);
     }
@@ -152,6 +163,14 @@ public final class BitArrayGTRec implements GTRec {
         }
         return allele;
     }
+
+    @Override
+    public int[] alleles() {
+        return IntStream.range(0, size())
+                .map(h -> get(h))
+                .toArray();
+    }
+
 
     /**
      * Returns the data represented by {@code this} as a VCF

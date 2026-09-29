@@ -166,7 +166,6 @@ public class WindowWriter implements Closeable {
      */
     public void printPhased(GT phasedTarg, int start, int end) {
         checkInterval(start, end, phasedTarg.nMarkers());
-        long t0 = System.nanoTime();
         int blockSize = 50000;
         int stepSize = 100;
         int[] blockEnds = ends(start, end, blockSize);
@@ -178,14 +177,11 @@ public class WindowWriter implements Closeable {
                     .toArray(UnsignedByteArray[]::new);
             append(output, vcfOutFile);
         }
-        long t1 = System.nanoTime();
-        System.out.println("WindWriter tot: " + Utilities.elapsedNanos(t1-t0));
     }
 
     public void printPhased(Stage2Haps stage2Haps, int start, int end) {
         GT targGT = stage2Haps.fpd().targGT();
         checkInterval(start, end, targGT.nMarkers());
-        long t0 = System.nanoTime();
         int blockSize = 20000;
         int stepSize = 50;
         int[] blockEnds = ends(start, end, blockSize);
@@ -201,8 +197,6 @@ public class WindowWriter implements Closeable {
                     .toArray(UnsignedByteArray[]::new);
             append(output, vcfOutFile);
         }
-        long t1 = System.nanoTime();
-        System.out.println("WindWriter tot: " + Utilities.elapsedNanos(t1-t0));
     }
 
     private static void checkInterval(int start, int end, int nMarkers) {

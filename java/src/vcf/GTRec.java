@@ -19,7 +19,6 @@
 package vcf;
 
 import blbutil.Const;
-import ints.IntArray;
 import java.util.Arrays;
 
 /**
@@ -31,62 +30,13 @@ import java.util.Arrays;
  *
  * @author Brian L. Browning {@code <browning@uw.edu>}
  */
-public interface GTRec extends IntArray {
+public interface GTRec extends DuplicatesGTRec {
 
     /**
      * Returns the list of samples.
      * @return the list of samples
      */
     Samples samples();
-
-    /**
-     * Returns the marker.
-     * @return the marker
-     */
-    Marker marker();
-
-    /**
-     * Returns the specified allele for the specified haplotype or
-     * -1 if the allele is missing.  The two alleles for a sample
-     * at a marker are arbitrarily ordered if
-     * {@code this.unphased(marker, hap/2) == false}.
-     * @param hap a haplotype index
-     * @return the specified allele for the specified sample
-     *
-     * @throws IndexOutOfBoundsException if
-     * {@code hap < 0 || hap >= this.size()}
-     */
-    @Override
-    int get(int hap);
-
-    /**
-     * Returns the number of haplotypes.
-     * @return the number of haplotypes
-     */
-    @Override
-    int size();
-
-
-    /**
-     * Returns {@code true} if the genotype for the specified sample
-     * has non-missing alleles and is either haploid or diploid with
-     * a phased allele separator, and returns {@code false} otherwise.
-     * @param sample a sample index
-     * @return {@code true} if the genotype for the specified sample
-     * is a phased, nonmissing genotype
-     *
-     * @throws IndexOutOfBoundsException if
-     * {@code sample < 0 || sample >= this.size()/2}
-     */
-    boolean isPhased(int sample);
-
-    /**
-     * Returns {@code true} if every genotype for each sample is a phased,
-     * non-missing genotype, and returns {@code false} otherwise.
-     * @return {@code true} if the genotype for each sample is a phased,
-     * non-missing genotype
-     */
-    boolean isPhased();
 
     /**
      * Returns the allele frequencies.  The {@code k}-th element of the
@@ -133,17 +83,19 @@ public interface GTRec extends IntArray {
      * @throws NullPointerException if {@code gtRec == null}
      */
     static String toVcfRec(GTRec gtRec) {
-        Marker marker = gtRec.marker();
         StringBuilder sb = new StringBuilder(100);
-        MarkerUtils.appendFirst7Fields(marker, sb);
+        sb.append(gtRec.marker());
         sb.append(Const.tab);
-        sb.append(marker.info());  // INFO
+        sb.append(Const.MISSING_DATA_CHAR);  // QUAL
         sb.append(Const.tab);
-        sb.append("GT");           // FORMAT
-        for (int s=0, n=gtRec.samples().size(); s<n; ++s) {
-            int hap1 = s<<1;
-            int a1 = gtRec.get(hap1);
-            int a2 = gtRec.get(hap1 | 0b1);
+        sb.append("PASS");                   // FILTER
+        sb.append(Const.tab);
+        sb.append(Const.MISSING_DATA_CHAR);  // INFO
+        sb.append(Const.tab);
+        sb.append("GT");                     // FORMAT
+        for (int j=0, n=gtRec.samples().size(); j<n; ++j) {
+            int a1 = gtRec.allele1(j);
+            int a2 = gtRec.allele2(j);
             sb.append(Const.tab);
             if (a1==-1) {
                 sb.append(Const.MISSING_DATA_CHAR);
@@ -151,7 +103,7 @@ public interface GTRec extends IntArray {
             else {
                 sb.append(a1);
             }
-            sb.append(gtRec.isPhased(s) ? Const.phasedSep : Const.unphasedSep);
+            sb.append(gtRec.isPhased(j) ? Const.phasedSep : Const.unphasedSep);
             if (a2==-1) {
                 sb.append(Const.MISSING_DATA_CHAR);
             }

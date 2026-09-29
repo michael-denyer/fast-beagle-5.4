@@ -49,11 +49,11 @@ public final class LowFreqPhaseStates {
     private final int maxStates;
     private final int minSteps;
 
-    private final IntIntMap hapToLastIbsStep;
+    private final IntIntMap hapToEnd;
     private final PriorityQueue<CompHapSegment> q;
 
-    private final IntList[] compHapHap;
-    private final IntList[] compHapEnd;
+    private final IntList[] compositeHapToHap;
+    private final IntList[] compositeHapToEnd;
     private final int[] segmentIndex;
     private final int[] compHapToHap;
     private final int[] compHapToEnd;
@@ -79,13 +79,13 @@ public final class LowFreqPhaseStates {
         this.maxStates = maxStates;
         float phaseStep = phaseData.fpd().ibsStep();
         this.minSteps = Math.max(200, (int) Math.ceil(1.0f/phaseStep)); // 200 steps and 1 cM
-        this.hapToLastIbsStep = new IntIntMap(maxStates);
+        this.hapToEnd = new IntIntMap(maxStates);
         this.q = new PriorityQueue<>(maxStates);
 
-        this.compHapHap = IntStream.range(0, maxStates)
+        this.compositeHapToHap = IntStream.range(0, maxStates)
                 .mapToObj(j -> new IntList())
                 .toArray(IntList[]::new);
-        this.compHapEnd = IntStream.range(0, maxStates)
+        this.compositeHapToEnd = IntStream.range(0, maxStates)
                 .mapToObj(j -> new IntList())
                 .toArray(IntList[]::new);
         this.segmentIndex = new int[maxStates];
@@ -155,10 +155,10 @@ public final class LowFreqPhaseStates {
 
     private int setCompRefHaps(int targHap) {
         q.clear();
-        hapToLastIbsStep.clear();
+        hapToEnd.clear();
         for (int j=0, n=maxStates; j<n; ++j) {
-            compHapHap[j].clear();
-            compHapEnd[j].clear();
+            compositeHapToHap[j].clear();
+            compositeHapToEnd[j].clear();
         }
         for (int step=0, n=steps.size(); step<n; ++step) {
             //ibsHaps.ibsHaps(targHap, step, ibsHapList);
@@ -176,40 +176,40 @@ public final class LowFreqPhaseStates {
         if (ibsHap<0) {
             return;
         }
-        if (hapToLastIbsStep.get(ibsHap, NIL)==NIL) { // hap is not currently in q
+        if (hapToEnd.get(ibsHap, NIL)==NIL) { // hap is not currently in q
             updateHeadOfQ();
             if (q.size()==maxStates
-                    || (q.isEmpty()==false && (step - q.peek().lastIbsStep()) >= minSteps)) {
+                    || (q.isEmpty()==false && (step - q.peek().ibsStep()) >= minSteps)) {
                 CompHapSegment head = q.poll();
                 int index = head.compHapIndex();
                 int prevHap = head.hap();
-                int nextStart = steps.start((head.lastIbsStep() + step) >>> 1);
-                hapToLastIbsStep.remove(prevHap);
-                compHapHap[index].add(ibsHap);      // hap of new segment
-                compHapEnd[index].add(nextStart);   // end of old segment
+                int nextStart = steps.start((head.ibsStep() + step) >>> 1);
+                hapToEnd.remove(prevHap);
+                compositeHapToHap[index].add(ibsHap);      // hap of new segment
+                compositeHapToEnd[index].add(nextStart);   // end of old segment
 
                 head.updateSegment(ibsHap, nextStart, step);
                 q.add(head);
             }
             else {
                 int index = q.size();
-                compHapHap[index].add(ibsHap);            // hap of new segment
+                compositeHapToHap[index].add(ibsHap);            // hap of new segment
                 q.add(new CompHapSegment(ibsHap, 0, step, index));
             }
         }
-        hapToLastIbsStep.put(ibsHap, step);
+        hapToEnd.put(ibsHap, step);
     }
 
     private void updateHeadOfQ() {
         CompHapSegment head = q.peek();
         if (head!=null) {
-            int lastIbsStep = hapToLastIbsStep.get(head.hap(), NIL);
-            while (head.lastIbsStep()!=lastIbsStep) {
+            int latestEnd = hapToEnd.get(head.hap(), NIL);
+            while (head.ibsStep()!=latestEnd) {
                 head = q.poll();
-                head.setLastIbsStep(lastIbsStep);
+                head.updateStep(latestEnd);
                 q.offer(head);
                 head = q.peek();
-                lastIbsStep = hapToLastIbsStep.get(head.hap(), NIL);
+                latestEnd = hapToEnd.get(head.hap(), NIL);
             }
         }
     }
@@ -219,10 +219,10 @@ public final class LowFreqPhaseStates {
         CompHapSegment head = q.poll();
         while (head!=null) {
             int compHap = head.compHapIndex();
-            compHapEnd[compHap].add(nMarkers); // add missing end of last segment
+            compositeHapToEnd[compHap].add(nMarkers); // add missing end of last segment
             segmentIndex[compHap] = 0;
-            compHapToHap[compHap] = compHapHap[compHap].get(0);
-            compHapToEnd[compHap] = compHapEnd[compHap].get(0);
+            compHapToHap[compHap] = compositeHapToHap[compHap].get(0);
+            compHapToEnd[compHap] = compositeHapToEnd[compHap].get(0);
             head = q.poll();
         }
         return nCompHaps;
@@ -234,8 +234,8 @@ public final class LowFreqPhaseStates {
             for (int j=0; j<nCompHaps; ++j) {
                 if (m==compHapToEnd[j]) {
                     ++segmentIndex[j];
-                    compHapToHap[j] = compHapHap[j].get(segmentIndex[j]);
-                    compHapToEnd[j] = compHapEnd[j].get(segmentIndex[j]);
+                    compHapToHap[j] = compositeHapToHap[j].get(segmentIndex[j]);
+                    compHapToEnd[j] = compositeHapToEnd[j].get(segmentIndex[j]);
                 }
                 int refHap = compHapToHap[j];
                 haps[m][j] = refHap;
@@ -254,16 +254,15 @@ public final class LowFreqPhaseStates {
         }
         else {
             Random rand = new Random(phaseData.seed() + hap);
+            int step = steps.size()-1;
             int sample = hap>>1;
-            int ibsStep = 0;
-            int startMarker = 0;
-            for (int j=0; j<nStates; ++j) {
+            for (int i=0; i<nStates; ++i) {
                 int h = rand.nextInt(nHaps);
                 while ((h>>1)==sample) {
                     h = rand.nextInt(nHaps);
                 }
-                compHapHap[q.size()].add(h);
-                q.add(new CompHapSegment(h, startMarker, ibsStep, j));
+                compositeHapToHap[q.size()].add(h);
+                q.add(new CompHapSegment(h, 0, step, i));
             }
         }
     }

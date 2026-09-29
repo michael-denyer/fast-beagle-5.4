@@ -18,7 +18,6 @@
  */
 package phase;
 
-import blbutil.Const;
 import blbutil.MultiThreadUtils;
 import blbutil.Utilities;
 import java.util.Arrays;
@@ -67,7 +66,7 @@ public class PhaseLS {
         for (int j=0; j<nThreads; ++j) {
             es.submit(() -> {
                 try {
-                    PhaseBaum2 baum = new PhaseBaum2(phaseIbs);
+                    PhaseBaum1 baum = new PhaseBaum1(phaseIbs);
                     for (int s=samples.getAndIncrement(); s<nSamples;
                             s=samples.getAndIncrement()) {
                         baum.phase(s);
@@ -83,8 +82,7 @@ public class PhaseLS {
 
     private static PbwtPhaseIbs pbwtPhaseIbs(PhaseData pd) {
         boolean useBwd = (pd.it() & 1)==0;
-        PbwtPhaseIbs phaseIbs = new PbwtPhaseIbs(pd, pd.codedSteps(), useBwd);
-        return phaseIbs;
+        return new PbwtPhaseIbs(pd, pd.codedSteps(), useBwd);
     }
 
     private static void initializeParameters(PbwtPhaseIbs phaseIbs, Random rand) {

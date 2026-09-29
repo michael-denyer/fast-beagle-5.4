@@ -26,8 +26,7 @@ import java.util.Arrays;
 /**
  * <p>Class {@code UnsignedByteIndexArray} represents an immutable
  * array of integer values between 0 and 255 inclusive that is stored
- * as a {@code byte[]} array.  A {@code 0xff} mask is used to convert
- * {@code int} values to {@code byte values}.
+ * as a {@code byte[]} array whose values have been translated by -128.
  * </p>
  * <p>
  * Instances of {@code UnsignedByteArray} are immutable.
@@ -68,7 +67,8 @@ public final class UnsignedByteArray implements IntArray {
     /**
      * Constructs a new {@code UnsignedByteArray} instance from
      * the specified data.
-     * @param ia an array of integer values between 0 and 255 inclusive
+     * @param ia an array of positive integer values whose lower order byte
+     * will be stored
      * @throws IllegalArgumentException if
      * {@code (ia[j] < 0 || ia[j] > 255)} for any index {@code j}
      * satisfying {@code (j >= 0 && j < ia.length)}
@@ -118,7 +118,7 @@ public final class UnsignedByteArray implements IntArray {
     /**
      * Constructs a new {@code UnsignedByteArray} instance from
      * the specified data.
-     * @param il an list of nonnegative integers between 0 and 255 inclusive
+     * @param il an list of nonnegative integers
      * @param valueSize the exclusive end of the range of non-negative
      * array values
      * @throws IllegalArgumentException if

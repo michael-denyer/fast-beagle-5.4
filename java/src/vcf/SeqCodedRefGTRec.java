@@ -18,23 +18,22 @@
  */
 package vcf;
 
-import ints.IndexArray;
 import ints.IntArray;
 import java.util.Arrays;
 import java.util.stream.IntStream;
 
 /**
- * <p>Class {@code HapRefGTRec}  represents phased, non-missing
+ * <p>Class {@code SeqCodedRefGT}  represents phased, non-missing
  * genotypes for a list of reference samples at a single marker.
  * Genotype emission probabilities are determined by the sample
  * genotypes.
  * </p>
- * <p>Instances of class {@code HapRefGTRec} are immutable.
+ * <p>Instances of class {@code SeqCodedRefGT} are immutable.
  * </p>
  *
  * @author Brian L. Browning {@code <browning@uw.edu>}
  */
-public class HapRefGTRec implements RefGTRec {
+public class SeqCodedRefGTRec implements RefGTRec {
 
     private final Marker marker;
     private final Samples samples;
@@ -42,12 +41,12 @@ public class HapRefGTRec implements RefGTRec {
     private final IntArray seqToAllele;
 
     /**
-     * Creates a new {@code HapRefGTRec} instance with phased,
+     * Creates a new {@code SeqCodedRefGT} instance with phased,
      * non-missing genotypes from the specified marker, samples,
      * and haplotype alleles.  The contract for the constructed object
      * is undefined if any element of {@code hapToSeq} is negative or
-     * greater than or equal to {@code hapToAllele.size()} or if any element
-     * of {@code hapToAllele} is negative or greater than or equal to
+     * greater than or equal to {@code seqToAllele.size()} or if any element
+     * of {@code seqToAllele} is negative or greater than or equal to
      * {@code marker.nAlleles()}.
      *
      * @param marker the marker
@@ -61,7 +60,7 @@ public class HapRefGTRec implements RefGTRec {
      * {@code hapToSeq.size() != 2*samples.size()}
      * @throws NullPointerException if any parameter is {@code null}
      */
-    public HapRefGTRec(Marker marker, Samples samples, IntArray hapToSeq,
+    public SeqCodedRefGTRec(Marker marker, Samples samples, IntArray hapToSeq,
         IntArray seqToAllele) {
         if (hapToSeq.size() != 2*samples.size()) {
             throw new IllegalArgumentException("inconsistent data");
@@ -106,7 +105,7 @@ public class HapRefGTRec implements RefGTRec {
     }
 
     @Override
-    public int[][] alleleToHaps() {
+    public int[][] hapIndices() {
         int[] alCnts = alleleCounts();
         int majAllele = 0;
         for (int al=1; al<alCnts.length; ++al) {
@@ -128,19 +127,6 @@ public class HapRefGTRec implements RefGTRec {
             }
         }
         return hapIndices;
-    }
-
-    @Override
-    public IndexArray hapToAllele() {
-        int[] alleles = IntStream.range(0, size())
-                .map(h -> seqToAllele.get(hapToSeq.get(h)))
-                .toArray();
-        return new IndexArray(alleles, marker.nAlleles());
-    }
-
-    @Override
-    public int nAlleleCodedHaps() {
-        return IntArrayRefGTRec.nonNullCnt(alleleToHaps());
     }
 
     @Override
@@ -184,13 +170,31 @@ public class HapRefGTRec implements RefGTRec {
     }
 
     @Override
+    public int allele1(int sample) {
+        return seqToAllele.get(hapToSeq.get(sample<<1));
+    }
+
+    @Override
+    public int allele2(int sample) {
+        return seqToAllele.get(hapToSeq.get((sample<<1) | 0b1));
+    }
+
+    @Override
     public int get(int hap) {
         return seqToAllele.get(hapToSeq.get(hap));
     }
 
     @Override
+    public int[] alleles() {
+        return IntStream.range(0, hapToSeq.size())
+                .map(h -> get(h))
+                .toArray();
+    }
+
+
+    @Override
     public int hapIndex(int allele, int copy) {
-        int[][] hapIndices = alleleToHaps();
+        int[][] hapIndices = hapIndices();
         if (hapIndices[allele]==null) {
             throw new IllegalArgumentException("major allele");
         }

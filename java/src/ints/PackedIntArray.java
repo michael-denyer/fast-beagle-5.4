@@ -28,19 +28,14 @@ package ints;
  */
 public final class PackedIntArray implements IntArray {
 
-    private static final byte MAX_PACK_INDEX = (byte) Integer.numberOfTrailingZeros(Integer.SIZE);
-
-    private final byte packIndex;   // each value will be stored in (1 << packIndex) bits
-    private final byte indexShift;  // right shift to map array index to packed int index
-    private final byte valuesPerIntM1;
+    private static final byte maxPackIndex = (byte) Integer.numberOfTrailingZeros(Integer.SIZE);
+    private final byte packIndex;
 
     private final int size;
     private final int[] ia;
 
     private PackedIntArray(int[] ia, int size, byte packIndex) {
         this.packIndex = packIndex;
-        this.indexShift = (byte) (MAX_PACK_INDEX - packIndex);
-        this.valuesPerIntM1 = (byte) ((Integer.SIZE >> packIndex) - 1);
         this.size = size;
         this.ia = ia;
     }
@@ -61,8 +56,8 @@ public final class PackedIntArray implements IntArray {
             throw new IllegalArgumentException(String.valueOf(valueSize));
         }
         this.packIndex = packIndex(valueSize);
-        this.indexShift = (byte) (MAX_PACK_INDEX - packIndex);
-        this.valuesPerIntM1 = (byte) ((Integer.SIZE >> packIndex) - 1);
+        byte bitsPerValue = (byte) (1 << packIndex);
+        int valuesPerIntM1 = (Integer.SIZE >> packIndex) - 1;
 
         this.size = ia.length;
         this.ia = new int[(size + valuesPerIntM1)/(valuesPerIntM1+1)];
@@ -71,7 +66,7 @@ public final class PackedIntArray implements IntArray {
             if (value < 0 || value >= valueSize) {
                 throw new IllegalArgumentException(String.valueOf(value));
             }
-            this.ia[j >> indexShift] |= (value << ((j & valuesPerIntM1) << packIndex));
+            this.ia[j >> (maxPackIndex-packIndex)] |= (value << (j & valuesPerIntM1)*bitsPerValue);
         }
     }
 
@@ -91,8 +86,8 @@ public final class PackedIntArray implements IntArray {
             throw new IllegalArgumentException(String.valueOf(valueSize));
         }
         this.packIndex = packIndex(valueSize);
-        this.indexShift = (byte) (MAX_PACK_INDEX - packIndex);
-        this.valuesPerIntM1 = (byte) ((Integer.SIZE >> packIndex) - 1);
+        byte bitsPerValue = (byte) (1 << packIndex);
+        int valuesPerIntM1 = (Integer.SIZE >> packIndex) - 1;
 
         this.size = il.size();
         this.ia = new int[(size + valuesPerIntM1)/(valuesPerIntM1+1)];
@@ -101,7 +96,7 @@ public final class PackedIntArray implements IntArray {
             if (value < 0 || value >= valueSize) {
                 throw new IllegalArgumentException(String.valueOf(value));
             }
-            this.ia[j >> indexShift] |= (value << ((j & valuesPerIntM1) << packIndex));
+            ia[j >> (maxPackIndex-packIndex)] |= (value << (j & valuesPerIntM1)*bitsPerValue);
         }
     }
 
@@ -196,8 +191,8 @@ public final class PackedIntArray implements IntArray {
         }
         int mask = useUnsignedValues ? Byte.MAX_VALUE : 0xff;
         byte packIndex = packIndex(valueSize);
+        byte bitsPerValue = (byte) (1 << packIndex);
         int valuesPerIntM1 = (Integer.SIZE >> packIndex) - 1;
-        int indexShift = MAX_PACK_INDEX - packIndex;
 
         int size = to - from;
         int[] ia = new int[(size + valuesPerIntM1)/(valuesPerIntM1+1)];
@@ -207,7 +202,7 @@ public final class PackedIntArray implements IntArray {
             if (value < 0 || value >= valueSize) {
                 throw new IllegalArgumentException(String.valueOf(value));
             }
-            ia[j >> indexShift] |= (value << ((offset & valuesPerIntM1) << packIndex));
+            ia[offset >> (maxPackIndex-packIndex)] |= (value << (offset & valuesPerIntM1)*bitsPerValue);
         }
         return new PackedIntArray(ia, size, packIndex);
     }
@@ -238,7 +233,7 @@ public final class PackedIntArray implements IntArray {
             throw new IllegalArgumentException(String.valueOf(ba.length));
         }
         byte packIndex = packIndex(valueSize);
-        int indexShift = MAX_PACK_INDEX - packIndex;
+        byte bitsPerValue = (byte) (1 << packIndex);
         int valuesPerIntM1 = (Integer.SIZE >> packIndex) - 1;
 
         int size = ba.length/2;
@@ -248,7 +243,7 @@ public final class PackedIntArray implements IntArray {
             if (value < 0 || value >= valueSize) {
                 throw new IllegalArgumentException(String.valueOf(value));
             }
-            ia[j >> indexShift] |= (value << ((j & valuesPerIntM1) << packIndex));
+            ia[j >> (maxPackIndex-packIndex)] |= (value << (j & valuesPerIntM1)*bitsPerValue);
         }
         return new PackedIntArray(ia, size, packIndex);
     }
@@ -299,7 +294,8 @@ public final class PackedIntArray implements IntArray {
         }
         int bitsPerValue = (1 << packIndex);
         int valueMask = (1 << bitsPerValue) - 1;
-        return valueMask & (ia[index >> indexShift] >>> ((index & valuesPerIntM1) << packIndex)) ;
+        int valuesPerIntM1 = (byte) ((Integer.SIZE >> packIndex) - 1);
+        return ((ia[index >> (maxPackIndex-packIndex)] >>> (index & valuesPerIntM1)*bitsPerValue) & valueMask);
     }
 
 //    public static void main(String[] args) {

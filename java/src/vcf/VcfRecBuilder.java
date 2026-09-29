@@ -125,10 +125,50 @@ public final class VcfRecBuilder {
     }
 
     private static void writeFixedFields(Marker marker, StringBuilder sb) {
-        MarkerUtils.appendFirst7Fields(marker, sb);
+        appendMarker(marker, sb);
         sb.append(Const.tab);
-        sb.append(marker.info());
+        sb.append(Const.MISSING_DATA_CHAR);     // QUAL
         sb.append(Const.tab);
-        sb.append("GT"); // FORMAT
+        sb.append("PASS");                      // FILTER
+        sb.append(Const.tab);
+        if (marker.end()==-1) {
+            sb.append(Const.MISSING_DATA_CHAR); // INFO
+        }
+        else {
+            sb.append("END=");
+            sb.append(marker.end());
+        }
+        sb.append(Const.tab);
+        sb.append("GT");                        // FORMAT
+    }
+
+    private static void appendMarker(Marker marker, StringBuilder sb) {
+        sb.append(marker.chrom());
+        sb.append(Const.tab);
+        sb.append(marker.pos());
+        int nIds = marker.nIds();
+        if (nIds==0) {
+            sb.append(Const.tab);
+            sb.append(Const.MISSING_DATA_CHAR);
+}
+        else {
+            for (int j=0; j<nIds; ++j) {
+                sb.append(j==0 ? Const.tab : Const.semicolon);
+                sb.append(marker.id(j));
+            }
+        }
+        int nAlleles = marker.nAlleles();
+        if (nAlleles==1) {
+            sb.append(Const.tab);
+            sb.append(marker.allele(0));
+            sb.append(Const.tab);
+            sb.append(Const.MISSING_DATA_CHAR);
+        }
+        else {
+            for (int j=0; j<nAlleles; ++j) {
+                sb.append(j<2 ? Const.tab : Const.comma);
+                sb.append(marker.allele(j));
+            }
+        }
     }
 }

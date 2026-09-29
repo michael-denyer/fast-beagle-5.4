@@ -1,48 +1,79 @@
 # name  hash  tags  Beagle arguments (@ is the data directory)
 # The hash field is thread:hash pairs where the output depends on nthreads:
-# PbwtPhaser splits windows longer than 4 cM by thread count.
+# Beagle 5.4's PbwtPhaser splits a window longer than 4.5 cM by thread count.
 # Tags, comma-separated or - for none, tell tests/check-bgen.sh how plink2
 # reads the output: nonautosome marks a chromosome that plink2 does not read as
 # an autosome without --chr-set, such as chrX, and multiallelic marks records
 # with more than two alleles, which plink2 imports with --import-max-alleles 2.
-gt        f984b768ab77c6fc  -           gt=@test.vcf.gz
-ref       8d852515c02be9b8  -           ref=@ref.vcf.gz gt=@target.vcf.gz
-imp       d3c663e69eeec762  -           ref=@ref.vcf.gz gt=@target.thin.vcf.gz
-imp-apgp  7802f1b2c1f27cc6  -           ref=@ref.vcf.gz gt=@target.thin.vcf.gz ap=true gp=true
-imp-bref3 d3c663e69eeec762  -           ref=@ref.bref3 gt=@target.thin.vcf.gz
-# A bref3 reference is sequence coded before excludemarkers= and
-# excludesamples= apply, a VCF reference after, so these differ from imp-excl
-# and from the same run on ref.vcf.gz.
-imp-bref3-excl 590eaaa46a16d339  -           ref=@ref.bref3 gt=@target.thin.vcf.gz excludemarkers=@exclude.markers
-imp-bref3-excls eccf9530577570ab  -           ref=@ref.bref3 gt=@target.thin.vcf.gz excludesamples=@exclude.samples
-imp-bref3-multi b97d7f613fc9bf03  multiallelic ref=@ref.multi.bref3 gt=@target.multi.thin.vcf.gz
-imp-bref3-end 1e98c6f082b64055  -           ref=@ref.end.bref3 gt=@target.thin.vcf.gz
-imp-chrom 89d2ea4e5b079431  -           ref=@ref.vcf.gz gt=@target.thin.vcf.gz chrom=22:20020000-20080000
-gt-map    4df47d88a10ad128  -           gt=@test.vcf.gz map=@map.map window=1.5 overlap=0.5
+gt        f1718d9eca3e5c58  -           gt=@test.vcf.gz
+ref       f6441c7a9b1aee8b  -           ref=@ref.vcf.gz gt=@target.vcf.gz
+imp       92e79837e9f08765  -           ref=@ref.vcf.gz gt=@target.thin.vcf.gz
+imp-apgp  212b08f878384cf1  -           ref=@ref.vcf.gz gt=@target.thin.vcf.gz ap=true gp=true
+imp-bref3 92e79837e9f08765  -           ref=@ref.bref3 gt=@target.thin.vcf.gz
+# A bref3 reference is sequence coded before excludemarkers= applies, a VCF
+# reference after, so imp-bref3-excl differs from imp-excl. Beagle 5.4 applies
+# excludesamples= to the target and to a VCF reference but not to a bref3
+# one, so imp-bref3-exclr, which excludes reference samples only, matches
+# imp-bref3.
+imp-bref3-excl 8867d92e38c4233f  -           ref=@ref.bref3 gt=@target.thin.vcf.gz excludemarkers=@exclude.markers
+imp-bref3-excls 3a435dee2c024b80  -           ref=@ref.bref3 gt=@target.thin.vcf.gz excludesamples=@exclude.samples
+imp-bref3-exclr 92e79837e9f08765  -           ref=@ref.bref3 gt=@target.thin.vcf.gz excludesamples=@exclude.ref-samples
+imp-bref3-multi f7041ece2a9960dc  multiallelic ref=@ref.multi.bref3 gt=@target.multi.thin.vcf.gz
+imp-bref3-end 34ecc104d8ab084a  -           ref=@ref.end.bref3 gt=@target.thin.vcf.gz
+imp-chrom 63c954adba6e5a29  -           ref=@ref.vcf.gz gt=@target.thin.vcf.gz chrom=22:20020000-20080000
+gt-map    c7fb83b8fd785602  -           gt=@test.vcf.gz map=@map.map window=1.5 overlap=0.5
 # gt-map with numbers in other scripts, which Integer.parseInt reads.
-gt-udigit 4df47d88a10ad128  -           gt=@test.udigit.vcf.gz map=@map.udigit.map window=1.5 overlap=0.5
-imp-map   c191c9d10af579ea  -           ref=@ref.vcf.gz gt=@target.thin.vcf.gz map=@map.map window=1.5 overlap=0.5
-gt-miss   9eab7a66d6b5dff9  -           gt=@test.miss.vcf.gz
-imp-miss  e9628d6d04aa31b6  -           ref=@ref.vcf.gz gt=@target.thin.miss.vcf.gz
-gt-excl   25614a1eaa25e2a3  -           gt=@test.vcf.gz excludesamples=@exclude.samples excludemarkers=@exclude.markers
-imp-excl  4dfa20ee3b6e34d1  -           ref=@ref.vcf.gz gt=@target.thin.vcf.gz excludemarkers=@exclude.markers
-gt-x      9fec4deb80b6a504  nonautosome gt=@test.X.vcf.gz
-imp-x     4336b2caac95998e  nonautosome ref=@ref.X.vcf.gz gt=@target.X.thin.vcf.gz
-gt-multi  3461c08584af37b9  multiallelic gt=@test.multi.vcf.gz
-imp-multi b97d7f613fc9bf03  multiallelic ref=@ref.multi.vcf.gz gt=@target.multi.thin.vcf.gz
-gt-phased 24336aa1cf2a85ac  -           gt=@ref.vcf.gz
-imp-chroms 9e7ab9d12e48171c  nonautosome ref=@ref.chroms.vcf.gz gt=@target.chroms.vcf.gz
-gt-ibs2   1:a4632d87e291b72c,2:d47af40d60431f3e,18:e98a403d5ee20e87  -           gt=@test.ibs2.vcf.gz map=@map.steep.map
-imp-bigref e8f6faa6c2cb5d33  -           ref=@ref.big.vcf.gz gt=@target.300.vcf.gz
-gt-ibs2-miss 1:ef140b6aafdfba7a,2:1c4f6942712da627,18:f03523b06302fb2a  -           gt=@test.ibs2.miss.vcf.gz map=@map.steep.map
-gt-573    42241a422d8075ef  -           gt=@test.573.vcf.gz
-gt-states 376c69eb98291020  -           gt=@test.vcf.gz phase-states=10
-imp-states dbeaf447196a3811  -           ref=@ref.vcf.gz gt=@target.thin.vcf.gz imp-states=10
-imp-evict 857e35c8bd392e17  -           ref=@ref.vcf.gz gt=@target.thin.vcf.gz map=@map.map window=1.5 overlap=0.5 imp-states=10 imp-segment=0.1
-imp-gap   dfe2fbe380f2003c  -           ref=@ref.vcf.gz gt=@target.gap.vcf.gz
+gt-udigit c7fb83b8fd785602  -           gt=@test.udigit.vcf.gz map=@map.udigit.map window=1.5 overlap=0.5
+imp-map   47c2d3a918ab4d2b  -           ref=@ref.vcf.gz gt=@target.thin.vcf.gz map=@map.map window=1.5 overlap=0.5
+gt-miss   af20fd8695abf825  -           gt=@test.miss.vcf.gz
+imp-miss  b5d94465d84bc679  -           ref=@ref.vcf.gz gt=@target.thin.miss.vcf.gz
+gt-excl   334397757015b703  -           gt=@test.vcf.gz excludesamples=@exclude.samples excludemarkers=@exclude.markers
+imp-excl  c38c14206abe3d5f  -           ref=@ref.vcf.gz gt=@target.thin.vcf.gz excludemarkers=@exclude.markers
+gt-x      d8fdb1e64091d517  nonautosome gt=@test.X.vcf.gz
+imp-x     ab9d23cd969f5f0f  nonautosome ref=@ref.X.vcf.gz gt=@target.X.thin.vcf.gz
+gt-multi  56536743bc06422d  multiallelic gt=@test.multi.vcf.gz
+imp-multi f7041ece2a9960dc  multiallelic ref=@ref.multi.vcf.gz gt=@target.multi.thin.vcf.gz
+gt-phased a260781cffe7c5e9  -           gt=@ref.vcf.gz
+imp-chroms 12ca5f91169a5a6c  nonautosome ref=@ref.chroms.vcf.gz gt=@target.chroms.vcf.gz
+gt-ibs2   1:a3ef0167d6700ac7,2:1c15c10e3e47350d,18:7f60159d64cfea53  -           gt=@test.ibs2.vcf.gz map=@map.steep.map
+imp-bigref 1c1c097eac0d63c3  -           ref=@ref.big.vcf.gz gt=@target.300.vcf.gz
+gt-ibs2-miss 1:45420dabe1bcdba5,2:7c540add3287deea,18:bb579f78552eb918  -           gt=@test.ibs2.miss.vcf.gz map=@map.steep.map
+gt-573    57ab0cfae0bff844  -           gt=@test.573.vcf.gz
+gt-states bc43ba6a4c5561af  -           gt=@test.vcf.gz phase-states=10
+imp-states 3095f6e1c0ba71b7  -           ref=@ref.vcf.gz gt=@target.thin.vcf.gz imp-states=10
+imp-evict 23c6855b6b36f017  -           ref=@ref.vcf.gz gt=@target.thin.vcf.gz map=@map.map window=1.5 overlap=0.5 imp-states=10 imp-segment=0.1
+imp-gap   3afce42669edf7b8  -           ref=@ref.vcf.gz gt=@target.gap.vcf.gz
 # Every marker in stage 1, so no stage 2: more than 75% of the markers are
 # high-frequency (gt-common, and in 10 of gt-common-map's 12 windows) or fewer
 # than 2 are (gt-rare).
-gt-common 157cfa67120dc9f3  -           gt=@test.common.vcf.gz
-gt-common-map c96dc1be7e861a1f  -           gt=@test.common.vcf.gz map=@map.map window=0.6 overlap=0.2
-gt-rare   81f328aed13131ef  -           gt=@test.rare.vcf.gz
+gt-common 9f6ce7a2ff6a5d96  -           gt=@test.common.vcf.gz
+gt-common-map 1429129f7da14c29  -           gt=@test.common.vcf.gz map=@map.map window=0.6 overlap=0.2
+gt-rare   aa621cfe94bf5c71  -           gt=@test.rare.vcf.gz
+# Beagle 5.4's marker and record text: FILTER written as PASS and END= as an
+# integer (gt-filter-end), END= with leading zeros or given twice, the last
+# kept (gt-end-text), and an ID list with a . entry (gt-ids-dot).
+gt-filter-end a33b42c57b695935  -           gt=@test.filter-end.vcf.gz
+gt-end-text 3e0f9ca5a3aa98b4  -           gt=@test.end-text.vcf.gz
+gt-ids-dot 2413080b53eb8b7b  -           gt=@test.ids-dot.vcf.gz
+# One 30 cM window, which PbwtPhaser splits by thread count.
+gt-long   1:61265e715b69ff0e,2:a8ec74d016bb6900,18:d180db937e92c2a7  -           gt=@test.vcf.gz map=@map.steep.map
+# Maps with a plateau: distances below 1e-7 cM, which Beagle 5.4 raises to
+# 1e-7 (map.plateau), and a flat 2 cM stretch across windows (map.plateau2).
+gt-plateau        a9bab77ac497ce31  -  gt=@test.vcf.gz map=@map.plateau.map
+imp-plateau       521067c258cc51e3  -  ref=@ref.vcf.gz gt=@target.thin.vcf.gz map=@map.plateau.map
+gt-plateau2       2c1cd9e84f6a9399  -  gt=@test.vcf.gz map=@map.plateau2.map window=1.0 overlap=0.3
+imp-plateau2      f39e1b0a98331295  -  ref=@ref.vcf.gz gt=@target.thin.vcf.gz map=@map.plateau2.map window=1.0 overlap=0.3
+# A 2.5 cM gap in the target markers, longer than the window (the imputed
+# runs fail: imp-gap-map in tests/check-failures.sh).
+gt-gap-map        6c17af0b3e86f846  -  gt=@test.gap.vcf.gz map=@map.map window=1.5 overlap=0.5
+# A reference whose sequence coding reaches SeqCoder3's limit exactly.
+imp-seqlimit      6c4cf4e11a833f6a  -  ref=@ref.seqlimit.vcf.gz gt=@target.seqlimit.vcf.gz
+imp-seqlimit-bref3 6c4cf4e11a833f6a  -  ref=@ref.seqlimit.bref3 gt=@target.seqlimit.vcf.gz
+# A phased target imputed from the other reference samples, with a map, with
+# excluded reference samples (applied to the VCF reference only) and with
+# few states.
+imp-phased        21330d47bc54d150  -  ref=@ref.rest.vcf.gz gt=@target.phased.vcf.gz
+imp-phased-map    94883afe74d1bc7d  -  ref=@ref.rest.vcf.gz gt=@target.phased.vcf.gz map=@map.map window=1.5 overlap=0.5
+imp-phased-bref3-excls 21330d47bc54d150  -  ref=@ref.rest.bref3 gt=@target.phased.vcf.gz excludesamples=@exclude.rest.samples
+imp-phased-excls  b93751634d50ae6a  -  ref=@ref.rest.vcf.gz gt=@target.phased.vcf.gz excludesamples=@exclude.rest.samples
+imp-phased-states b0639a856998ebf2  -  ref=@ref.rest.vcf.gz gt=@target.phased.vcf.gz imp-states=10 map=@map.plateau.map

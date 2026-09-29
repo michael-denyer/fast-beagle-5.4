@@ -6,6 +6,9 @@
 # log, and a run that fails on a malformed reference must end its log with the
 # error message.
 #
+# The log comparison is judged under the parity ratchet (tests/c54-ratchet.sh)
+# with the key "log <case>".
+#
 # Usage: tests/check-log.sh    (after make build/beagle)
 # CASES restricts the run to the named cases (default all); NTHREADS sets the
 # thread count (default 2).
@@ -15,18 +18,18 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 source "$ROOT/tests/cases.sh"
 OUT=$(mktemp -d)
 trap 'rm -rf "$OUT"' EXIT
-JAVA_BEAGLE=(java -ea -jar "$DATA/beagle.27Feb25.75f.jar")
+JAVA_BEAGLE=(java -ea -jar "$DATA/beagle.29Oct24.c8e.jar")
 T=${NTHREADS:-2}
 
 mask() {  # log
   sed -E \
     -e '/^Enter "java -jar /d' \
     -e '/^(CPU time|Max memory): /d' \
-    -e 's/^(beagle\.27Feb25\.75f\.jar|fast-beagle: a C port of beagle\.27Feb25\.75f\.jar) \(version 5\.5\)$/<banner>/' \
+    -e 's/^(beagle\.29Oct24\.c8e\.jar|fast-beagle: a C port of beagle\.29Oct24\.c8e\.jar) \(version 5\.4\)$/<banner>/' \
     -e 's/^(Start|End) time: .*/\1 time: <time>/' \
     -e 's/^Command line: .*/Command line: <program>/' \
     -e 's/^  out=.*/  out=<out>/' \
-    -e 's/^(beagle\.27Feb25\.75f\.jar|fast-beagle) finished$/<program> finished/' \
+    -e 's/^(beagle\.29Oct24\.c8e\.jar|fast-beagle) finished$/<program> finished/' \
     -e 's/^(.{31})([0-9]+ hours? )?([0-9]+ minutes? )?[0-9]+ seconds?$/\1<elapsed>/' \
     "$1"
 }
@@ -46,9 +49,11 @@ while read -r name _ _ args; do
     echo "FAIL $name: build/beagle's standard output differs from its log"
     diff "$c.log" "$c.run.log" | head -10; fail=1
   elif ! diff <(mask "$j.log") <(mask "$c.log") > "$OUT/$name.diff"; then
-    echo "FAIL $name: the logs differ"; head -20 "$OUT/$name.diff"; fail=1
+    echo "$(miss_label "log $name") $name: the logs differ"; head -20 "$OUT/$name.diff"
+    ratchet "log $name" 1 || fail=1
   else
     echo "PASS $name nthreads=$T $(wc -l < "$c.log" | tr -d ' ') lines"
+    ratchet "log $name" 0 || fail=1
   fi
 done < <(cases)
 

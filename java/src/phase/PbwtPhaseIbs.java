@@ -94,47 +94,51 @@ public final class PbwtPhaseIbs {
     }
 
     private WrappedIntArray[] bwdIbsHaps(PbwtIbsData data, int batch) {
-        int startStep = data.startStep(batch);
-        int endStep = data.endStep(batch);
-        int bufferEndStep = data.bufferEndStep(endStep);
+        int nSteps = data.codedSteps().steps().size();
+        int start = batch*data.stepsPerBatch();
+        int end = Math.min(start + data.stepsPerBatch(), nSteps);
+        int overlapEnd = Math.min(end + data.nOverlapSteps(), nSteps);
+        assert start < nSteps;
 
-        WrappedIntArray[] ibsHaps0 = new WrappedIntArray[endStep - startStep];
+        WrappedIntArray[] ibsHaps0 = new WrappedIntArray[end - start];
         int nHaps = data.nHaps();
         PbwtDivUpdater pbwt = new PbwtDivUpdater(nHaps);
         int[] a = IntStream.range(0, nHaps).toArray();
-        int[] d = IntStream.range(0, nHaps+1).map(j -> (bufferEndStep-1)).toArray(); // last entry is sentinal
+        int[] d = IntStream.range(0, nHaps+1).map(j -> (overlapEnd-1)).toArray(); // last entry is sentinal
 
-        for (int j=(bufferEndStep-1); j>=endStep; --j) {
+        for (int j=(overlapEnd-1); j>=end; --j) {
             IndexArray ia = data.codedSteps().get(j);
             pbwt.bwdUpdate(ia, ia.valueSize(), j, a, d);
         }
-        for (int j=(endStep-1); j>=startStep; --j) {
+        for (int j=(end-1); j>=start; --j) {
             IndexArray ia = data.codedSteps().get(j);
             pbwt.bwdUpdate(ia, ia.valueSize(), j, a, d);
-            ibsHaps0[j-startStep] = getBwdIbsHaps(j, a, d, data);
+            ibsHaps0[j-start] = getBwdIbsHaps(j, a, d, data);
         }
         return ibsHaps0;
     }
 
     private WrappedIntArray[] fwdIbsHaps(PbwtIbsData data, int batch) {
-        int startStep = data.startStep(batch);
-        int endStep = data.endStep(batch);
-        int bufferStartStep = data.bufferStartStep(startStep);
+        int nSteps = data.codedSteps().steps().size();
+        int start = batch*data.stepsPerBatch();
+        int end = Math.min(start + data.stepsPerBatch(), nSteps);
+        int overlapStart = Math.max(0, start - data.nOverlapSteps());
+        assert start < nSteps;
 
-        WrappedIntArray[] ibsHaps0 = new WrappedIntArray[endStep - startStep];
+        WrappedIntArray[] ibsHaps0 = new WrappedIntArray[end - start];
         int nHaps = data.nHaps();
         PbwtDivUpdater pbwt = new PbwtDivUpdater(nHaps);
         int[] a = IntStream.range(0, nHaps).toArray();
-        int[] d = IntStream.range(0, nHaps+1).map(j -> bufferStartStep).toArray(); // last entry is sentinal
+        int[] d = IntStream.range(0, nHaps+1).map(j -> overlapStart).toArray(); // last entry is sentinal
 
-        for (int j=bufferStartStep; j<startStep; ++j) {
+        for (int j=overlapStart; j<start; ++j) {
             IndexArray ia = data.codedSteps().get(j);
             pbwt.fwdUpdate(ia, ia.valueSize(), j, a, d);
         }
-        for (int j=startStep; j<endStep; ++j) {
+        for (int j=start; j<end; ++j) {
             IndexArray ia = data.codedSteps().get(j);
             pbwt.fwdUpdate(ia, ia.valueSize(), j, a, d);
-            ibsHaps0[j-startStep] = getfwdIbsHaps(j, a, d, data);
+            ibsHaps0[j-start] = getfwdIbsHaps(j, a, d, data);
         }
         return ibsHaps0;
     }

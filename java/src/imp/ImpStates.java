@@ -43,10 +43,10 @@ public final class ImpStates {
     private final int nClusters;
     private final int maxStates;
 
-    private final IntIntMap hapToLastIbsStep;
+    private final IntIntMap hapToEnd;
     private final PriorityQueue<CompHapSegment> q;
-    private final IntList[] compHapHap;
-    private final IntList[] compHapEnd;
+    private final IntList[] compositeHapToHap;
+    private final IntList[] compositeHapToEnd;
 
     private final int[] compHapToListIndex;
     private final int[] compHapToHap;
@@ -62,12 +62,12 @@ public final class ImpStates {
         this.impData = ibsHaps.impData();
         this.nClusters = ibsHaps.impData().nClusters();
         this.maxStates = impData.par().imp_states();
-        this.hapToLastIbsStep = new IntIntMap(maxStates);
+        this.hapToEnd = new IntIntMap(maxStates);
         this.q = new PriorityQueue<>(maxStates);
-        this.compHapHap = IntStream.range(0, maxStates)
+        this.compositeHapToHap = IntStream.range(0, maxStates)
                 .mapToObj(j -> new IntList())
                 .toArray(IntList[]::new);
-        this.compHapEnd = IntStream.range(0, maxStates)
+        this.compositeHapToEnd = IntStream.range(0, maxStates)
                 .mapToObj(j -> new IntList())
                 .toArray(IntList[]::new);
         this.compHapToListIndex = new int[maxStates];
@@ -120,46 +120,45 @@ public final class ImpStates {
     }
 
     private void initializeFields() {
-        hapToLastIbsStep.clear();
+        hapToEnd.clear();
         for (int j=0, n=q.size(); j<n; ++j) {
-            compHapHap[j].clear();
-            compHapEnd[j].clear();
+            compositeHapToHap[j].clear();
+            compositeHapToEnd[j].clear();
         }
         q.clear();
     }
 
     private void updateFields(int hap, int step) {
-        if (hapToLastIbsStep.get(hap, NIL)==NIL) { // hap not currently in q
+        if (hapToEnd.get(hap, NIL)==NIL) { // hap not currently in q
             updateHeadOfQ();
             if (q.size()==maxStates) {
                 CompHapSegment head = q.poll();
-                int startMarker = ibsHaps.codedSteps().stepStart((head.lastIbsStep() + step) >>> 1);
-                hapToLastIbsStep.remove(head.hap());
-                compHapHap[head.compHapIndex()].add(hap);         // hap of new segment
-                compHapEnd[head.compHapIndex()].add(startMarker); // end of previous segment
-                head.updateSegment(hap, startMarker, step);
+                int nextStart = ibsHaps.codedSteps().stepStart((head.ibsStep() + step) >>> 1);
+                hapToEnd.remove(head.hap());
+                compositeHapToHap[head.compHapIndex()].add(hap);         // hap of new segment
+                compositeHapToEnd[head.compHapIndex()].add(nextStart);   // end of previous segment
+                head.updateSegment(hap, nextStart, step);
                 q.offer(head);
             }
             else {
                 int compHapIndex = q.size();
-                int startMarker = 0;
-                compHapHap[compHapIndex].add(hap);                // hap of new segment
-                q.offer(new CompHapSegment(hap, startMarker, step, compHapIndex));
+                compositeHapToHap[compHapIndex].add(hap);                // hap of new segment
+                q.offer(new CompHapSegment(hap, 0, step, compHapIndex));
             }
         }
-        hapToLastIbsStep.put(hap, step);
+        hapToEnd.put(hap, step);
     }
 
     private void updateHeadOfQ() {
         CompHapSegment head = q.peek();
         if (head!=null) {
-            int lastIbsStep = hapToLastIbsStep.get(head.hap(), NIL);
-            while (head.lastIbsStep()!=lastIbsStep) {
+            int latestEnd = hapToEnd.get(head.hap(), NIL);
+            while (head.ibsStep()!=latestEnd) {
                 head = q.poll();
-                head.setLastIbsStep(lastIbsStep);
+                head.updateStep(latestEnd);
                 q.offer(head);
                 head = q.peek();
-                lastIbsStep = hapToLastIbsStep.get(head.hap(), NIL);
+                latestEnd = hapToEnd.get(head.hap(), NIL);
             }
         }
     }
@@ -173,8 +172,8 @@ public final class ImpStates {
             for (int j=0; j<nCompHaps; ++j) {
                 if (m==compHapToEnd[j]) {
                     ++compHapToListIndex[j];
-                    compHapToHap[j] = compHapHap[j].get(compHapToListIndex[j]);
-                    compHapToEnd[j] = compHapEnd[j].get(compHapToListIndex[j]);
+                    compHapToHap[j] = compositeHapToHap[j].get(compHapToListIndex[j]);
+                    compHapToEnd[j] = compositeHapToEnd[j].get(compHapToListIndex[j]);
                 }
                 hapIndices[m][j] = compHapToHap[j];
                 alMatch[m][j] = impData.allele(m, compHapToHap[j])==targAllele;
@@ -185,10 +184,10 @@ public final class ImpStates {
 
     private void initializeCopy(int nSlots) {
         for (int j=0; j<nSlots; ++j) {
-            compHapEnd[j].add(nClusters); // add missing end of last segment
+            compositeHapToEnd[j].add(nClusters); // add missing end of last segment
             compHapToListIndex[j] = 0;
-            compHapToHap[j] = compHapHap[j].get(0);
-            compHapToEnd[j] = compHapEnd[j].get(0);
+            compHapToHap[j] = compositeHapToHap[j].get(0);
+            compHapToEnd[j] = compositeHapToEnd[j].get(0);
         }
     }
 
@@ -197,15 +196,10 @@ public final class ImpStates {
         int nRefHaps = impData.nRefHaps();
         int nStates = Math.min(nRefHaps, maxStates);
         Random rand = new Random(hap);
-        int ibsStep = 0;
-        int startMarker = 0;
-        for (int j=0; j<nStates; ++j) {
+        for (int i=0; i<nStates; ++i) {
             int h = rand.nextInt(nRefHaps);
-            while (h==hap) {
-                h = rand.nextInt(nRefHaps);
-            }
-            compHapHap[j].add(h);            // hap of new segment
-            q.add(new CompHapSegment(h, startMarker, ibsStep, j));
+            compositeHapToHap[i].add(h);            // hap of new segment
+            q.add(new CompHapSegment(h, 0, nClusters, i));
         }
     }
 }

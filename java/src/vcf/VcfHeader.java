@@ -22,7 +22,6 @@ import blbutil.Const;
 import blbutil.Filter;
 import blbutil.StringUtil;
 import blbutil.Utilities;
-import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -61,8 +60,7 @@ public final class VcfHeader  {
      * Returns a boolean array whose {@code k}-th value is {@code true}
      * if the FORMAT field for the {@code k}-th sample in a VCF record
      * contains an allele separator character and returns {@code false}
-     * otherwise.  The contract for this method is undefined of the
-     * specified string is not a properly-formatted VCF record.
+     * otherwise.
      * @param vcfRec a VCF record
      * @return  a boolean array whose {@code k}-th value is {@code true}
      * if the FORMAT field for the {@code k}-th sample does not contain an
@@ -70,7 +68,7 @@ public final class VcfHeader  {
 
      * @throws NullPointerException if {@code vcfHeader == null || rec == null}
      */
-    public static boolean[] isDiploid(String vcfRec) {
+    static boolean[] isDiploid(String vcfRec) {
         List<Boolean> list = new ArrayList<>();
         int start = VcfRecGTParser.ninthTabPos(vcfRec) + 1;
         boolean noAlleleSep = true;
@@ -104,7 +102,7 @@ public final class VcfHeader  {
      * @throws IllegalArgumentException if a format error is encountered
      * in a meta-information line or header lines}
      * @throws NullPointerException if
-     * {@code src==null || lines == null || isDiploid == null}
+     * {@code src==null || lines == null || isDiploid == nulle}
      */
     public VcfHeader(String src, String[] lines, boolean[] isDiploid) {
         this(src, lines, isDiploid, Filter.acceptAllFilter());
@@ -289,11 +287,10 @@ public final class VcfHeader  {
     }
 
     /**
-     * Returns a {@code String} containing the VCF meta-information lines
-     * and the post-sample-filtering VCF header line. Each line in the
-     * {@code String} is terminated with a line separator.
+     * Returns the VCF meta-information lines and the VCF header line after
+     * applying sample exclusions.
      * @return the VCF meta-information lines and the VCF header line after
-     * applying sample exclusions
+     * applying sample exclusions.
      */
     @Override
     public String toString() {

@@ -26,8 +26,14 @@ fetch() {  # url dest sha256
   echo "$3  $2" | shasum -a 256 -c -
 }
 fetch "$BASE/test.beagle.vcf.gz" test.vcf.gz 8200f512645c4ac271777bdf20b045d592774dc58e7517885df4627340b184e6
-fetch "$BASE/beagle.27Feb25.75f.jar" beagle.27Feb25.75f.jar 7319f4af9638be05c18dcc1bfb8fb41a58a09293507ebf0d54617d0e40df5a70
-fetch "$BASE/bref3.27Feb25.75f.jar" bref3.27Feb25.75f.jar 6166426f63b2c1cfed9e2cda2f9ba59ef3b3c19fdfc988a9ec6036358457e3f2
+fetch "$BASE/beagle.29Oct24.c8e.jar" beagle.29Oct24.c8e.jar 938f0b1ab12385e0686790cef52d7b9491c96c0c1837af5c0d62c9a6576a8956
+fetch "$BASE/bref3.29Oct24.c8e.jar" bref3.29Oct24.c8e.jar cc921f974277e1a83e3e6edb7ca3424479d5994ea36d6ae9601de10269179cc9
+
+# Runs Beagle 5.4's bref3 jar, killed after 300 s: after an exception it can
+# hang instead of exiting (tests/fuzz-regressions/seq-coder-full).
+bref3() {  # args...
+  perl -e 'alarm shift; exec @ARGV or die "exec: $!\n"' 300 java -jar bref3.29Oct24.c8e.jar "$@"
+}
 
 # Same split as Beagle's run.beagle example: 181 reference samples, 10 targets.
 split_panel() {  # source.vcf.gz suffix
@@ -119,9 +125,12 @@ LC_ALL=C awk "$DIGITS"' NR % 3 == 0 {$4 = digits($4, arabic)} {print}' map.map >
 # Exclusions: every 10th sample and every 13th named marker.
 gzip -dc test.vcf.gz | awk '/^#CHROM/ {for (c = 10; c <= NF; c += 10) print $c}' > exclude.samples
 gzip -dc test.vcf.gz | awk '!/^#/ && $3 != "." && ++n % 13 == 0 {print $3}' > exclude.markers
+# The reference samples among them. Beagle 5.4 does not apply excludesamples=
+# to a bref3 reference.
+gzip -dc test.vcf.gz | awk '/^#CHROM/ {for (c = 10; c <= 190; c += 10) print $c}' > exclude.ref-samples
 
-java -jar bref3.27Feb25.75f.jar ref.vcf.gz > ref.bref3
-java -jar bref3.27Feb25.75f.jar ref.multi.vcf.gz > ref.multi.bref3
+bref3 ref.vcf.gz > ref.bref3
+bref3 ref.multi.vcf.gz > ref.multi.bref3
 # END= in the INFO of every 25th record, SNV or not, and a second ID on every
 # 31st. bref3 keeps END only for markers that are not SNVs, so imputed SNVs
 # print it from a VCF reference but not from this bref3 file.
@@ -129,7 +138,7 @@ gzip -dc ref.vcf.gz | awk 'BEGIN {OFS="\t"} /^#/ {print; next} {
   n++
   if (n % 25 == 0) $8 = "END=" ($2 + length($4) - 1) ";" $8
   if (n % 31 == 0 && $3 != ".") $3 = $3 ";alt" n
-  print }' | java -jar bref3.27Feb25.75f.jar > ref.end.bref3
+  print }' | bref3 > ref.end.bref3
 
 # Several chromosomes: the reference adds chromosome 21 (absent from the
 # target) before 22, and 23 after it. The target adds one marker absent from
@@ -261,7 +270,10 @@ edge_header() {
 # bref3 edge cases: IDs with a 4-byte UTF-8 character (a surrogate pair in
 # Java's modified UTF-8), an invalid byte and two entries, END= on SNV and
 # other markers, a 3-allele SNV, a marker with no ALT allele and a symbolic
-# allele.
+# allele. R4, homozygous REF throughout, keeps the 3-allele SNV below
+# SeqCoder3's sequence limit (3 for 3 samples, 4 for 4): Beagle 5.4 refuses a
+# record whose allele count reaches the limit, then hangs
+# (tests/fuzz-regressions/seq-coder-full).
 {
   printf '##fileformat=VCFv4.2\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tR1\tR2\tR3\n'
   printf '1\t100\trs\360\237\230\200\tA\tC\t.\t.\tEND=100\tGT\t0|1\t1|1\t0|0\n'
@@ -271,12 +283,84 @@ edge_header() {
   printf '1\t250\trs4\tG\t.\t.\t.\t.\tGT\t0|0\t0|0\t0|0\n'
   printf '1\t300\trs5\tT\t<DEL>\t.\t.\tSVTYPE=DEL;END=400\tGT\t0|1\t0|0\t0|0\n'
   printf '1\t350\trs6\tC\tT\t.\t.\t.\tGT\t1|0\t0|1\t0|0\n'
-} | java -jar bref3.27Feb25.75f.jar > edge-bref3.bref3
+} | LC_ALL=C awk 'BEGIN {OFS = "\t"} /^##/ {print; next} /^#CHROM/ {print $0, "R4"; next} {print $0, "0|0"}' \
+  | bref3 > edge-bref3.bref3
 {
   printf '##fileformat=VCFv4.2\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tT1\n'
   printf '1\t100\t.\tA\tC\t.\t.\t.\tGT\t0/1\n'
   printf '1\t350\t.\tC\tT\t.\t.\t.\tGT\t0/1\n'
 } | gzip > edge-bref3-target.vcf.gz
+
+# Beagle 5.4 marker and record text (tests/oracle-cases.txt). test.filter-end
+# has FILTER q10 on every 3rd record and . on the next, which Beagle 5.4
+# writes as PASS, and END= in the INFO of every 25th record. test.end-text has
+# END= with leading zeros on every 25th record and two END= subfields, the last
+# the valid one, on every 25th from the 13th. test.ids-dot turns the ID of
+# every 7th named record into three entries with a . between them.
+gzip -dc test.vcf.gz | awk 'BEGIN {OFS="\t"} /^#/ {print; next} {
+  n++
+  if (n % 3 == 0) $7 = "q10"; else if (n % 3 == 1) $7 = "."
+  if (n % 25 == 0) $8 = "END=" ($2 + length($4) - 1) ";" $8
+  print }' | gzip > test.filter-end.vcf.gz
+gzip -dc test.vcf.gz | awk 'BEGIN {OFS="\t"} /^#/ {print; next} {
+  n++
+  end = $2 + length($4) - 1
+  if (n % 25 == 0) $8 = "END=00" end ";" $8
+  if (n % 25 == 13) $8 = "END=" (end + 7) ";" $8 ";END=" end
+  print }' | gzip > test.end-text.vcf.gz
+gzip -dc test.vcf.gz | awk 'BEGIN {OFS="\t"} /^#/ {print; next} {
+  n++
+  if (n % 7 == 0 && $3 != ".") $3 = $3 ";.;alt" n
+  print }' | gzip > test.ids-dot.vcf.gz
+
+# Genetic maps with a plateau. On map.plateau (0.004 cM over the region) the
+# minimum marker distance, the mean single-base distance, is below 1e-7 cM, so
+# consecutive markers in the flat 20.03-20.06 Mb stretch, or a few bp apart,
+# have distances that Beagle 5.4 raises to 1e-7 cM. map.plateau2 has 1 cM
+# steps with a flat 2 cM stretch.
+printf '22\t.\t0.0\t19990000\n22\t.\t0.001\t20030000\n22\t.\t0.001\t20060000\n22\t.\t0.004\t20110000\n' > map.plateau.map
+printf '22\t.\t0.0\t19990000\n22\t.\t1.0\t20030000\n22\t.\t2.0\t20040000\n22\t.\t2.0\t20070000\n22\t.\t3.0\t20110000\n' > map.plateau2.map
+# A long gap: test.vcf.gz without 20.03-20.08 Mb (about 2.5 cM on map.map).
+gzip -dc test.vcf.gz | awk '/^#/ || $2 < 20030000 || $2 >= 20080000' | gzip > test.gap.vcf.gz
+# A phased target, the first 20 reference samples at every 10th marker, and
+# the other 161 samples as the reference, in VCF and bref3.
+gzip -dc ref.vcf.gz | awk 'BEGIN {OFS="\t"} /^##/ {print; next} {
+  line = $1; for (i = 2; i <= 9; i++) line = line OFS $i
+  if (/^#CHROM/) { for (i = 10; i < 30; i++) line = line OFS $i; print line; next }
+  if (++n % 10 != 0) next
+  for (i = 10; i < 30; i++) line = line OFS $i; print line }' | gzip > target.phased.vcf.gz
+gzip -dc ref.vcf.gz | awk 'BEGIN {OFS="\t"} /^##/ {print; next} {
+  line = $1; for (i = 2; i <= 9; i++) line = line OFS $i
+  for (i = 30; i <= NF; i++) line = line OFS $i; print line }' | gzip > ref.rest.vcf.gz
+bref3 ref.rest.vcf.gz > ref.rest.bref3
+gzip -dc ref.rest.vcf.gz | awk '/^#CHROM/ {for (c = 10; c <= NF; c += 7) print $c}' > exclude.rest.samples
+# The reference sequence-count limit: with 10 reference samples SeqCoder3
+# allows floor(2^(2*log10(10)+1)) = 8 sequences. Record r gives the ALT allele
+# to both haplotypes of sample r mod 10 (and of sample (r+3) mod 10 on every
+# 4th record), so each record adds one sequence and the 7th reaches exactly 8:
+# Beagle 5.4 starts a new block there, Beagle 5.5 one record later.
+{
+  printf '##fileformat=VCFv4.2\n##contig=<ID=22>\n##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">\n'
+  printf '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT'
+  for s in 0 1 2 3 4 5 6 7 8 9; do printf '\tR%d' $s; done; printf '\n'
+  for r in $(seq 0 59); do
+    printf '22\t%d\tm%d\tA\tC\t.\tPASS\t.\tGT' $((20000000 + 1000 * r)) "$r"
+    for s in 0 1 2 3 4 5 6 7 8 9; do
+      if [ $s -eq $((r % 10)) ] || { [ $((r % 4)) -eq 3 ] && [ $s -eq $(((r + 3) % 10)) ]; }; then printf '\t1|1'; else printf '\t0|0'; fi
+    done
+    printf '\n'
+  done
+} | gzip > ref.seqlimit.vcf.gz
+bref3 ref.seqlimit.vcf.gz > ref.seqlimit.bref3
+{
+  printf '##fileformat=VCFv4.2\n##contig=<ID=22>\n##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">\n'
+  printf '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tT0\tT1\tT2\n'
+  for r in $(seq 0 3 59); do
+    printf '22\t%d\tm%d\tA\tC\t.\tPASS\t.\tGT' $((20000000 + 1000 * r)) "$r"
+    for s in 0 1 2; do if [ $s -eq $((r % 10)) ]; then printf '\t1|0'; else printf '\t0|0'; fi; done
+    printf '\n'
+  done
+} | gzip > target.seqlimit.vcf.gz
 
 # Paths relative to the checkout let a complete cache move between worktrees.
 # Publish only after every generator and checksum above has succeeded.

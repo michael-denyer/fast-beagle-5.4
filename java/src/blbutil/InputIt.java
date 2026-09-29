@@ -228,8 +228,7 @@ public class InputIt implements FileIt<String> {
      * Constructs and returns a buffered {@code InputIt} instance that
      * iterates through lines of the specified compressed or uncompressed
      * text file. If the filename ends in ".gz", the file must be
-     * GZIP-compressed. The Java virtual machine will exit with an
-     * error message if an I/O error is encountered.
+     * tGZIP-compressed.
      *
      * @param file a compressed or uncompressed text file
      * @return  a buffered {@code InputIt} instance that iterates

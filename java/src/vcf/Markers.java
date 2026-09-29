@@ -37,6 +37,7 @@ public final class Markers {
     private final Marker[] markers;
     private final Set<Marker> markerSet;
     private final int[] sumAlleles;
+    private final int[] sumGenotypes;
     private final int[] sumHapBits;
     private final int hashCode;
 
@@ -82,6 +83,7 @@ public final class Markers {
         this.markerSet = markerSet(markers);
 
         this.sumAlleles = cumSumAlleles(markers);
+        this.sumGenotypes = cumSumGenotypes(markers);
         this.sumHapBits = cumSumHaplotypeBits(markers);
         this.hashCode = Arrays.deepHashCode(markers);
     }
@@ -138,17 +140,10 @@ public final class Markers {
         return ia;
     }
 
-    /**
-     * Return an array of length {@code this.size() + 1} whose
-     * {@code k}-th value is the the sum of the number of possible genotypes
-     * for markers with index less than {@code k}
-     * @return  an array whose {@code k}-th value is the the sum of the number
-     * of possible genotypes for markers with index less than {@code k}
-     */
-    public int[] cumSumGenotypes() {
+    private static int[] cumSumGenotypes(Marker[] markers) {
         int[] ia = new int[markers.length + 1];
         for (int j=1; j<ia.length; ++j) {
-            ia[j] = ia[j-1] + MarkerUtils.nGenotypes(markers[j-1].nAlleles());
+            ia[j] = ia[j-1] + markers[j-1].nGenotypes();
         }
         return ia;
     }
@@ -308,6 +303,27 @@ public final class Markers {
      */
     public int sumAlleles() {
         return sumAlleles[markers.length];
+    }
+
+    /**
+     * Returns the sum of the number of possible genotypes for the markers
+     * with index less than the specified index.
+     * @param marker a marker index
+     * @return the sum of the number of possible genotypes for the markers
+     * with index less than the specified index
+     * @throws IndexOutOfBoundsException if
+     * {@code marker < 0 || marker > this.nMarkers()}
+     */
+    public int sumGenotypes(int marker) {
+        return sumGenotypes[marker];
+    }
+
+    /**
+     * Returns {@code this.sumGenotypes(this.nMarkers())}.
+     * @return {@code this.sumGenotypes(this.nMarkers())}
+     */
+    public int sumGenotypes() {
+        return sumGenotypes[markers.length];
     }
 
     /**

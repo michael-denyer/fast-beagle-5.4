@@ -28,12 +28,17 @@ unknown parameter). Java and C must both exit 1 with the same message (Java
 may prefix it with the exception class) and leave the input files unchanged.
 
 First, each directory in tests/fuzz-regressions (inputs from earlier
-failures, with their arguments in args.txt) must give the C exit code and
-message named in expect.txt.
+failures, with their arguments in args.txt) must give the C result named in
+expect.txt: an exit code and a message, or exit code 0 and the VCF hash.
+
+Results are judged under the parity ratchet (tests/c54-ratchet.sh) with the
+keys "fuzz-regression <directory>", "fuzz" for the generated examples as a
+whole, and "fuzz-invalid <change>" for each invalid-parameter change. A listed
+key's differences are counted, not shrunk.
 
 Without --random the examples are the same on every run (the gate's mode).
 BEAGLE overrides the C binary (default build/beagle), JAR the jar (default
-data/beagle.27Feb25.75f.jar) and JAVA the java command.
+data/beagle.29Oct24.c8e.jar) and JAVA the java command.
 """
 
 import argparse
@@ -55,16 +60,39 @@ from hypothesis import strategies as st
 
 ROOT = Path(__file__).resolve().parent.parent
 BEAGLE = os.environ.get("BEAGLE", str(ROOT / "build" / "beagle"))
-JAR = os.environ.get("JAR", str(ROOT / "data" / "beagle.27Feb25.75f.jar"))
+JAR = os.environ.get("JAR", str(ROOT / "data" / "beagle.29Oct24.c8e.jar"))
 JAVA = os.environ.get("JAVA", "java")
 FAIL_DIR = ROOT / "build" / "fuzz-fail"
 REGRESSIONS = ROOT / "tests" / "fuzz-regressions"
+RATCHET = ROOT / "tests" / "c54-ratchet.sh"
 STALL = "does not advance"
 # bgen= must fail when no record is left for the BGEN (as plink2 does), after
 # writing the VCF.
 BGEN_EMPTY = "no variants remaining after the bgen filters"
 BASES = "ACGT"
 OUTCOMES = Counter()
+# Differences per ratchet key; a key with none must not be listed as pending.
+DIFFERENCES = Counter()
+
+
+def ratchet(key, status):
+    """True when the check may continue: tests/c54-ratchet.sh judges the key's result."""
+    result = subprocess.run([str(RATCHET), key, str(status)], capture_output=True, text=True, check=False)
+    if result.stdout:
+        print(result.stdout, end="")
+    return result.returncode == 0
+
+
+def pending_difference(key):
+    """Counts a difference for key; True while the key is listed as pending."""
+    if DIFFERENCES[key] == 0 and not ratchet(key, 1):
+        return False
+    DIFFERENCES[key] += 1
+    return True
+
+
+def invalid_key(invalid):
+    return "fuzz-invalid " + " ".join(map(str, invalid))
 
 
 @st.composite
@@ -335,7 +363,7 @@ def check(s):
         elif messages is not None:
             # Counted, not failed: both fail with a message, worded differently.
             OUTCOMES[f"both fail, messages differ: java {messages[0][:60]!r}, C {messages[1][:60]!r}"] += 1
-        if not ok:
+        if not ok and not pending_difference("fuzz"):
             if FAIL_DIR.exists():
                 shutil.rmtree(FAIL_DIR)
             shutil.copytree(d, FAIL_DIR)
@@ -385,6 +413,8 @@ def check_invalid(s):
         same = messages is not None and messages[0].endswith(messages[1])
         kind = s["invalid"][0]
         changed = [p.name for p, data in inputs.items() if p.read_bytes() != data]
+        if not same and not changed and pending_difference(invalid_key(s["invalid"])):
+            return
         if messages is None or not same or changed:
             raise AssertionError(
                 f"{s['invalid']}: java exit={rc_j}, C exit={rc_c}, same message: {same}, inputs changed: {changed}\n"
@@ -418,15 +448,18 @@ time.sleep(10)
 def check_regressions():
     for case in sorted(d for d in REGRESSIONS.iterdir() if d.is_dir()):
         args = (case / "args.txt").read_text().split()
-        want_rc, want_msg = (case / "expect.txt").read_text().rstrip("\n").split(" ", 1)
+        want_rc, want = (case / "expect.txt").read_text().rstrip("\n").split(" ", 1)
         with tempfile.TemporaryDirectory() as tmp:
             cmd = [BEAGLE, f"gt={case}/targ.vcf", f"out={tmp}/c", *args]
             if (case / "ref.vcf").exists():
                 cmd.append(f"ref={case}/ref.vcf")
-            rc, _, log = run(cmd, Path(tmp) / "c")
-        if rc != int(want_rc) or want_msg not in log:
-            sys.exit(f"FAIL regression {case.name}: exit {rc}, want {want_rc} and {want_msg!r}\n{log[-2000:]}")
-        print(f"PASS regression {case.name}")
+            rc, vcf, log = run(cmd, Path(tmp) / "c")
+        # Exit code 0 names the VCF hash, any other a message.
+        ok = rc == int(want_rc) and (vcf == want if rc == 0 else want in log)
+        if not ratchet(f"fuzz-regression {case.name}", 0 if ok else 1):
+            sys.exit(f"FAIL regression {case.name}: exit {rc} hash {vcf}, want {want_rc} and {want!r}\n{log[-2000:]}")
+        if ok:
+            print(f"PASS regression {case.name}")
 
 
 def main():
@@ -448,16 +481,24 @@ def main():
         suppress_health_check=[HealthCheck.too_slow],
         print_blob=True,
     )
+    keys = []
     if a.examples:
         test = settings(fuzz, max_examples=a.examples)(given(scenarios())(check))
         if a.reproduce:
             test = reproduce_failure("6.168.1", a.reproduce.encode())(test)
         test()
+        keys.append("fuzz")
     if a.invalid_examples and not a.reproduce:
         for invalid in INVALID:
             settings(fuzz, max_examples=a.invalid_examples)(given(invalid_scenarios(invalid))(check_invalid))()
+            keys.append(invalid_key(invalid))
+    stale = [key for key in keys if DIFFERENCES[key] == 0 and not ratchet(key, 0)]
+    for key, n in DIFFERENCES.items():
+        print(f"{n:5d}  pending differences: {key}")
     for outcome, n in OUTCOMES.most_common():
         print(f"{n:5d}  {outcome}")
+    if stale:
+        sys.exit(f"FAIL {len(stale)} pending keys now match Beagle 5.4")
     mode = "random" if a.random else "fixed"
     print(
         f"PASS {a.examples} fuzz examples and {a.invalid_examples} for each of {len(INVALID)}"

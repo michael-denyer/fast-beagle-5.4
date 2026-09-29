@@ -109,6 +109,26 @@ public final class SplicedGT implements GT {
     }
 
     @Override
+    public int allele1(int marker, int sample) {
+        if (marker<overlap) {
+            return phasedGT.allele1(marker, sample);
+        }
+        else {
+            return gt.allele1(marker, sample);
+        }
+    }
+
+    @Override
+    public int allele2(int marker, int sample) {
+        if (marker<overlap) {
+            return phasedGT.allele2(marker, sample);
+        }
+        else {
+            return gt.allele2(marker, sample);
+        }
+    }
+
+    @Override
     public int allele(int marker, int hap) {
         if (marker<overlap) {
             return phasedGT.allele(marker, hap);

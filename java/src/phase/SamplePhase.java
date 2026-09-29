@@ -29,7 +29,10 @@ import vcf.Markers;
 
 /**
  * <p>Each instance of class {@code SamplePhase} stores an estimated haplotype
- * pair for a sample.
+ * pair for a sample, the list of markers with missing genotypes for the sample,
+ * a list of markers whose genotype phase with respect to the preceding
+ * heterozygote genotype is considered to be uncertain for the sample, and
+ * a set of marker clusters for the sample.
  * </p>
  * <p>Instances of class {@code SamplePhase} are not thread-safe.
  * </p>
@@ -38,52 +41,35 @@ import vcf.Markers;
  */
 public final class SamplePhase {
 
-    public static enum ClustType {
-        MISSING_GT,
-        MASKED_HET,
-        HOMOZYGOUS_GT,
-        PHASED_HET,
-        UNPHASED_HET
-    }
-
-    private static final ClustType[] clustTypes = ClustType.values();
-
-    private final int sample;
     private final Markers markers;
-    private final BitArray hap1;
-    private final BitArray hap2;
+    private BitArray hap1;
+    private BitArray hap2;
+    private IntArray unphased;
+    private final IntArray missing;
     private final byte[] clustSize;
-    private final byte[] clustType;
-    private final int[] clustTypeCnt = new int[clustTypes.length];
-
 
     /**
      * Constructs a new {@code SamplePhase} instance from the specified data.
-     * @param sample the sample index
      * @param markers the list of markers
      * @param genPos the genetic positions of the specifed markers
      * @param hap1 the list of alleles on the first haplotype
      * @param hap2 the list of alleles on the second haplotype
-     * @param unphasedHets the indices of markers whose genotype phase with respect
+     * @param unphased the indices of markers whose genotype phase with respect
      * to the preceding heterozygote is unknown
-     * @param missingGTs the indices of markers whose genotype is missingGT
-     * @throws IllegalArgumentException if {@code sample < 0}
+     * @param missing the indices of markers whose genotype is missing
      * @throws IllegalArgumentException if
      * {@code genPos.size() != markers.nMarkers()}
      * @throws IllegalArgumentException if
-     * {@code hap1.length != markers.nMarkers() || hap2.length != markers.nMarkers()}
-     * @throws IllegalArgumentException if the specified {@code unphasedHet} or
-     * {@code missingGT} list is not a strictly increasing list of
+     * {@code hap1.length != markers.nMarkers()
+     * || hap2.length != markers.nMarkers()}
+     * @throws IllegalArgumentException if the specified {@code unphased} or
+     * {@code missing} list is not a strictly increasing list of
      * marker indices between 0 (inclusive) and {@code markers.nMarkers()}
      * (exclusive)
      * @throws NullPointerException if any argument is {@code null}
      */
-    public SamplePhase(int sample, Markers markers, DoubleArray genPos,
-            int[] hap1, int[] hap2, IntArray unphasedHets, IntArray missingGTs) {
-        if (sample < 0) {
-            throw new IllegalArgumentException(String.valueOf(sample));
-        }
-        this.sample = sample;
+    public SamplePhase(Markers markers, DoubleArray genPos,
+            int[] hap1, int[] hap2, IntArray unphased, IntArray missing) {
         int nMarkers = markers.size();
         if (nMarkers!=genPos.size()) {
             throw new IllegalArgumentException(String.valueOf(genPos.size()));
@@ -94,21 +80,17 @@ public final class SamplePhase {
         if (hap2.length!=nMarkers) {
             throw new IllegalArgumentException(String.valueOf(hap2.length));
         }
-        checkIncreasing(unphasedHets, nMarkers);
-        checkIncreasing(missingGTs, nMarkers);
+        checkIncreasing(unphased, nMarkers);
+        checkIncreasing(missing, nMarkers);
         this.markers = markers;
         this.hap1 = new BitArray(markers.sumHapBits());
         this.hap2 = new BitArray(markers.sumHapBits());
         markers.allelesToBits(hap1, this.hap1);
         markers.allelesToBits(hap2, this.hap2);
+        this.unphased = unphased;
+        this.missing = missing;
         float maxClusterCM = 0.005f;
-        IntList clustTypeList = new IntList();
-        IntList clustSizeList = new IntList();
-        setClusters(hap1, hap2, missingGTs, unphasedHets, genPos, maxClusterCM,
-                clustTypeList, clustTypeCnt, clustSizeList);
-        this.clustType = toByteArray(clustTypeList);
-        this.clustSize = toByteArray(clustSizeList);
-        assert clustSize.length==clustType.length;
+        this.clustSize = clustSize(hap1, hap2, missing, genPos, maxClusterCM);
     }
 
     private static void checkIncreasing(IntArray ia, int nMarkers) {
@@ -124,62 +106,33 @@ public final class SamplePhase {
         }
     }
 
-    private static void setClusters(int[] hap1, int[] hap2, IntArray missingGT,
-            IntArray unphHets, DoubleArray genPos, float maxCM,
-            IntList clustType, int[] clustTypeCnt, IntList clustSizeList)  {
+    private static byte[] clustSize(int[] hap1, int[] hap2, IntArray missing,
+            DoubleArray genPos, float maxCM)  {
+        IntList clustSizes = new IntList(1<<12);
         int nMarkers = genPos.size();
         double maxClustEnd = genPos.get(0) + maxCM;
-        boolean prevIsMissingOrHet = false;
+        boolean prevIsMissOrHet = false;
         int lastEnd = 0;
         int missIndex = 0;
-        int unphIndex = 0;
-        int nextMiss = missIndex<missingGT.size() ? missingGT.get(missIndex++) : -1;
-        int nextUnph = unphIndex<unphHets.size() ? unphHets.get(unphIndex++) : -1;
-        ClustType prevType = ClustType.HOMOZYGOUS_GT;
+        int nextMiss = missIndex<missing.size() ? missing.get(missIndex++) : -1;
         for (int m=0; m<nMarkers; ++m) {
             int size = m - lastEnd;
-            ClustType type = clustType(m==nextMiss, m==nextUnph, hap1[m], hap2[m]);
-            if (type==ClustType.MISSING_GT) {
-                nextMiss = missIndex<missingGT.size() ? missingGT.get(missIndex++) : -1;
+            boolean isMissing = m==nextMiss;
+            if (isMissing) {
+                nextMiss = missIndex<missing.size() ? missing.get(missIndex++) : -1;
             }
-            else if (type==ClustType.UNPHASED_HET) {
-                nextUnph = unphIndex<unphHets.size() ? unphHets.get(unphIndex++) : -1;
-            }
-            boolean isMissingOrHet = type==ClustType.MISSING_GT
-                    || type==ClustType.UNPHASED_HET
-                    || type==ClustType.PHASED_HET;
-            if (isMissingOrHet || prevIsMissingOrHet
-                    || genPos.get(m)>maxClustEnd || size==255) {
+            boolean isMissOrHet = isMissing || hap1[m]!=hap2[m];
+            if (prevIsMissOrHet || isMissOrHet || genPos.get(m)>maxClustEnd || size==255) {
                 if (m>0) {
-                    clustType.add(prevType.ordinal());
-                    ++clustTypeCnt[prevType.ordinal()];
-                    clustSizeList.add(size);
+                    clustSizes.add(size);
                     maxClustEnd = genPos.get(m) + maxCM;
                     lastEnd = m;
                 }
-                prevType = type;
             }
-            prevIsMissingOrHet = isMissingOrHet;
+            prevIsMissOrHet = isMissOrHet;
         }
-        clustType.add(prevType.ordinal());
-        ++clustTypeCnt[prevType.ordinal()];
-        clustSizeList.add(nMarkers - lastEnd);
-    }
-
-    private static ClustType clustType(boolean isMissing, boolean isUnphased,
-            int a1, int a2) {
-        if (isMissing) {
-            return ClustType.MISSING_GT;
-        }
-        else if (a1==a2) {
-            return ClustType.HOMOZYGOUS_GT;
-        }
-        else if (isUnphased) {
-            return ClustType.UNPHASED_HET;
-        }
-        else {
-           return ClustType.PHASED_HET;
-        }
+        clustSizes.add(nMarkers - lastEnd);
+        return toByteArray(clustSizes);
     }
 
     private static byte[] toByteArray(IntList intList) {
@@ -188,114 +141,6 @@ public final class SamplePhase {
             ba[j] = (byte) intList.get(j);
         }
         return ba;
-    }
-
-    /**
-     * Returns the sample index.
-     * @return the sample index
-     */
-    public int sample() {
-        return sample;
-    }
-
-    /**
-     * Masks the trailing unphased heterozygote or heterozygotes in any maximal
-     * sequence of consecutive unphased heterozygotes if the maximal sequence
-     * has size two or three and spans less than 3000 base pairs.
-     */
-    public void maskTrailingUnphasedHets() {
-        int maxUnphHetClusters = 3;
-        int maxMaskedBasePairs = 3000;
-        IntList unphHetMarkers = new IntList();
-        IntList unphHetClusters = new IntList();
-        int startMarker = 0;
-        for (int c=0; c<clustType.length; ++c) {
-            ClustType ct = clustType(c);
-            if (ct==ClustType.PHASED_HET) {
-                if (2<=unphHetClusters.size() && unphHetClusters.size()<=maxUnphHetClusters) {
-                    maskTrailingUnphasedHets(unphHetClusters, unphHetMarkers, maxMaskedBasePairs);
-                }
-                unphHetMarkers.clear();
-                unphHetClusters.clear();
-            }
-            else if (ct==ClustType.UNPHASED_HET) {
-                unphHetMarkers.add(startMarker);
-                unphHetClusters.add(c);
-            }
-            startMarker += clustSize[c] & 0xff;
-        }
-        if (2<=unphHetClusters.size() && unphHetClusters.size()<=maxUnphHetClusters) {
-            maskTrailingUnphasedHets(unphHetClusters, unphHetMarkers, maxMaskedBasePairs);
-        }
-        assert startMarker==markers.size();
-    }
-
-    private void maskTrailingUnphasedHets(IntList unphHetClusters,
-            IntList unphHetMarkers, int maxMaskedBasePairs) {
-        int lastMaskedIndex = unphHetClusters.size()-2;
-        if (lastMaskedIndex==0) {
-            maskHetCluster(unphHetClusters.get(lastMaskedIndex));
-        }
-        else if (lastMaskedIndex>0) {
-            int startPos = markers.marker(unphHetMarkers.get(0)).pos();
-            int endPos = markers.marker(unphHetMarkers.get(lastMaskedIndex)).pos();
-            if ((endPos - startPos)<=maxMaskedBasePairs) {
-                for (int j=0; j<=lastMaskedIndex; ++j) {
-                    maskHetCluster(unphHetClusters.get(j));
-                }
-            }
-        }
-    }
-
-    /**
-     * Masks the unphased heterozygote genotype in the specified cluster.
-     * @param cluster a cluster index
-     * @throws IllegalArgumentException if
-     * {@code this.clustType(cluster) != ClustType.UNPHASED_HET}
-     * @throws IndexOutOfBoundsException if
-     * {@code (cluster < 0 || cluster >= this.nClusters())}
-     */
-    public void maskHetCluster(int cluster) {
-        if (clustType[cluster]!=ClustType.UNPHASED_HET.ordinal()) {
-            throw new IllegalArgumentException(String.valueOf(clustType[cluster]));
-        }
-        clustType[cluster] = (byte) ClustType.MASKED_HET.ordinal();
-        --clustTypeCnt[ClustType.UNPHASED_HET.ordinal()];
-        ++clustTypeCnt[ClustType.MASKED_HET.ordinal()];
-    }
-
-    /**
-     * Marks the specified unphased heterozygote genotype as phased.
-     * @param cluster a cluster index
-     * @throws IllegalArgumentException if
-     * {@code this.clustType(cluster) != ClustType.UNPHASED_HET}
-     * @throws IndexOutOfBoundsException if
-     * {@code (cluster < 0 || cluster >= this.nClusters())}
-     */
-    public void markUnphasedHetClusterAsPhased(int cluster) {
-        if (clustType[cluster]!=ClustType.UNPHASED_HET.ordinal()) {
-            throw new IllegalArgumentException(String.valueOf(clustType[cluster]));
-        }
-        clustType[cluster] = (byte) ClustType.PHASED_HET.ordinal();
-        --clustTypeCnt[ClustType.UNPHASED_HET.ordinal()];
-        ++clustTypeCnt[ClustType.PHASED_HET.ordinal()];
-    }
-
-    /**
-     * Marks the specified masked heterozygote genotype as phased.
-     * @param cluster a cluster index
-     * @throws IllegalArgumentException if
-     * {@code this.clustType(cluster) != ClustType.MASKED_HET}
-     * @throws IndexOutOfBoundsException if
-     * {@code (cluster < 0 || cluster >= this.nClusters())}
-     */
-    public void markMaskedHetClusterAsPhased(int cluster) {
-        if (clustType[cluster]!=ClustType.MASKED_HET.ordinal()) {
-            throw new IllegalArgumentException(String.valueOf(clustType[cluster]));
-        }
-        clustType[cluster] = (byte) ClustType.PHASED_HET.ordinal();
-        --clustTypeCnt[ClustType.MASKED_HET.ordinal()];
-        ++clustTypeCnt[ClustType.PHASED_HET.ordinal()];
     }
 
     /**
@@ -322,73 +167,40 @@ public final class SamplePhase {
     }
 
     /**
-     * Returns the number of genotype clusters
-     * @return the number of genotype clusters
+     * Returns a list of marker indices in increasing order for which
+     * the genotype is missing.
+     * @return a list of marker indices in increasing order for which
+     * the genotype is missing
      */
-    public int nClusters() {
-        return clustSize.length;
+    public IntArray missing() {
+        return missing;
     }
 
     /**
-     * Returns the size of the specified cluster
-     * @param cluster a cluster index
-     * @return the size of the specified cluster
-     * @throws IllegalArgumentException if
-     * {@code (cluster < 0 || cluster >= this.nClusters())}
+     * Returns a list of marker indices in increasing order whose genotype
+     * phase with respect to the preceding non-missing heterozygote genotype
+     * is unknown.
+     * @return a list of markers indices in increasing order whose genotype
+     * phase with respect to the preceding non-missing heterozygote genotype
+     * is unknown
      */
-    public int clustSize(int cluster) {
-        return clustSize[cluster] & 0xff;
+    public IntArray unphased() {
+        return unphased;
     }
 
     /**
-     * Returns the cluster type
-     * @param cluster a cluster index
-     * @return the cluster type
-     * @throws IndexOutOfBoundsException if
-     * {@code (cluster < 0 || cluster >= this.clustEnds().length())}
+     * Sets the list of markers whose genotype phase with respect to
+     * the preceding non-missing heterozygote genotype is unknown.
+     * @param unphased a list of markers whose genotype phase with respect to
+     * the preceding non-missing heterozygote genotype is unknown
+     * @throws IllegalArgumentException if the specified list or marker
+     * indices is not a strictly increasing list of indices between 0
+     * (inclusive) and {@code this.markers().nMarkers()} (exclusive)
+     * @throws NullPointerException if {@code unphased == null}
      */
-    public ClustType clustType(int cluster) {
-        return clustTypes[clustType[cluster]];
-    }
-
-    /**
-     * Returns the number of unphased, non-masked heterozygotes.
-     * @return the number of unphased, non-masked heterozygotes
-     */
-    public int nUnphased() {
-        return clustTypeCnt[ClustType.UNPHASED_HET.ordinal()];
-    }
-
-    /**
-     * Returns the number of phased, non-masked heterozygotes.
-     * @return the number of phased, non-masked heterozygotes
-     */
-    public int nPhased() {
-        return clustTypeCnt[ClustType.PHASED_HET.ordinal()];
-    }
-
-    /**
-     * Returns the number of masked heterozygotes.
-     * @return the number of masked heterozygotes
-     */
-    public int nMasked() {
-        return clustTypeCnt[ClustType.MASKED_HET.ordinal()];
-    }
-
-    /**
-     * Returns the number of missing genotypes.
-     * @return the number of missing genotypes
-     */
-    public int nMissing() {
-        return clustTypeCnt[ClustType.MISSING_GT.ordinal()];
-    }
-
-    /**
-     * Returns the number of homozygote clusters.
-     * @return the number of homozygote clusters
-     */
-    public int nHomClusters() {
-        return clustTypeCnt[ClustType.HOMOZYGOUS_GT.ordinal()];
+    public void setUnphased(IntArray unphased) {
+        checkIncreasing(unphased, markers.size());
+        this.unphased = unphased;
     }
 
     /**

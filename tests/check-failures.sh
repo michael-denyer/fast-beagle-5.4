@@ -4,8 +4,10 @@
 # files unchanged and write no output.
 #
 # Usage: tests/check-failures.sh <command...>
-#   tests/check-failures.sh java -ea -jar data/beagle.27Feb25.75f.jar
+#   tests/check-failures.sh java -ea -jar data/beagle.29Oct24.c8e.jar
 #   tests/check-failures.sh build/beagle
+# A command other than java is judged under the parity ratchet
+# (tests/c54-ratchet.sh) with the key "failure <case>".
 set -uo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 # shellcheck source=cases.sh
@@ -18,10 +20,19 @@ failed() { echo "FAIL $*"; fail=1; }
 
 # ABSENT names an output the refused run must not write.
 check() {  # name message args...
-  local name=$1 message=$2; shift 2
+  local name=$1 message=$2 status=0 miss=FAIL; shift 2
+  [ "${BEAGLE[0]}" = java ] || miss=$(miss_label "failure $name")
   "${BEAGLE[@]}" "$@" seed=$SEED nthreads=2 > "$OUT/$name.log" 2>&1
-  refused "$OUT/$name.log" $? "$message" ${ABSENT:+"$ABSENT"} || { failed "$name $VERDICT"; return; }
-  echo "PASS $name: $message"
+  if refused "$OUT/$name.log" $? "$message" ${ABSENT:+"$ABSENT"}; then
+    echo "PASS $name: $message"
+  else
+    echo "$miss $name $VERDICT"; status=1
+  fi
+  if [ "${BEAGLE[0]}" = java ]; then
+    [ $status -eq 0 ] || fail=1
+  else
+    ratchet "failure $name" $status || fail=1
+  fi
 }
 
 unchanged() {  # name file hash
@@ -54,6 +65,34 @@ ABSENT="$OUT/window.vcf.gz" check window-overlap \
 gzip -dc "$DATA/target.vcf.gz" | LC_ALL=C awk 'BEGIN {OFS = "\t"} /^#/ {print; next}
   !done {$10 = sprintf("%c%c", 217, 161) substr($10, 2); done = 1} {print}' | gzip > "$OUT/one-char.vcf.gz"
 check one-char-allele "ERROR: Invalid allele [$(printf '\331\241')]" gt="$OUT/one-char.vcf.gz" out="$OUT/one-char-out"
+
+# BasicMarker exits on a malformed marker. Each file edits the 100th record of
+# target.vcf.gz (22:20008093, REF G, ALT A), so only one record fails:
+# parallel parsing makes the message of the first of several failures vary.
+marker_check() {  # name message field value
+  local name=$1 message=$2
+  gzip -dc "$DATA/target.vcf.gz" | awk -v f="$3" -v v="$4" 'BEGIN {OFS = "\t"} /^#/ {print; next} ++n == 100 {$f = v} {print}' \
+    | gzip > "$OUT/$name.vcf.gz"
+  check "$name" "$message" gt="$OUT/$name.vcf.gz" out="$OUT/$name-out"
+}
+marker_check end-before-pos "ERROR: invalid INFO:END field at 22:20008093 [20008092]" 8 END=20008092
+marker_check ref-not-acgtn "ERROR: REF field is not a sequence of A, C, T, G, or N characters at 22:20008093 [R]" 4 R
+marker_check duplicate-alleles "ERROR: duplicate allele at 22:20008093 [G, G]" 5 G
+
+# Beagle 5.5's parameters, which Beagle 5.4's Par does not know.
+check initial-lr "Error: unrecognized parameter: initial-lr=100" \
+  gt="$DATA/target.vcf.gz" out="$OUT/initial-lr" initial-lr=100
+check window-markers "Error: unrecognized parameter: window-markers=100000" \
+  gt="$DATA/target.vcf.gz" out="$OUT/window-markers" window-markers=100000
+
+# A 2.5 cM gap in the target markers, longer than the window. Imputing, Beagle
+# 5.4 fails on the window 22:20049939-20068772, which has no target markers
+# (Beagle 5.5 ends that window elsewhere). Phasing only, it fails on a window
+# with one position.
+check imp-gap-map "22:20049939-20068772" \
+  ref="$DATA/ref.vcf.gz" gt="$DATA/target.gap.vcf.gz" map="$DATA/map.map" window=1.5 overlap=0.5 out="$OUT/gap"
+check imp-gap-map-noimp "java.lang.IllegalArgumentException: Window has only one position: CHROM=22 POS=20029411" \
+  ref="$DATA/ref.vcf.gz" gt="$DATA/target.gap.vcf.gz" map="$DATA/map.map" window=1.5 overlap=0.5 impute=false out="$OUT/gap-noimp"
 
 # PlinkGenMap throws IllegalArgumentException, and prints a genetic position
 # with Double.toString.

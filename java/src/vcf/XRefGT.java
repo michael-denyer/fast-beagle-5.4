@@ -79,6 +79,41 @@ public final class XRefGT implements GT {
     }
 
     /**
+     * Returns a new {@code XRefGT} instance from the specified data.  The
+     * specified haplotypes will be copied, and the returned {@code XRefGT}
+     * instance will not contain a reference to the specified haplotypes.
+     *
+     * @param markers the list of markers
+     * @param samples the list of samples
+     * @param haps the list of haplotypes corresponding to the list of samples
+     * @return a  new{@code XRefGT} instance
+     *
+     * @throws IllegalArgumentException if there exists
+     * {@code (0 <= j && j < haps.length)} such that
+     * {@code (haps[j].size() != markers.sumHaplotypeBits())}
+     * @throws IllegalArgumentException if
+     * {@code 2*samples.size() != haps.length}
+     * @throws NullPointerException if
+     * {@code markers == null || samples == null || haps == null}
+     */
+    public static XRefGT from(Markers markers, Samples samples, BitArray[] haps) {
+        int nHapBits = markers.sumHapBits();
+        for (BitArray hap : haps) {
+            if (hap.size()!=nHapBits) {
+                throw new IllegalArgumentException("inconsistent data");
+            }
+        }
+        if (samples.size()<<1 != haps.length) {
+            throw new IllegalArgumentException("inconsistent data");
+        }
+        BitArray[] copy = Arrays.stream(haps)
+                .parallel()
+                .map(hap -> new BitArray(hap))
+                .toArray(BitArray[]::new);
+        return new XRefGT(markers, samples, copy);
+    }
+
+    /**
      * Returns a new {@code XRefGT} instance from the specified data.
      *
      * @param samples the list of samples
@@ -114,59 +149,54 @@ public final class XRefGT implements GT {
         return new XRefGT(markers, samples, haps);
     }
 
-//    NB: The toBitLists() method is commented-out because it is
-//        not currently used
-//    ToDo: decide whether to delete toBitLists() method after
-//          XRefGT amd BrefGT code stabilizes.
-//
-//    /**
-//     * Returns the phased, non-missing genotypes as a {@code BitArray[]}.
-//     * @param nThreads the maximum number of computational threads for object
-//     * construction
-//     * @return the phased, non-missing genotypes as a {@code BitArray[]}
-//     * @throws IllegalArgumentException if {@code nThreads < 1}
-//     */
-//    public BitArray[] toBitLists(int nThreads) {
-//        if (nThreads<1) {
-//            throw new IllegalArgumentException(String.valueOf(nThreads));
-//        }
-//        int nRecsPerBatch = (markers.size() + nThreads - 1)/nThreads;
-//        while (nRecsPerBatch>4096) {
-//            nRecsPerBatch = (nRecsPerBatch+1) >> 1;
-//        }
-//        int stepSize = nRecsPerBatch;
-//        int nSteps = (markers.size() + (stepSize-1)) / stepSize;
-//        return IntStream.range(0, nSteps)
-//                .parallel()
-//                .boxed()
-//                .flatMap(step -> bitLists(step, stepSize))
-//                .toArray(BitArray[]::new);
-//    }
-//
-//    private Stream<BitArray> bitLists(int step, int stepSize) {
-//        int mStart = step*stepSize;
-//        int mEnd = Math.min(mStart + stepSize, markers.size());
-//        BitArray[] bitLists = IntStream.range(mStart, mEnd)
-//                .mapToObj(j -> new BitArray(haps.length*markers.marker(j).bitsPerAllele()))
-//                .toArray(BitArray[]::new);
-//        int[] bitsPerAllele = IntStream.range(mStart, mEnd)
-//                .map(m -> markers.marker(m).bitsPerAllele())
-//                .toArray();
-//        for (int h=0; h<haps.length; ++h) {
-//            int inBit = markers.sumHapBits(mStart);
-//            for (int m=mStart; m<mEnd; ++m) {
-//                int mOffset = m - mStart;
-//                int nBits = bitsPerAllele[mOffset];
-//                int startOutBit = h*nBits;
-//                for (int i=0; i<nBits; ++i) {
-//                    if (haps[h].get(inBit++)) {
-//                        bitLists[mOffset].set(startOutBit + i);
-//                    }
-//                }
-//            }
-//        }
-//        return Arrays.stream(bitLists);
-//    }
+    /**
+     * Returns the phased, non-missing genotypes as a {@code BitArray[]}.
+     * @param nThreads the maximum number of computational threads for object
+     * construction
+     * @return the phased, non-missing genotypes as a {@code BitArray[]}
+     * @throws IllegalArgumentException if {@code nThreads < 1}
+     */
+    public BitArray[] toBitLists(int nThreads) {
+        if (nThreads<1) {
+            throw new IllegalArgumentException(String.valueOf(nThreads));
+        }
+        int nRecsPerBatch = (markers.size() + nThreads - 1)/nThreads;
+        while (nRecsPerBatch>4096) {
+            nRecsPerBatch = (nRecsPerBatch+1) >> 1;
+        }
+        int stepSize = nRecsPerBatch;
+        int nSteps = (markers.size() + (stepSize-1)) / stepSize;
+        return IntStream.range(0, nSteps)
+                .parallel()
+                .boxed()
+                .flatMap(step -> bitLists(step, stepSize))
+                .toArray(BitArray[]::new);
+    }
+
+    private Stream<BitArray> bitLists(int step, int stepSize) {
+        int mStart = step*stepSize;
+        int mEnd = Math.min(mStart + stepSize, markers.size());
+        BitArray[] bitLists = IntStream.range(mStart, mEnd)
+                .mapToObj(j -> new BitArray(haps.length*markers.marker(j).bitsPerAllele()))
+                .toArray(BitArray[]::new);
+        int[] bitsPerAllele = IntStream.range(mStart, mEnd)
+                .map(m -> markers.marker(m).bitsPerAllele())
+                .toArray();
+        for (int h=0; h<haps.length; ++h) {
+            int inBit = markers.sumHapBits(mStart);
+            for (int m=mStart; m<mEnd; ++m) {
+                int mOffset = m - mStart;
+                int nBits = bitsPerAllele[mOffset];
+                int startOutBit = h*nBits;
+                for (int i=0; i<nBits; ++i) {
+                    if (haps[h].get(inBit++)) {
+                        bitLists[mOffset].set(startOutBit + i);
+                    }
+                }
+            }
+        }
+        return Arrays.stream(bitLists);
+    }
 
     /**
      * Returns a new {@code XRefGT} instance from the specified data. The
@@ -256,7 +286,12 @@ public final class XRefGT implements GT {
     public int hash(int hap, int start, int end) {
         int startBit = markers.sumHapBits(start);
         int endBit = markers.sumHapBits(end);
-        return haps[hap].hash(startBit, endBit);
+        if ((endBit-startBit)==1) {
+            return (haps[hap].getAsInt(startBit));
+        }
+        else {
+            return haps[hap].hash(startBit, endBit);
+        }
     }
 
     @Override
@@ -297,6 +332,16 @@ public final class XRefGT implements GT {
     @Override
     public boolean isPhased() {
         return true;
+    }
+
+    @Override
+    public int allele1(int marker, int sample) {
+        return markers.allele(haps[sample<<1], marker);
+    }
+
+    @Override
+    public int allele2(int marker, int sample) {
+        return markers.allele(haps[(sample<<1) | 0b1], marker);
     }
 
     @Override
@@ -363,11 +408,10 @@ public final class XRefGT implements GT {
             sb.append(Const.tab);
             sb.append("GT");                        // FORMAT
             for (int s=0; s<nSamples; ++s) {
-                int hap1 = s << 1;
                 sb.append(Const.tab);
-                sb.append(allele(m, hap1));
+                sb.append(allele1(m, s));
                 sb.append(Const.phasedSep);
-                sb.append(allele(m, hap1 | 0b1));
+                sb.append(allele2(m, s));
             }
         }
         sb.append(Const.nl);

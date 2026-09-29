@@ -20,7 +20,6 @@ package vcf;
 
 import blbutil.FileIt;
 import blbutil.Filter;
-import blbutil.TriFunction;
 import blbutil.VcfFileIt;
 import java.io.File;
 import java.util.ArrayDeque;
@@ -29,6 +28,7 @@ import java.util.Arrays;
 import java.util.Deque;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -47,6 +47,8 @@ import java.util.stream.IntStream;
  * @author Brian L. Browning {@code <browning@uw.edu>}
  */
 public class VcfIt<E extends GTRec> implements VcfFileIt<E> {
+
+    private static final float DEFAULT_MAX_LR = Float.MAX_VALUE;
 
     private final VcfHeader vcfHeader;
     private final FileIt<String> it;
@@ -69,9 +71,9 @@ public class VcfIt<E extends GTRec> implements VcfFileIt<E> {
      * per record.  All genotypes are considered to be unphased if any
      * genotype is unphased or if any allele is missing.
      */
-    public static final TriFunction<VcfHeader, String, MarkerParser, GTRec> TO_LOWMEM_GT_REC
-            = (VcfHeader h, String s, MarkerParser f) -> {
-                VcfRecGTParser.HapListRep hlr = new VcfRecGTParser(h, s, f)
+    public static final BiFunction<VcfHeader, String, GTRec> TO_LOWMEM_GT_REC
+            = (VcfHeader h, String s) -> {
+                VcfRecGTParser.HapListRep hlr = new VcfRecGTParser(h, s)
                         .hapListRep();
                 int nonMajorAlleleThreshold = (hlr.samples().size()>>7);
                 if (hlr.nonmajorAlleleCnt()<=nonMajorAlleleThreshold) {
@@ -91,23 +93,22 @@ public class VcfIt<E extends GTRec> implements VcfFileIt<E> {
             };
 
    /**
-     * A function mapping a string VCF record to a {@code BasicGTRec} object.
-     * Phase status is stored per-genotype.
+     * A function mapping a string VCF record with GT format fields
+     * to a {@code GTRec} object. Phase status is stored per-genotype.
      */
-    public static final TriFunction<VcfHeader, String, MarkerParser, GTRec> TO_BASIC_GT_REC
-        = (VcfHeader h, String s, MarkerParser f) -> new BasicGTRec(new VcfRecGTParser(h, s, f));
+    public static final BiFunction<VcfHeader, String, GTRec> TO_BASIC_GT_REC
+        = (VcfHeader h, String s) -> new BasicGTRec(new VcfRecGTParser(h, s));
 
     /**
-     * A function mapping a string VCF record  to a {@code VcfRec} object.
+     * A function mapping a string VCF record with GT or GL format fields
+     * to a {@code VcfRecord} object.
      */
-    public static final TriFunction<VcfHeader, String, MarkerParser, VcfRec> TO_VCF_REC
-            = (VcfHeader h, String s, MarkerParser mp) -> new VcfRec(h, s, mp);
+    public static final BiFunction<VcfHeader, String, VcfRec> TO_VCF_REC
+            = (VcfHeader h, String s) -> VcfRec.fromGTGL(h, s, DEFAULT_MAX_LR);
 
     /**
      * Returns an array containing VCF meta-information lines, the
-     * VCF header line, and the first VCF data line.  The returned array
-     * will contain all initial lines that begin with the '#' character
-     * and the next line.
+     * VCF header line, and the first VCF data line.
      * @param src a string describing the source of the VCF file
      * @param it an iterator that returns the lines of a VCF file
      * @return an array containing VCF meta-information lines, the
@@ -116,7 +117,7 @@ public class VcfIt<E extends GTRec> implements VcfFileIt<E> {
      * @throws IllegalArgumentException if all lines returned by the iterator
      * begin with the '#' character
      */
-    public static String[] head(String src, FileIt<String> it) {
+    static String[] head(String src, FileIt<String> it) {
         String hash = "#";
         List<String> lines = new ArrayList<>(32);
         String line =  it.hasNext() ? it.next() : null;
@@ -146,7 +147,7 @@ public class VcfIt<E extends GTRec> implements VcfFileIt<E> {
      * {@code strIt == null || mapFactory == null}
      */
     public static <R extends GTRec> VcfIt<R> create(
-            FileIt<String> strIt, TriFunction<VcfHeader, String, MarkerParser, R> recMapper) {
+            FileIt<String> strIt, BiFunction<VcfHeader, String, R> recMapper) {
         return VcfIt.create(strIt, Filter.acceptAllFilter(),
                 Filter.acceptAllFilter(), recMapper);
     }
@@ -169,7 +170,7 @@ public class VcfIt<E extends GTRec> implements VcfFileIt<E> {
     public static <R extends GTRec> VcfIt<R> create(
             FileIt<String> strIt, Filter<String> sampleFilter,
             Filter<Marker> markerFilter,
-            TriFunction<VcfHeader, String, MarkerParser, R> recMapper) {
+            BiFunction<VcfHeader, String, R> recMapper) {
         return VcfIt.create(strIt, sampleFilter, markerFilter, recMapper,
                 DEFAULT_BUFFER_SIZE);
     }
@@ -194,14 +195,14 @@ public class VcfIt<E extends GTRec> implements VcfFileIt<E> {
     public static <R extends GTRec> VcfIt<R> create(
             FileIt<String> strIt, Filter<String> sampleFilter,
             Filter<Marker> markerFilter,
-            TriFunction<VcfHeader, String, MarkerParser, R> recMapper, int bufferSize) {
+            BiFunction<VcfHeader, String, R> recMapper, int bufferSize) {
         return new VcfIt<>(strIt, sampleFilter, markerFilter,
                 recMapper, bufferSize);
     }
 
     private VcfIt(FileIt<String> it, Filter<String> sampleFilter,
             Filter<Marker> markerFilter,
-            TriFunction<VcfHeader, String, MarkerParser, E> recMapper,
+            BiFunction<VcfHeader, String, E> recMapper,
             int bufferSize) {
         if (bufferSize < 1) {
             throw new IllegalArgumentException(String.valueOf(bufferSize));
@@ -214,11 +215,9 @@ public class VcfIt<E extends GTRec> implements VcfFileIt<E> {
         String[] nonDataLines = Arrays.copyOf(head, head.length-1);
         String firstDataLine = head[head.length-1];
         boolean[] isDiploid = VcfHeader.isDiploid(firstDataLine);
-        boolean storeId = true;
-        MarkerParser fieldFilter = new MarkerParser(storeId, false, false, false);
         this.it = it;
         this.vcfHeader = new VcfHeader(src, nonDataLines, isDiploid, sampleFilter);
-        this.mapper = (String s) -> recMapper.apply(vcfHeader, s, fieldFilter);
+        this.mapper = (String s) -> recMapper.apply(vcfHeader, s);
         this.next = firstDataLine;
         this.markerFilter = markerFilter;
         this.bufferSize = bufferSize;

@@ -1,15 +1,14 @@
 # Notice
 
-fast-beagle is licensed under GPL-3.0-or-later ([LICENSE](LICENSE)). It is a derivative work of Beagle 5.5 and contains code from the projects below. Each entry names the files, the upstream copyright and the upstream license.
+fast-beagle is licensed under GPL-3.0-or-later ([LICENSE](LICENSE)). It is a derivative work of Beagle 5.5 and 5.4 and contains code from the projects below. Each entry names the files, the upstream copyright and the upstream license.
 
-## Beagle 5.5
+## Beagle 5.4 and 5.5
 
-- Files: the Java source in `java/src/`, and every file under `src/` ported from it.
-- Version: Beagle 5.5 (27Feb25).
+- Files: the Java source in `java/src/`, Beagle 5.4 (29Oct24), and every file under `src/` ported from Beagle 5.5 (27Feb25) or 5.4.
 - Copyright (C) 2014-2024 Brian L. Browning.
 - License: GPL-3.0-or-later.
 
-`java/src/` holds the Java source unmodified. Each file under `src/` that is ported from a Beagle source file carries Browning's copyright line and a notice that names the Java file and the year of modification.
+`java/src/` holds the Beagle 5.4 Java source unmodified. Each file under `src/` that is ported from a Beagle source file carries Browning's copyright line and a notice that names the Java file and the year of modification.
 
 ## PLINK 2.0
 
