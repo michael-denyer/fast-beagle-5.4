@@ -31,14 +31,12 @@ public class PbwtIbsData {
     private static final int BURNIN_CANDIDATES = 100;
     private static final int MAX_PHASE_CANDIDATES = 90;
     private static final int MIN_PHASE_CANDIDATES = 5;
-    private static final int STAGE2_CANDIDATES = 10;
     private static final float MAX_BACKOFF_CM = 0.3f;
 
     private final CodedSteps codedSteps;
     private final int nHaps;
     private final int nTargHaps;
     private final int nCandidates;
-    private final int nSteps;
     private final int nOverlapSteps;
     private final int maxBackoffSteps;
     private final int stepsPerBatch;
@@ -62,16 +60,15 @@ public class PbwtIbsData {
         checkConsistency(phaseData, codedSteps);
         FixedPhaseData fpd = phaseData.fpd();
         Par par = fpd.par();
+        int nSteps = codedSteps.steps().size();
         int nThreads = par.nthreads();
         int nIts = par.burnin() + par.iterations();
 
         this.codedSteps = codedSteps;
         this.nHaps = fpd.nHaps();
         this.nTargHaps = phaseData.fpd().targGT().nHaps();
-        this.nCandidates = phaseData.it()<nIts
-                ? nCandidates1(phaseData)
-                : Math.min(STAGE2_CANDIDATES, phaseData.fpd().nHaps());
-        this.nSteps = codedSteps.steps().size();
+        this.nCandidates = phaseData.it()<nIts ? nCandidates1(phaseData)
+                : nCandidates2(phaseData);
         this.nOverlapSteps = (int) Math.rint(par.buffer() / fpd.ibsStep());
         this.maxBackoffSteps = (int) Math.rint(MAX_BACKOFF_CM / fpd.ibsStep());
         this.stepsPerBatch = (nSteps + nThreads - 1) / nThreads;
@@ -99,6 +96,16 @@ public class PbwtIbsData {
             nCandidates = Math.max(nCandidates, MIN_PHASE_CANDIDATES);
         }
         return Math.min(nCandidates, phaseData.fpd().nHaps());
+    }
+
+    private static int nCandidates2(PhaseData phaseData) {
+        FixedPhaseData fpd = phaseData.fpd();
+        int nHaps = fpd.nHaps();
+        float rare = fpd.par().rare();
+        float scaleFactor = 0.5f;
+        int nCandidates = (int) Math.floor(scaleFactor * rare * nHaps);
+        nCandidates = Math.max(nCandidates, MIN_PHASE_CANDIDATES);
+        return Math.min(nCandidates, nHaps);
     }
 
     /**
@@ -134,14 +141,6 @@ public class PbwtIbsData {
     }
 
     /**
-     * Returns the number of steps.
-     * @return the number of steps
-     */
-    public int nSteps() {
-        return nSteps;
-    }
-
-    /**
      * Returns the number of overlap steps
      * @return the number of overlap steps
      */
@@ -171,65 +170,5 @@ public class PbwtIbsData {
      */
     public int nBatches() {
         return nBatches;
-    }
-
-    /**
-     * Returns the start step (inclusive) for the specified batch:
-     * {@code (batch * this.stepsPerbatch())}.
-     * @param batch a batch index
-     * @throws IndexOutOfBoundsException if
-     * {@code (batch < 0 || batch >= this.nBatches()) }
-     * @return the start step (inclusive) for the specified batch
-     */
-    public int startStep(int batch) {
-        if (batch < 0 || batch >= nBatches) {
-            throw new IndexOutOfBoundsException(String.valueOf(batch));
-        }
-        return batch*stepsPerBatch;
-    }
-
-    /**
-     * Returns the end step (exclusive) for the specified batch:
-     * {@code Math.min((batch+1)*this.stepsPerBatch(), this.nSteps())}.
-     * @param batch a batch index
-     * @throws IndexOutOfBoundsException if
-     * {@code (batch < 0 || batch >= this.nBatches()) }
-     * @return the end step (exclusive) for the specified batch
-     */
-    public int endStep(int batch) {
-        if (batch < 0 || batch >= nBatches) {
-            throw new IndexOutOfBoundsException(String.valueOf(batch));
-        }
-        return Math.min((batch+1)*stepsPerBatch, nSteps);
-    }
-
-    /**
-     * Returns the start step (inclusive) of the start buffer segment:
-     * {@code Math.max((0, startStep - this.nOverlapSteps())}.
-     * @param startStep the start step (inclusive) of a segment
-     * @throws IndexOutOfBoundsException if
-     * {@code (startStep < 0 || startStep >= this.nSteps()) }
-     * @return the start step (inclusive) of the start buffer segment
-     */
-    public int bufferStartStep(int startStep) {
-        if (startStep < 0 || startStep >= nSteps) {
-            throw new IndexOutOfBoundsException(String.valueOf(startStep));
-        }
-        return Math.max(0, startStep - nOverlapSteps);
-    }
-
-    /**
-     * Returns the end step (exclusive) of the end buffer segment:
-     * {@code Math.min((endStep + this.nOverlapSteps(), this.nSteps())}.
-     * @param endStep the end step (exclusive) of a segment
-     * @throws IndexOutOfBoundsException if
-     * {@code (endStep <= 0 || endStep > this.nSteps()) }
-     * @return the end step (exclusive) of the end buffer segment
-     */
-    public int bufferEndStep(int endStep) {
-        if (endStep <= 0 || endStep > nSteps) {
-            throw new IndexOutOfBoundsException(String.valueOf(endStep));
-        }
-        return Math.min(endStep + nOverlapSteps, nSteps);
     }
 }

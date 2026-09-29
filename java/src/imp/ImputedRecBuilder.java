@@ -270,10 +270,30 @@ public final class ImputedRecBuilder {
         out.print(marker.chrom());
         out.print(Const.tab);
         out.print(marker.pos());
-        out.print(Const.tab);
-        out.print(marker.id());
-        out.print(Const.tab);
-        out.print(marker.alleles());
+        int nIds = marker.nIds();
+        if (nIds==0) {
+            out.print(Const.tab);
+            out.print(Const.MISSING_DATA_CHAR);
+        }
+        else {
+            for (int j=0; j<nIds; ++j) {
+                out.print(j==0 ? Const.tab : Const.semicolon);
+                out.print(marker.id(j));
+            }
+        }
+        int nAlleles = marker.nAlleles();
+        if (nAlleles==1) {
+            out.print(Const.tab);
+            out.print(marker.allele(0));
+            out.print(Const.tab);
+            out.print(Const.MISSING_DATA_CHAR);
+        }
+        else {
+            for (int j=0; j<nAlleles; ++j) {
+                out.print(j<2 ? Const.tab : Const.comma);
+                out.print(marker.allele(j));
+            }
+        }
     }
 
     private void printInfoField(PrintWriter out, boolean isImputed) {
@@ -291,26 +311,13 @@ public final class ImputedRecBuilder {
                 out.print( (a==1) ? ";AF=" : Const.comma);
                 out.print(DF4.format(sumAlProbs[a]/nInputTargHaps));
             }
-            String endSubfield = extractEnd(marker);
-            if (endSubfield!=null) {
-                out.print(';');
-                out.print(endSubfield);
+            if (marker.end()!=-1) {
+                out.print(";END=");
+                out.print(marker.end());
             }
             if (isImputed) {
                 out.print(";IMP");
             }
-        }
-    }
-
-    private static String extractEnd(Marker marker) {
-        String info = marker.info();
-        int start = info.indexOf("END=");
-        if (start == -1) {
-            return null;
-        }
-        else {
-            int endIndex = info.indexOf(Const.semicolon, start+4);
-            return info.substring(start, endIndex<0 ? info.length() : endIndex);
         }
     }
 

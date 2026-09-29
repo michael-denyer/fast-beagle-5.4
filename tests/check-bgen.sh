@@ -8,7 +8,8 @@
 # .info sidecar matching the BGEN and VCF, tests/check_bgen_reader.py must find
 # that bgen-reader decodes the BGEN as our own decoder does, and a run that
 # fails anywhere after the writer opens must leave no .bgen, .info or .sample.
-# The VCF must keep its oracle hash. Invalid
+# The VCF must keep its oracle hash (any hash while tests/c54-pending.txt
+# lists the case). Invalid
 # bgen-bits and bgen-chr-set values must exit 1 with a message, as must every
 # refused run.
 #
@@ -102,9 +103,10 @@ pass() { echo "PASS $*"; }
 bgen_reader() { PYTHONDONTWRITEBYTECODE=1 uv run --python 3.12 --script "$ROOT/tests/check_bgen_reader.py" "$1" 2>&1; }
 failed() { echo "FAIL $*"; fail=1; }
 
-# Sets expect, tags and args to the case's row.
+# Sets expect, tags and args to the case's row, expect as c_expect gives it.
 read_case() {  # name
   read -r expect tags args <<< "$(cases "${TABLES[@]}" | awk -v n="$1" '$1 == n {$1 = ""; print; exit}')"
+  expect=$(c_expect "$1" "$expect")
 }
 
 # The run's row in tests/bgen-hashes.txt must match the SHA-256 prefixes of its
@@ -233,16 +235,16 @@ check_no_partial() {  # label out message beagle-args...
 }
 
 partial_runs() {
-  local stall="$ROOT/tests/fuzz-regressions/window-stall"
   mkdir "$OUT/open-fail.info" "$OUT/vcf-fail.vcf.gz"
   check_no_partial "bgen=phased, .info cannot be opened" "$OUT/open-fail" "Error opening $OUT/open-fail.info" \
     ref="$DATA/ref.vcf.gz" gt="$DATA/target.vcf.gz" bgen=phased
   [ -d "$OUT/open-fail.info" ] || failed "bgen=phased, .info cannot be opened removed a path it did not write"
   check_no_partial "bgen=plink2, VCF cannot be opened" "$OUT/vcf-fail" "Error opening $OUT/vcf-fail.vcf.gz" \
     ref="$DATA/ref.vcf.gz" gt="$DATA/target.vcf.gz" bgen=plink2
-  # shellcheck disable=SC2046  # args.txt is an argument list; splitting it is the point
-  check_no_partial "bgen=phased, fails after writing records" "$OUT/stall" "does not advance" \
-    gt="$stall/targ.vcf" ref="$stall/ref.vcf" $(cat "$stall/args.txt") bgen=phased
+  # The window after the first ends in the target's gap (imp-gap-map in
+  # tests/check-failures.sh).
+  check_no_partial "bgen=phased, fails after writing records" "$OUT/gap" "contain no markers in common" \
+    ref="$DATA/ref.vcf.gz" gt="$DATA/target.gap.vcf.gz" map="$DATA/map.map" window=1.5 overlap=0.5 bgen=phased
 }
 
 check_selection "${TABLES[@]}" || fail=1

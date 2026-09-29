@@ -38,7 +38,6 @@ public class PhaseData {
     private final long seed;
 
     private volatile int it;
-    private volatile float lrThreshold;
     private volatile TrProb trProb;
     private volatile float pMismatch;
 
@@ -50,32 +49,13 @@ public class PhaseData {
      * @throws NullPointerException if {@code fpd == null}
      */
     public PhaseData(FixedPhaseData fpd, long seed) {
-        Par par = fpd.par();
         this.estPhase = new EstPhase(fpd, seed);
         this.leaveUnphProp = leaveUnphasedProp(fpd, estPhase);
-        this.seed = seed;
         this.it = 0;
-        this.lrThreshold = lrThreshold(par, it);
+        this.seed = seed;
         float recombIntensity = (float) 0.04f*fpd.par().ne()/fpd.nHaps();
         this.trProb = new TrProb(fpd.stage1Map(), recombIntensity);
         this.pMismatch = Par.liStephensPMismatch(fpd.nHaps());
-    }
-
-    static float lrThreshold(Par par, int it) {
-        int nBurninIts = par.burnin();
-        int nItsM1 = par.iterations() - 1;
-        if (it<nBurninIts) {
-            return Float.POSITIVE_INFINITY;
-        }
-        else if (it==(nItsM1 + nBurninIts)) {
-            return 1f;
-        }
-        else {
-            double lastVal = 4.0;
-            double exp = (double) (nItsM1 - (it-nBurninIts)) / nItsM1;
-            double base = par.initial_lr()/lastVal;
-            return (float) (lastVal*Math.pow(base, exp));
-        }
     }
 
     private static float[] leaveUnphasedProp(FixedPhaseData fpd,
@@ -83,7 +63,7 @@ public class PhaseData {
         int nIterations = fpd.par().iterations();
         int[] floatBits = IntStream.range(0, fpd.targGT().nSamples())
                 .parallel()
-                .map(s -> estPhase.get(s).nUnphased())
+                .map(s -> estPhase.get(s).unphased().size())
                 .mapToDouble(cnt -> Math.pow(cnt, -1.0/nIterations))
                 .mapToInt(p -> Float.floatToRawIntBits((float) p))
                 .toArray();
@@ -173,7 +153,6 @@ public class PhaseData {
      */
     public void incrementIt() {
         ++it;
-        lrThreshold = lrThreshold(estPhase.fpd().par(), it);
     }
 
     /**
@@ -192,7 +171,6 @@ public class PhaseData {
         int nBurninIts = estPhase.fpd().par().burnin();
         if (it<nBurninIts) {
             it = nBurninIts;
-            lrThreshold = lrThreshold(estPhase.fpd().par(), it);
         }
     }
 
@@ -235,16 +213,6 @@ public class PhaseData {
      */
     public float leaveUnphasedProp(int sample) {
         return leaveUnphProp[sample];
-    }
-
-    /**
-     * Returns the threshold on the phasing likelihood ratio that
-     * determines whether a pair of heterozygotes will be marked as phased.
-     * @return the threshold on the phasing likelihood ratio that
-     * determines whether a pair of heterozygotes will be marked as phased
-     */
-    public float lrThreshold() {
-        return lrThreshold;
     }
 
     /**

@@ -13,6 +13,8 @@
 
 fast-beagle is a standalone C port of [Beagle 5.5](https://faculty.washington.edu/browning/beagle/beagle.html) (27Feb25), the genotype phasing and imputation tool. Its output is byte-identical to the Java release run with the same `nthreads=`. It adds BGEN v1.2 output and a tabix index written in the same pass as the VCF.
 
+This repository is porting fast-beagle to Beagle 5.4 (29Oct24). The checks now compare it with the Beagle 5.4 release, while the C engine is still the Beagle 5.5 port. [`tests/c54-pending.txt`](tests/c54-pending.txt) lists the checks it does not yet pass ([Parity ratchet](docs/testing.md#parity-ratchet)).
+
 ## How it works
 
 Beagle phases each target sample's genotypes into two haplotypes, then imputes the markers the target lacks from a reference panel. It works along the chromosome in overlapping windows. fast-beagle runs the same steps and writes the same output, and can also write BGEN.

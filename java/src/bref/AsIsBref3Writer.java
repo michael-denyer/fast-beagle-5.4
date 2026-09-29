@@ -19,7 +19,6 @@
 package bref;
 
 import beagleutil.ChromIds;
-import blbutil.Const;
 import blbutil.FileUtil;
 import blbutil.Utilities;
 import ints.IntArray;
@@ -37,7 +36,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import vcf.Marker;
-import vcf.MarkerUtils;
 import vcf.RefGTRec;
 import vcf.Samples;
 
@@ -97,12 +95,12 @@ public class AsIsBref3Writer implements BrefWriter {
     private final File bref;
     private final Samples samples;
     private final int nHaps;
-    private final List<RefGTRec> recBuffer;
+    private final List<RefGTRec> emBuffer;
     private final List<BrefBlock> index;
 
     private final DataOutputStream brefOut;
     private final ByteArrayOutputStream baos;
-    private final DataOutputStream utf8Buffer;
+    private final DataOutputStream buffer;
 
     /**
      * Constructs a new {@code AsIsBref4Writer} for the specified data.
@@ -130,11 +128,11 @@ public class AsIsBref3Writer implements BrefWriter {
         this.bref = brefFile;
         this.samples = samples;
         this.nHaps = 2*samples.size();
-        this.recBuffer = new ArrayList<>(500);
+        this.emBuffer = new ArrayList<>(500);
         this.index = new ArrayList<>(500);
         this.brefOut = dataOutputStream(bref);
         this.baos = new ByteArrayOutputStream(100);
-        this.utf8Buffer = new DataOutputStream(baos);
+        this.buffer = new DataOutputStream(baos);
         try {
             brefOut.writeInt(MAGIC_NUMBER_V3);
             bytesWritten += Integer.BYTES;
@@ -158,14 +156,14 @@ public class AsIsBref3Writer implements BrefWriter {
         if (startNewBlock(rec)) {
             writeAndClearBuffer();
         }
-        recBuffer.add(rec);
+        emBuffer.add(rec);
     }
 
      private boolean startNewBlock(RefGTRec rec) {
         boolean startNewBlock = false;
-        int chromIndex = rec.marker().chromIndex();
-        if (chromIndex!=lastChromIndex) {
-            lastChromIndex = chromIndex;
+        int cIndex = rec.marker().chromIndex();
+        if (cIndex!=lastChromIndex) {
+            lastChromIndex = cIndex;
             hap2Seq = null;
             startNewBlock = true;
         }
@@ -201,16 +199,16 @@ public class AsIsBref3Writer implements BrefWriter {
     }
 
     private void writeAndClearBuffer() {
-        if (recBuffer.isEmpty()==false) {
+        if (emBuffer.isEmpty()== false) {
             try {
-                Marker m = recBuffer.get(0).marker();
+                Marker m = emBuffer.get(0).marker();
                 index.add(new BrefBlock(m.chromIndex(), m.pos(), bytesWritten));
-                brefOut.writeInt(recBuffer.size());
+                brefOut.writeInt(emBuffer.size());
                 bytesWritten += Integer.BYTES;
                 writeString(m.chrom(), brefOut);
                 writeHapToSeq();
-                for (int j=0, n=recBuffer.size(); j<n; ++j) {
-                    RefGTRec rec = recBuffer.get(j);
+                for (int j=0, n=emBuffer.size(); j<n; ++j) {
+                    RefGTRec rec = emBuffer.get(j);
                     if (rec.isAlleleCoded()) {
                         writeAlleleCodedRec(rec);
                     }
@@ -218,7 +216,7 @@ public class AsIsBref3Writer implements BrefWriter {
                         writeSeqCodedRec(rec);
                     }
                 }
-                recBuffer.clear();
+                emBuffer.clear();
             } catch (IOException ex) {
                 Utilities.exit(ex, WRITE_ERR);
             }
@@ -227,8 +225,8 @@ public class AsIsBref3Writer implements BrefWriter {
 
     private void writeHapToSeq() throws IOException {
         RefGTRec rec = null;
-        for (int j=0, n=recBuffer.size(); j<n && rec==null; ++j) {
-            RefGTRec candidate = recBuffer.get(j);
+        for (int j=0, n=emBuffer.size(); j<n && rec==null; ++j) {
+            RefGTRec candidate = emBuffer.get(j);
             if (candidate.isAlleleCoded()==false) {
                 rec = candidate;
             }
@@ -289,39 +287,21 @@ public class AsIsBref3Writer implements BrefWriter {
     }
 
     private void writeMarker(Marker marker) throws IOException {
-        String[] ids = MarkerUtils.ids(marker);
-        int nIds = Math.min(ids.length, 255);
+        int nIds = Math.min(marker.nIds(), 255);
         brefOut.writeInt(marker.pos());
         brefOut.writeByte(nIds);
         bytesWritten += (Integer.BYTES + Byte.BYTES);
         for (int j=0; j<nIds; ++j) {
-            writeString(ids[j], brefOut);
+            writeString(marker.id(j), brefOut);
         }
-        String[] alleleList = MarkerUtils.alleles(marker);
-        byte alleleCode = isSNV(alleleList) ? snvCode(alleleList) : -1;
+        byte alleleCode = isSNV(marker) ? snvCode(marker.alleles()) : -1;
         brefOut.writeByte(alleleCode);
         bytesWritten += Byte.BYTES;
         if (alleleCode == -1) {
-            writeStringArray(alleleList, brefOut);
-            brefOut.writeInt(extractEnd(marker));
+            writeStringArray(marker.alleles(), brefOut);
+            brefOut.writeInt(marker.end());
             bytesWritten += Integer.BYTES;
         }
-    }
-
-    private static int extractEnd(Marker marker) {
-        String info = marker.info();
-        int index = 4;  // start of base coordinate if info.startsWith("END=")==true
-        if (info.startsWith("END=")==false) {
-            index = info.indexOf(";END=") + 5;
-            if (index<5) {  // ";END=" not found
-                return -1;
-            }
-        }
-        int endIndex = info.indexOf(Const.semicolon, index);
-        if (endIndex == -1) {
-            endIndex = info.length();
-        }
-        return Integer.parseInt(info.substring(index, endIndex));
     }
 
     private byte snvCode(String[] alleles) {
@@ -333,9 +313,9 @@ public class AsIsBref3Writer implements BrefWriter {
         return (byte) code;
     }
 
-    private boolean isSNV(String[] alleleList) {
-        for (int j=0; j<alleleList.length; ++j) {
-            if (BASES_SET.contains(alleleList[j])==false) {
+    private boolean isSNV(Marker marker) {
+        for (int j=0, n=marker.nAlleles(); j<n; ++j) {
+            if (BASES_SET.contains(marker.allele(j))==false) {
                 return false;
             }
         }
@@ -394,11 +374,11 @@ public class AsIsBref3Writer implements BrefWriter {
         IntList firstChromBlock = new IntList();
         for (int j=0, n=index.size(); j<n; ++j) {
             BrefBlock bb = index.get(j);
-            int chromIndex = bb.chromIndex();
-            if (chromIndex!=lastChrIndex) {
-                chromList.add(ChromIds.instance().id(chromIndex));
+            int ci = bb.chromIndex();
+            if (ci!=lastChrIndex) {
+                chromList.add(ChromIds.instance().id(ci));
                 firstChromBlock.add(j);
-                lastChrIndex = chromIndex;
+                lastChrIndex = ci;
             }
         }
         Set<String> set = new HashSet<>(chromList);
@@ -436,7 +416,7 @@ public class AsIsBref3Writer implements BrefWriter {
     private void writeString(String s, DataOutputStream dos)
            throws IOException {
         baos.reset();
-        utf8Buffer.writeUTF(s);
+        buffer.writeUTF(s);
         bytesWritten += baos.size();
         baos.writeTo(dos);
     }

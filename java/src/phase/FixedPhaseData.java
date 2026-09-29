@@ -79,6 +79,7 @@ public class FixedPhaseData {
     private final int[] prevStage1Marker;
     private final float[] prevStage1Wt;   // interpolation weight
 
+
     /**
      * Constructs a new {@code FixedPhaseData} instance from the
      * specified data.

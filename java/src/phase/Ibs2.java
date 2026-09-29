@@ -133,12 +133,10 @@ public final class Ibs2 {
     }
 
     private static boolean ibs2(GT targGT, int m, int s1, int s2) {
-        int hap1 = s1 << 1;
-        int hap2 = s2 << 1;
-        int a1 = targGT.allele(m, hap1);
-        int a2 = targGT.allele(m, hap1 | 0b1);
-        int b1 = targGT.allele(m, hap2);
-        int b2 = targGT.allele(m, hap2 | 0b1);
+        int a1 = targGT.allele1(m, s1);
+        int a2 = targGT.allele2(m, s1);
+        int b1 = targGT.allele1(m, s2);
+        int b2 = targGT.allele2(m, s2);
         return arePhaseConsistent(a1, a2, b1, b2)
                 || arePhaseConsistent(a1, a2, b2, b1);
     }

@@ -21,7 +21,6 @@ package vcf;
 import blbutil.DoubleArray;
 import blbutil.FloatArray;
 import ints.IntArray;
-import java.util.stream.IntStream;
 
 /**
  * <p>Class {@code MarkerRecombMap} represents genetic map positions and
@@ -51,8 +50,7 @@ public class MarkerMap {
      * {@code genMap == null || markers == null}
      */
     public static MarkerMap create(GeneticMap genMap, Markers markers) {
-        double meanGenDiff = MarkerMap.meanSingleBaseGenDist(genMap, markers);
-        return new MarkerMap(GeneticMap.genPos(genMap, meanGenDiff, markers));
+        return new MarkerMap(GeneticMap.genPos(genMap, markers));
     }
 
    /**
@@ -100,7 +98,7 @@ public class MarkerMap {
             throw new IllegalArgumentException(s);
         }
         double meanSingleBaseDist = Math.abs(genMap.genPos(b) - genMap.genPos(a))
-                / Math.abs(b.pos() - a.pos());
+                / Math.abs(b.pos()-a.pos());
         // require meanSingleBaseDist to be >= 0.01 * mean human single base genetic distance
         return Math.max(meanSingleBaseDist, 1e-8);
     }
@@ -158,27 +156,13 @@ public class MarkerMap {
         return new MarkerMap(gPos);
     }
 
-    /**
-     * Returns an array whose {@code (k+1}-st element is the genetic
-     * distance between the {@code (k+1)}-st genetic position and
-     * the {@code k}-th genetic position.  The first element of the returned
-     * array is {@code 0f}.
-     * @param genPos an array of strictly increasing genetic positions
-     * @return an array whose {@code (k+1}-st element is the genetic
-     * distance between the {@code (k+1)}-st genetic position and
-     * the {@code k}-th genetic position.
-     * @throws IllegalArgumentException if there exists {@code j} such that
-     * {@code (0 < j) && (j < genPos.length) && (genPos[j-1] >= genPos[j])}
-     * @throws NullPointerException if {@code (genPos == null)}
-     */
     private static FloatArray genDist(double[] genPos) {
+        float minCmDist = 1e-7f;
         float[] da = new float[genPos.length];
         for (int j=1; j<da.length; ++j) {
             da[j] = (float) (genPos[j] - genPos[j-1]);
-            if (da[j]<=0) {
-                String s = "Nonpositive genetic distance: dist[" + j + "]="
-                        + da[j];
-                throw new IllegalArgumentException(s);
+            if (da[j] < minCmDist) {
+                da[j] = minCmDist;
             }
         }
         return new FloatArray(da);
@@ -223,10 +207,10 @@ public class MarkerMap {
             throw new IllegalArgumentException(String.valueOf(recombIntensity));
         }
         double c = -recombIntensity;
-        double[] pRecomb = IntStream.range(0, genDist.size())
-                .parallel()
-                .mapToDouble(m -> -Math.expm1(c*genDist.get(m)))
-                .toArray();
+        float[] pRecomb = new float[genDist.size()];
+        for (int j=1; j<pRecomb.length; ++j) {
+            pRecomb[j] = (float) -Math.expm1(c*genDist.get(j));
+        }
         return new FloatArray(pRecomb);
     }
 }

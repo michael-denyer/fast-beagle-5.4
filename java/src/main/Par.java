@@ -50,7 +50,6 @@ public final class Par {
     // phasing parameters
     private final int burnin;
     private final int iterations;
-    private final float initial_lr;
     private final int phase_states;
     private final float step_scale;
     private final float rare;
@@ -70,7 +69,6 @@ public final class Par {
     private final float ne;
     private final float err;
     private final float window;
-    private final int window_markers;
     private final float overlap;
     private final long seed;
     private final int nthreads;
@@ -82,7 +80,6 @@ public final class Par {
     // default phasing parameters
     private static final int D_BURNIN = 3;
     private static final int D_ITERATIONS = 12;
-    private static final float D_INITIAL_LR = 100_000f;
     private static final int D_PHASE_STATES = 280;
     private static final float D_STEP_SCALE = 3.0f;
     private static final float D_RARE = 0.002f;
@@ -102,7 +99,6 @@ public final class Par {
     private static final int D_NE = 100_000;
     private static final float D_ERR = -Float.MIN_VALUE;
     private static final float D_WINDOW = 40.0f;
-    private static final int D_WINDOW_MARKERS = 4000000;
     private static final float D_OVERLAP = 2.0f;
     private static final int D_SEED = -99999;
     private static final int D_NTHREADS = Integer.MAX_VALUE;
@@ -146,7 +142,6 @@ public final class Par {
         // phasing parameters
         burnin = Validate.intArg("burnin", argsMap, false, D_BURNIN, 1, IMAX);
         iterations = Validate.intArg("iterations", argsMap, false, D_ITERATIONS, 1, IMAX);
-        initial_lr = Validate.floatArg("initial-lr", argsMap, false, D_INITIAL_LR, 1f, FMAX);
         phase_states = Validate.intArg("phase-states", argsMap, false, D_PHASE_STATES, 1, IMAX);
         step_scale = Validate.floatArg("step-scale", argsMap, false, D_STEP_SCALE, FMIN, FMAX);
         rare = Validate.floatArg("rare", argsMap, false, D_RARE, FMIN, 0.5f);
@@ -166,7 +161,6 @@ public final class Par {
         ne = Validate.floatArg("ne", argsMap, false, D_NE, FMIN, FMAX);
         err = Validate.floatArg("err", argsMap, false, D_ERR, -FMIN, FMAX);
         window = Validate.floatArg("window", argsMap, false, D_WINDOW, FMIN, FMAX);
-        window_markers = Validate.intArg("window-markers", argsMap, false, D_WINDOW_MARKERS, 100000, IMAX);
         overlap = Validate.floatArg("overlap", argsMap, false, D_OVERLAP, FMIN, FMAX);
         buffer = Validate.floatArg("buffer", argsMap, false, D_BUFFER, FMIN, FMAX);
         seed = Validate.longArg("seed", argsMap, false, D_SEED, LMIN, LMAX);
@@ -233,7 +227,6 @@ public final class Par {
                 + "  err=<allele mismatch probability>                  (default: data dependent)" + nl
                 + "  em=<estimate ne and err parameters (true/false)>   (default=" + D_EM + ")" + nl
                 + "  window=<window length in cM>                       (default=" + D_WINDOW + ")" + nl
-                + "  window-markers=<maximum markers per window>        (default=" + D_WINDOW_MARKERS + ")" + nl
                 + "  overlap=<window overlap in cM>                     (default=" + D_OVERLAP + ")" + nl
                 + "  seed=<random seed>                                 (default=" + D_SEED + ")" + nl
                 + "  nthreads=<number of threads>                       (default: machine dependent)" + nl + nl;
@@ -286,7 +279,6 @@ public final class Par {
      * if no ped parameter was specified
      */
     public File ped() {
-//        return ped;
         return null;
     }
 
@@ -347,14 +339,6 @@ public final class Par {
      */
     public int iterations() {
         return iterations;
-    }
-
-    /**
-     * Returns the initial-lr parameter.
-     * @return the initial-lr parameter
-     */
-    public float initial_lr() {
-        return initial_lr;
     }
 
     /**
@@ -502,14 +486,6 @@ public final class Par {
      */
     public float window() {
         return window;
-    }
-
-    /**
-     * Returns the window-markers parameter.
-     * @return the window-markers parameter
-     */
-    public int window_markers() {
-        return window_markers;
     }
 
     /**

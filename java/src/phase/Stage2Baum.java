@@ -106,11 +106,9 @@ public class Stage2Baum {
     }
 
     private void imputeInterval(int sample, int start, int end) {
-        int hap1 = sample << 1;
-        int hap2 = hap1 | 0b1;
         for (int m=start; m<end; ++m) {
-            int a1 = unphTargGT.allele(m, hap1);
-            int a2 = unphTargGT.allele(m, hap2);
+            int a1 = unphTargGT.allele1(m, sample);
+            int a2 = unphTargGT.allele2(m, sample);
             if (a1>=0 && a2>=0) {
                 if (a1!=a2) {
                     float[] alProbs1 = unscaledAlProbs(m, 0, a1, a2);

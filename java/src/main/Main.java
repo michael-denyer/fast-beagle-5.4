@@ -29,10 +29,10 @@ import java.util.Optional;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 import phase.FixedPhaseData;
+import phase.PhaseBaum1;
 import phase.PhaseData;
 import phase.PhaseLS;
 import phase.Stage2Haps;
-import phase.SwapRate;
 import vcf.BasicGT;
 import vcf.GT;
 import vcf.MarkerIndices;
@@ -53,22 +53,22 @@ public class Main {
     /**
      * The program name and version.
      */
-    private static final String VERSION = "(version 5.5)";
+    private static final String VERSION = "(version 5.4)";
 
     /**
      * The program name and commit version.
      */
-    public static final String PROGRAM = "beagle.27Feb25.75f.jar";
+    public static final String PROGRAM = "beagle.29Oct24.c8e.jar";
 
     /**
      * The command to invoke the program.
      */
-    public static final String COMMAND = "java -jar beagle.27Feb25.75f.jar";
+    public static final String COMMAND = "java -jar beagle.29Oct24.c8e.jar";
 
     /**
      * The copyright string.
      */
-    public static final String COPYRIGHT = "Copyright (C) 2014-2024 Brian L. Browning";
+    public static final String COPYRIGHT = "Copyright (C) 2014-2022 Brian L. Browning";
 
     /**
      * The program name and a brief help message.
@@ -136,9 +136,9 @@ public class Main {
         GT overlap = null;
         while (optWindow.isPresent()) {
             Window window = optWindow.get();
+            runStats.printWindowUpdate(window);
             FixedPhaseData fpd = new FixedPhaseData(par, slidingWind.ped(),
                 window, overlap);
-            runStats.printWindowUpdate(window, fpd);
             PhaseData pd = new PhaseData(fpd, rand.nextLong());
             if (fpd.targGT().isPhased()) {
                 XRefGT phasedTarg = XRefGT.fromPhasedGT(fpd.targGT(), par.nthreads());
@@ -174,7 +174,7 @@ public class Main {
             PhaseLS.runStage1(pd);
             runStats.printStage1Info(pd, (System.nanoTime() - t0));
             pd.incrementIt();
-            double swapRate = SwapRate.getAndResetSwapRate();
+            double swapRate = PhaseBaum1.getAndResetSwapRate();
             if (pd.it()<par.burnin() && swapRate<=maxBurninSwapRate) {
                 pd.advanceToFirstPhasingIt();
             }

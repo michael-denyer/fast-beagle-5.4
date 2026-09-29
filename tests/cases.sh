@@ -4,6 +4,8 @@
 DATA="$ROOT/data"
 SEED=-99999
 SHA=$(command -v sha256sum || echo "shasum -a 256")
+# shellcheck source=c54-ratchet.sh
+source "$ROOT/tests/c54-ratchet.sh"
 # Preparation errors must stop even callers that deliberately run without -e.
 "$ROOT/tests/fetch-fixtures.sh" --ensure >&2 || exit 1
 
@@ -75,6 +77,13 @@ case_verdict() {  # expect args out nthreads command...
     want="exit=0 $(want_hash "$expect" "$t")"
   fi
   [ "$VERDICT" = "$want" ] || { VERDICT="$VERDICT, want $want"; return 1; }
+}
+
+# The expect by which a check of build/beagle other than tests/check-oracle.sh
+# judges an oracle case. While tests/c54-pending.txt lists the case, its hash
+# is Beagle 5.4's and build/beagle's VCF differs, so the run must only exit 0.
+c_expect() {  # name expect
+  if pending "oracle $1"; then echo exit=0; else echo "$2"; fi
 }
 
 # Judges a run that Beagle must refuse: exit 1, the message in its log, and no

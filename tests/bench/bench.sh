@@ -9,7 +9,7 @@
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 DIR=$1 ROUNDS=$2 THREADS=${3:-18}
-JAR="$ROOT/data/beagle.27Feb25.75f.jar"
+JAR="$ROOT/data/beagle.29Oct24.c8e.jar"
 read -r -a JAVA <<< "${JAVA:-java -Xmx32g}"
 OUT=$(mktemp -d)
 trap 'rm -rf "$OUT"' EXIT

@@ -247,7 +247,7 @@ public class BitArray {
         long endWordMask = WORD_MASK >>> -to;
         if (startWord==endWord) {
             long mask = (startWordMask & endWordMask);
-            return longHashCode(words[startWord] & mask);
+            return Long.hashCode(words[startWord] & mask);
         }
         else {
             long longHash = (words[startWord] & startWordMask);
@@ -255,12 +255,8 @@ public class BitArray {
                 longHash ^= words[j];
             }
             longHash ^= (words[endWord] & endWordMask);
-            return longHashCode(longHash);
+            return Long.hashCode(longHash);
         }
-    }
-
-    public static int longHashCode(long value) {
-        return (int)(value ^ (value >>> 32));
     }
 
     /**

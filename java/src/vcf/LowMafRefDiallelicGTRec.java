@@ -18,24 +18,23 @@
  */
 package vcf;
 
-import ints.IndexArray;
 import ints.IntArray;
 import java.util.Arrays;
 import java.util.stream.IntStream;
 
 /**
- * <p>Class {@code TwoAlleleRefGTRec} represent represents phased,
+ * <p>Class {@code LowMafRefDiallelicGTRec} represent represents phased,
  * non-missing genotypes for a list of reference samples at a single diallelic
  * marker.</p>
  *
- * <p>Class {@code TwoAlleleRefGTRec} stores haplotypes that carry
+ * <p>Class {@code LowMafRefDiallelicGTRec} stores haplotypes that carry
  * the minor allele.</p>
  *
- * <p>Instances of class {@code TwoAlleleRefGTRec} are immutable.</p>
+ * <p>Instances of class {@code LowMemRefDiallelicGTRec} are immutable.</p>
  *
  * @author Brian L. Browning {@code <browning@uw.edu>}
  */
-public final class TwoAlleleRefGTRec implements RefGTRec {
+public final class LowMafRefDiallelicGTRec implements RefGTRec {
 
     private final Marker marker;
     private final Samples samples;
@@ -45,19 +44,19 @@ public final class TwoAlleleRefGTRec implements RefGTRec {
     private final int[] minorAlleles;
 
     /**
-     * Constructs a new {@code TwoAlleleRefGTRec} instance from the
+     * Constructs a new {@code LowMafRefDiallelicGTRec} instance from the
      * specified data.
      *
      * @param rec the phased, non-missing genotype data
      * @throws IllegalArgumentException if {@code rec.marker().nAlleles() != 2}
      * @throws NullPointerException if {@code rec == null}
      */
-    public TwoAlleleRefGTRec(RefGTRec rec) {
+    public LowMafRefDiallelicGTRec(RefGTRec rec) {
         if (rec.marker().nAlleles()!=2) {
             throw new IllegalArgumentException(
                     String.valueOf(rec.marker().nAlleles()!=2));
         }
-        int[][] hapIndices = rec.alleleToHaps();
+        int[][] hapIndices = rec.hapIndices();
         int majAllele = 0;
         while (hapIndices[majAllele]!=null) {
             ++majAllele;
@@ -71,7 +70,7 @@ public final class TwoAlleleRefGTRec implements RefGTRec {
     }
 
     /**
-     * Constructs a new {@code TwoAlleleRefGTRec} instance from the
+     * Constructs a new {@code LowMafRefDiallelicGTRec} instance from the
      * specified data.
      *
      * @param gtp a VCF record parser that extracts sample genotypes
@@ -82,7 +81,7 @@ public final class TwoAlleleRefGTRec implements RefGTRec {
      * VCF record
      * @throws NullPointerException if {@code gtp == null}
      */
-    public TwoAlleleRefGTRec(VcfRecGTParser gtp) {
+    public LowMafRefDiallelicGTRec(VcfRecGTParser gtp) {
         if (gtp.nAlleles()!=2) {
             throw new IllegalArgumentException(String.valueOf(gtp.nAlleles()));
         }
@@ -96,7 +95,7 @@ public final class TwoAlleleRefGTRec implements RefGTRec {
     }
 
     /**
-     * Constructs a new {@code TwoAlleleRefGTRec} instance from the
+     * Constructs a new {@code LowMafRefDiallelicGTRec} instance from the
      * specified data. The specified {@code hapIndices} array is required to
      * have length 2 and contain exactly one {@code null} element.
      * The {@code null} element should be the major allele because this is
@@ -120,7 +119,7 @@ public final class TwoAlleleRefGTRec implements RefGTRec {
      * @throws NullPointerException if
      * {@code marker == null || samples == null || hapIndices == null}
      */
-    public TwoAlleleRefGTRec(Marker marker, Samples samples,
+    public LowMafRefDiallelicGTRec(Marker marker, Samples samples,
             int[][] hapIndices) {
         if (marker.nAlleles()!=2) {
             throw new IllegalArgumentException(String.valueOf(marker.nAlleles()));
@@ -128,36 +127,16 @@ public final class TwoAlleleRefGTRec implements RefGTRec {
         this.marker = marker;
         this.samples = samples;
         this.nHaps = 2*samples.size();
-        this.majorAllele = AlleleRefGTRec.checkIndicesAndReturnNullIndex(hapIndices, nHaps);
+        this.majorAllele = LowMafRefGTRec.checkIndicesAndReturnNullIndex(hapIndices, nHaps);
         this.minorAllele = 1 - majorAllele;
         this.minorAlleles = hapIndices[minorAllele].clone();
     }
 
     @Override
-    public int[][] alleleToHaps() {
+    public int[][] hapIndices() {
         int[][] hapIndices = new int[2][];
         hapIndices[minorAllele] = minorAlleles.clone();
         return hapIndices;
-    }
-
-    @Override
-    public IndexArray hapToAllele() {
-        return new IndexArray(toIntArray(), 2);
-    }
-
-    private IntArray toIntArray() {
-        int[] ia = IntStream.range(0, nHaps)
-                .map(h -> majorAllele)
-                .toArray();
-        for (int h : minorAlleles) {
-            ia[h] = minorAllele;
-        }
-        return IntArray.packedCreate(ia, 2);
-    }
-
-    @Override
-    public int nAlleleCodedHaps() {
-        return minorAlleles.length;
     }
 
     @Override
@@ -193,6 +172,17 @@ public final class TwoAlleleRefGTRec implements RefGTRec {
         return marker;
     }
 
+
+    @Override
+    public int allele1(int sample) {
+        return get(sample<<1);
+    }
+
+    @Override
+    public int allele2(int sample) {
+        return get((sample<<1) | 0b1);
+    }
+
     @Override
     public int get(int hap) {
         if (hap < 0 || hap >= nHaps) {
@@ -205,6 +195,18 @@ public final class TwoAlleleRefGTRec implements RefGTRec {
             return majorAllele;
         }
     }
+
+    @Override
+    public int[] alleles() {
+        int[] ia = IntStream.range(0, nHaps)
+                .map(h -> majorAllele)
+                .toArray();
+        for (int h : minorAlleles) {
+            ia[h] = minorAllele;
+        }
+        return ia;
+    }
+
 
     @Override
     public boolean isAlleleCoded() {
@@ -278,5 +280,15 @@ public final class TwoAlleleRefGTRec implements RefGTRec {
             throw new IndexOutOfBoundsException(String.valueOf(index));
         }
         return toIntArray();
+    }
+
+    private IntArray toIntArray() {
+        int[] ia = IntStream.range(0, nHaps)
+                .map(i -> majorAllele)
+                .toArray();
+        for (int i : minorAlleles) {
+            ia[i] = minorAllele;
+        }
+        return IntArray.packedCreate(ia, 2);
     }
 }

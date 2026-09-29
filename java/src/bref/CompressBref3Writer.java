@@ -40,7 +40,7 @@ public class CompressBref3Writer implements BrefWriter {
     private final int maxNAlleles;
     private final List<RefGTRec> buffer;
     private final SeqCoder3 seqCoder;
-    private final AsIsBref3Writer asIsBref3Writer;
+    private final AsIsBref3Writer brefWriter;
     private final int nonMajThreshold;
 
     /**
@@ -57,7 +57,7 @@ public class CompressBref3Writer implements BrefWriter {
      * @param brefFile name of the output binary reference file or
      * {@code null} if the output should be directed to standard output
      * @throws IllegalArgumentException
-     * {@code maxNSeq < 0 || maxNSeq >= Character.MAX_VALUE}
+     * {@code maxNSeq < 0 || maxNSeq >= Chracter.MAX_VALUE}
      * @throws NullPointerException if {@code program == null || samples == null}
      */
     public CompressBref3Writer(String program, Samples samples, int maxNSeq,
@@ -65,19 +65,19 @@ public class CompressBref3Writer implements BrefWriter {
         this.maxNAlleles = SeqCoder3.MAX_NALLELES;
         this.buffer = new ArrayList<>(500);
         this.seqCoder = new SeqCoder3(samples, maxNSeq);
-        this.asIsBref3Writer = new AsIsBref3Writer(program, samples, brefFile);
+        this.brefWriter = new AsIsBref3Writer(program, samples, brefFile);
         this.nonMajThreshold = (maxNSeq/4) + 1;
     }
 
     @Override
     public Samples samples() {
-        return asIsBref3Writer.samples();
+        return brefWriter.samples();
     }
 
     @Override
     public void write(RefGTRec rec) {
         if (rec.isAlleleCoded()==false) {
-            rec = RefGTRec.alleleRefGTRec(rec);
+            rec = RefGTRec.alleleCodedInstance(rec);
         }
         if (buffer.size()==Integer.MAX_VALUE) {
             flushBuffer();
@@ -116,7 +116,7 @@ public class CompressBref3Writer implements BrefWriter {
         int index = 0;
         for (int j=0, n=buffer.size(); j<n; ++j) {
             RefGTRec rec = buffer.get(j);
-            asIsBref3Writer.write( rec==null ? list.get(index++) : rec );
+            brefWriter.write( rec==null ? list.get(index++) : rec );
         }
         assert index==list.size();
         buffer.clear();
@@ -125,6 +125,6 @@ public class CompressBref3Writer implements BrefWriter {
     @Override
     public void close() {
         flushBuffer();
-        asIsBref3Writer.close();
+        brefWriter.close();
     }
 }

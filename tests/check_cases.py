@@ -22,6 +22,7 @@ def main():
         (root / "tests").mkdir()
         for name in (
             "cases.sh",
+            "c54-ratchet.sh",
             "fetch-fixtures.sh",
             "oracle-cases.txt",
             "trace-cases.txt",
@@ -32,6 +33,9 @@ def main():
         ):
             shutil.copy2(ROOT / "tests" / name, root / "tests" / name)
         shutil.copytree(ROOT / "data", root / "data")
+        # The runs below judge verdicts, not the ratchet: no case is pending.
+        pending = root / "tests/c54-pending.txt"
+        pending.write_text("# none\n")
         manifest = root / "data/.fixtures.sha256"
         manifest.unlink(missing_ok=True)
         prepare = ["bash", "-c", "ROOT=$PWD; source tests/cases.sh"]
@@ -167,6 +171,36 @@ judge clean
         assert rc == {"crash-after-message": "1", "leftover-bgen": "1", "clean": "0"}, verdicts
         assert "exit=2, want 1" in verdicts and "left r.bgen" in verdicts, verdicts
         print("PASS refusal rejects a wrong exit and a leftover file")
+
+        # The ratchet: a listed key must differ, an unlisted one must match.
+        pending.write_text("# kind case\noracle gt\n")
+        judged = run(
+            root,
+            [
+                "bash",
+                "-c",
+                """source tests/c54-ratchet.sh
+for key in "oracle gt" "oracle imp" "oracle gt-x"; do
+  for status in 0 1; do
+    out=$(ratchet "$key" $status)
+    echo "${key// /_} $status $? $out"
+  done
+done
+tests/c54-ratchet.sh "oracle gt" 1
+""",
+            ],
+        ).stdout.splitlines()
+        assert judged[:6] == [
+            "oracle_gt 0 1 FAIL oracle gt matches Beagle 5.4: remove oracle gt from tests/c54-pending.txt",
+            "oracle_gt 1 0 pending oracle gt",
+            "oracle_imp 0 0 ",
+            "oracle_imp 1 1 ",
+            "oracle_gt-x 0 0 ",
+            "oracle_gt-x 1 1 ",
+        ], judged
+        assert judged[6:] == ["pending oracle gt"], judged
+        pending.write_text("# none\n")
+        print("PASS ratchet fails an unlisted difference and a listed match, passes a listed difference")
 
         # check-sanitizers.sh with its builds replaced by the fake Beagle.
         fake_make = root / "make-bin/make"

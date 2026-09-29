@@ -91,7 +91,7 @@ public class RefTargSlidingWindow implements SlidingWindow {
 
     private static SampleFileIt<GTRec> targIt(Par par, Filter<String> sFilter,
             Filter<Marker> mFilter) {
-        int nBufferedBlocks = par.nthreads() << 2;
+        int nBufferedBlocks = par.nthreads() << 3;
         FileIt<String> it = InputIt.fromBGZipFile(par.gt(), nBufferedBlocks);
         SampleFileIt<GTRec> targIt = VcfIt.create(it, sFilter, mFilter,
                 VcfIt.TO_LOWMEM_GT_REC);
@@ -111,10 +111,7 @@ public class RefTargSlidingWindow implements SlidingWindow {
             Utilities.exit(s);
         }
         if (filename.endsWith(".bref3")) {
-            refIt = new Bref3It(par.ref(), sampleFilter, markerFilter);
-            if (par.chromInt() != null) {
-                refIt = new IntervalVcfIt<>(refIt, par.chromInt());
-            }
+            refIt = new Bref3It(par.ref(), markerFilter);
         } else {
             if (filename.endsWith(".vcf") == false
                     && filename.endsWith(".vcf.gz") == false
@@ -122,15 +119,15 @@ public class RefTargSlidingWindow implements SlidingWindow {
                 System.err.println(Const.nl
                         + "ERROR: unrecognized reference filename extension: "
                         + Const.nl
-                        + "       expected \".bref3\", \".bref4\", \".vcf\", \".vcf.gz\", or \".vcf.bgz\""
+                        + "       Expected \".bref3\", \".vcf\", \".vcf.gz\", or \".vcf.bgz\""
                         + Const.nl);
             }
-            int nBufferedBlocks = par.nthreads() << 2;
+            int nBufferedBlocks = par.nthreads() << 3;
             FileIt<String> it = InputIt.fromBGZipFile(par.ref(), nBufferedBlocks);
             refIt = RefIt.create(it, sampleFilter, markerFilter);
-            if (par.chromInt() != null) {
-                refIt = new IntervalVcfIt<>(refIt, par.chromInt());
-            }
+        }
+        if (par.chromInt() != null) {
+            refIt = new IntervalVcfIt<>(refIt, par.chromInt());
         }
         return refIt;
     }
@@ -198,9 +195,7 @@ public class RefTargSlidingWindow implements SlidingWindow {
 
         private final GeneticMap genMap;
         private final float windowCM;
-        private final int windowMarkers;
         private final float overlapCM;
-        private final int overlapMarkers;
         private final boolean impute;
         private final SampleFileIt<RefGTRec> refIt;
         private final SampleFileIt<GTRec> targIt;
@@ -220,9 +215,7 @@ public class RefTargSlidingWindow implements SlidingWindow {
                 BlockingQueue<Window> q) {
             this.genMap = genMap;
             this.windowCM = par.window();
-            this.windowMarkers = par.window_markers();
             this.overlapCM = par.overlap();
-            this.overlapMarkers = windowMarkers >> 2;
             this.impute = par.impute();
             this.targIt = targIt;
             this.refIt = refIt;
@@ -245,10 +238,11 @@ public class RefTargSlidingWindow implements SlidingWindow {
                 nextTargRec = targIt.next();
                 nextRefRec = refIt.next();
                 int windowIndex = 0;
+                double endCm = Double.NaN;
                 while (nextTargRec!=null && nextRefRec!=null) {
                     int chromIndex = nextTargRec.marker().chromIndex();
                     advanceRefItToChrom(refIt, chromIndex);
-                    double endCm = nextEndCm(nextRefRec.marker());
+                    endCm = nextEndCm(endCm);
                     int endPos = genMap.basePos(chromIndex, endCm);
                     Window window = readWindow(chromIndex, endPos, ++windowIndex);
                     SlidingWindow.addToQ(q, window);
@@ -263,10 +257,9 @@ public class RefTargSlidingWindow implements SlidingWindow {
             }
         }
 
-        private double nextEndCm(Marker nextRefMarker) {
-            double endCm = genMap.genPos(nextRefMarker);
+        private double nextEndCm(double endCm) {
             if (refOverlap.isEmpty()) {
-                endCm += windowCM;
+                endCm = genMap.genPos(nextRefRec.marker()) + windowCM;
             } else {
                 endCm += (windowCM - overlapCM);
             }
@@ -278,8 +271,7 @@ public class RefTargSlidingWindow implements SlidingWindow {
             resetLists();
             while (nextTargRec != null
                     && nextTargRec.marker().chromIndex() == chromIndex
-                    && nextTargRec.marker().pos() < endPos
-                    && refRecs.size()<windowMarkers) {
+                    && nextTargRec.marker().pos() < endPos) {
                 Marker targMarker = nextTargRec.marker();
                 int targPos = targMarker.pos();
                 while (nextRefRec != null
@@ -303,8 +295,7 @@ public class RefTargSlidingWindow implements SlidingWindow {
             if (impute) {
                 while (nextRefRec!=null
                         && nextRefRec.marker().chromIndex()==chromIndex
-                        && nextRefRec.marker().pos()<endPos
-                        && refRecs.size()<windowMarkers) {
+                        && nextRefRec.marker().pos()<endPos) {
                     refRecs.add(nextRefRec);
                     inTarg.add(Boolean.FALSE);
                     nextRefRec = refIt.hasNext() ? refIt.next() : null;
@@ -366,7 +357,7 @@ public class RefTargSlidingWindow implements SlidingWindow {
                 int refOverlapEnd, int endPos) {
             boolean chromEnd =  lastWindow
                     || (refRecs.get(0).marker().chromIndex() != nextRefRec.marker().chromIndex());
-            int refOverlapStart = overlapStart(refGT, chromEnd, endPos);
+            int refOverlapStart = overlapStart(refGT, chromEnd, overlapCM, endPos);
             boolean[] inTarget = new boolean[inTarg.size()];
             for (int j=0; j<inTarget.length; ++j) {
                 inTarget[j] = inTarg.get(j);
@@ -374,7 +365,8 @@ public class RefTargSlidingWindow implements SlidingWindow {
             return new MarkerIndices(inTarget, refOverlapEnd, refOverlapStart);
         }
 
-        private int overlapStart(RefGT refGT, boolean chromEnd, int endPos) {
+        private int overlapStart(RefGT refGT, boolean chromEnd, float overlapCM,
+                int endPos) {
             if (chromEnd) {
                 return refGT.nMarkers();
             } else {
@@ -383,7 +375,7 @@ public class RefTargSlidingWindow implements SlidingWindow {
                 double endGenPos = genMap.genPos(chromIndex, endPos-1);
                 double startGenPos = endGenPos - overlapCM;
                 int key = genMap.basePos(chromIndex, startGenPos);
-                int low = Math.max(0, refGT.nMarkers()-overlapMarkers);
+                int low = 0;
                 int high = nMarkersM1;
                 while (low <= high) {
                     int mid = (low + high) >>> 1;

@@ -44,6 +44,8 @@ public final class VcfWriter {
             + "estimated REF dose [P(RA) + 2*P(RR)] and true REF dose\">";
     private static final String IMP_INFO = "##INFO=<ID=IMP,Number=0,Type=Flag,"
             + "Description=\"Imputed marker\">";
+    private static final String END_INFO = "##INFO=<ID=END,Number=1,Type=Integer,"
+            + "Description=\"End position of the variant described in this record  (for use with symbolic alleles)\">";
 
     private static final String GT_FORMAT = "##FORMAT=<ID=GT,Number=1,Type=String,"
             + "Description=\"Genotype\">";
@@ -132,6 +134,7 @@ public final class VcfWriter {
             out.println(DR2_INFO);
             out.println(IMP_INFO);
         }
+        out.println(END_INFO);
         out.println(GT_FORMAT);
         if (ds) {
             out.println(DS_FORMAT);

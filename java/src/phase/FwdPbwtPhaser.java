@@ -168,7 +168,7 @@ public class FwdPbwtPhaser {
     private static BitArray storePhasing(GT targGT, int m, int[] alleles) {
         int nTargHaps = targGT.nHaps();
         int bitsPerAllele = targGT.markers().marker(m).bitsPerAllele();
-        BitArray bits = new BitArray(nTargHaps*bitsPerAllele);
+        BitArray bits = new BitArray(targGT.nHaps()*bitsPerAllele);
         int bit=0;
         for (int h=0; h<nTargHaps; ++h) {
             int mask = 1;

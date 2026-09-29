@@ -209,6 +209,16 @@ public final class BasicGT implements GT {
     }
 
     @Override
+    public int allele1(int marker, int sample) {
+        return recs[marker].allele1(sample);
+    }
+
+    @Override
+    public int allele2(int marker, int sample) {
+        return recs[marker].allele2(sample);
+    }
+
+    @Override
     public int allele(int marker, int hap) {
         return recs[marker].get(hap);
     }

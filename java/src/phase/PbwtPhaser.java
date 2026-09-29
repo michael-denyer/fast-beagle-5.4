@@ -19,7 +19,6 @@
 package phase;
 
 import blbutil.DoubleArray;
-import blbutil.Utilities;
 import ints.IntList;
 import ints.WrappedIntArray;
 import java.util.ArrayList;
@@ -70,17 +69,26 @@ public class PbwtPhaser {
     public static AtomicReferenceArray<SamplePhase> initPhase(FixedPhaseData fpd,
             long seed) {
         PbwtPhaser[] ppa = pbwtPhasers(fpd, seed);
-        int nSamples = fpd.stage1TargGT().nSamples();
-        int nThreads = fpd.par().nthreads();
-        int maxStepSize = 128;
-        int stepSize = Math.min((nSamples + nThreads - 1)/nThreads, maxStepSize);
-        int nSteps = (nSamples + (stepSize-1)) / stepSize;
-        AtomicReferenceArray<SamplePhase> phase = new AtomicReferenceArray<>(nSamples);
+
+        int nTargSamples = fpd.stage1TargGT().nSamples();
+        int stepSize = nSamplesPerBatch(nTargSamples, fpd.par().nthreads());
+        int nSteps = (nTargSamples + (stepSize-1)) / stepSize;
+
+        AtomicReferenceArray<SamplePhase> phase = new AtomicReferenceArray<>(nTargSamples);
         IntStream.range(0, nSteps)
                 .parallel()
                 .boxed()
                 .forEach(step -> setSamplePhase(fpd, ppa, phase, step, stepSize));
         return phase;
+    }
+
+    private static int nSamplesPerBatch(int nSamples, int nThreads) {
+        int maxSamplesPerBatch = 4096;
+        int nSamplesPerBatch = (nSamples + nThreads - 1)/nThreads;
+        while (nSamplesPerBatch>maxSamplesPerBatch) {
+            nSamplesPerBatch = (nSamplesPerBatch+1) >> 1;
+        }
+        return nSamplesPerBatch;
     }
 
     private static void setSamplePhase(FixedPhaseData fpd, PbwtPhaser[] ppa,
@@ -102,7 +110,7 @@ public class PbwtPhaser {
             int ss = s - sStart;
             int hh1 = ss<<1;
             int hh2 = hh1 | 0b1;
-            phase.set(s, new SamplePhase(s, gt.markers(), fpd.stage1Map().genPos(),
+            phase.set(s, new SamplePhase(gt.markers(), fpd.stage1Map().genPos(),
                 haps[hh1], haps[hh2], indices[ss].hetIndices, indices[ss].missIndices));
         }
     }
@@ -179,29 +187,23 @@ public class PbwtPhaser {
         int nMarkers = genPos.size();
         int nThreads = fpd.par().nthreads();
         double totalCM = genPos.get(genPos.size()-1) - genPos.get(0);
-        double overlapCM = 0.5;
-        double advanceCM = Math.max(4*overlapCM, (totalCM/nThreads));
+        double overlapCM = 1.5;
+        double advanceCM = Math.max(2*overlapCM, (totalCM-overlapCM)/nThreads);
         List<int[]> windowList = new ArrayList<>(nThreads);
         int from = 0;
-        int to = to(genPos, genPos.get(from) + advanceCM);
+        int to = insPt(genPos, genPos.get(from) + overlapCM + advanceCM) + 1;
         while (to<nMarkers) {
             windowList.add(new int[] {from, to});
-            from = from(genPos, genPos.get(to) - overlapCM);
-            to = to(genPos, genPos.get(to) + advanceCM);
+            from = insPt(genPos, genPos.get(to) - overlapCM) - 1;
+            to = insPt(genPos, genPos.get(to) + advanceCM) + 1;
         }
-        assert to==nMarkers;
-        windowList.add(new int[] {from, to});
+        windowList.add(new int[] {from, nMarkers});
         return windowList.toArray(new int[0][]);
     }
 
-    private static int from(DoubleArray genPos, double pos) {
-        int insPt = genPos.binarySearch(pos);
-        return insPt<0 ? -insPt-1 : insPt;
-    }
-
-    private static int to(DoubleArray genPos, double pos) {
-        int insPt = genPos.binarySearch(pos);
-        return insPt<0 ? -insPt-1 : (insPt+1);  //insPt>=0 implies insPt<genpPos.size()
+    private static int insPt(DoubleArray genPos, double pos) {
+        int targIndex = genPos.binarySearch(pos);
+        return targIndex<0 ? -targIndex-1 : targIndex;
     }
 
     private static Indices[] indices(FixedPhaseData fpd, int sStart, int sEnd) {
@@ -215,9 +217,8 @@ public class PbwtPhaser {
         for (int m=0; m<nMarkers; ++m) {
             for (int s=sStart; s<sEnd; ++s) {
                 int ss = s-sStart;
-                int hap1 = s << 1;
-                int a1 = gt.allele(m, hap1);
-                int a2 = gt.allele(m, hap1 | 0b1);
+                int a1 = gt.allele1(m, s);
+                int a2 = gt.allele2(m, s);
                 if (a1<0 || a2<0) {
                     missIndices[ss].add(m);
                 }

@@ -1,13 +1,13 @@
 # Checks and the pre-merge gate
 
-Most checks compare fast-beagle with Beagle 5.5 or with a tool whose output it must match. The unmodified Java source in `java/src/` and the release jar are the oracle. [Byte identity with Beagle 5.5](byte-identity.md) summarises what these checks prove and where the proof stops.
+Most checks compare fast-beagle with Beagle 5.4 or with a tool whose output it must match. The unmodified Beagle 5.4 Java source in `java/src/` and the release jar `beagle.29Oct24.c8e.jar` are the oracle. The C engine is still the Beagle 5.5 port, so the checks that compare it with Beagle 5.4 go through the [parity ratchet](#parity-ratchet). [Byte identity with Beagle 5.5](byte-identity.md) summarises what these checks proved for the Beagle 5.5 port.
 
 ## Check an implementation
 
 `tests/check-oracle.sh` takes the command of any implementation. To check the release jar:
 
 ```bash
-tests/check-oracle.sh java -ea -jar data/beagle.27Feb25.75f.jar
+tests/check-oracle.sh java -ea -jar data/beagle.29Oct24.c8e.jar
 ```
 
 To check fast-beagle, run `tests/check-oracle.sh build/beagle`.
@@ -25,6 +25,10 @@ To check fast-beagle, run `tests/check-oracle.sh build/beagle`.
 - exclusion lists
 - bref3 references, one of them with END= on SNV and indel records
 - a bref3 edge case (IDs with a 4-byte character, an invalid byte and two entries, a marker with no ALT allele, a symbolic allele)
+- Beagle 5.4's marker and record text: FILTER values and END= in INFO, END= with leading zeros or given twice, and ID lists with a `.` entry
+- a flat genetic map whose plateau gives genetic distances below 1e-7 cM
+- a 20-sample reference whose sequence coding reaches its limit
+- an exclusion list of reference samples only, which Beagle 5.4 does not apply to a bref3 reference
 - for `tests/check-bgen.sh`, the chrX split moved to chromosome 22 and the reference/target split moved to chromosome 38
 
 ## Oracle hashes
@@ -32,7 +36,7 @@ To check fast-beagle, run `tests/check-oracle.sh build/beagle`.
 `tests/check-oracle.sh` runs an implementation on the fixtures at 1, 2 and 18 threads and compares its output with the hashes in `tests/oracle-cases.txt`. `NTHREADS` overrides the thread counts.
 
 - `CASES="gt imp"` restricts the run. A name that is not in the case tables fails the run. The same holds for the sanitizer, trace and BGEN runners.
-- Beagle's output depends on the thread count when a window is longer than 4 cM. Such cases record one hash per thread count, as `thread:hash` pairs.
+- Beagle 5.4's output depends on the thread count when a window is longer than 4.5 cM. Such cases record one hash per thread count, as `thread:hash` pairs.
 
 ## Case tables
 
@@ -61,10 +65,14 @@ Every case table row holds a name, the expected outcome, tags and Beagle's argum
   - lines with too few or too many fields
   - no map for the target's chromosome
 - a one-character non-ASCII GT allele
+- a marker that Beagle 5.4 rejects: END= before POS, a REF allele with a character other than A, C, G, T or N, and a repeated allele
+- the Beagle 5.5 parameters `initial-lr=` and `window-markers=`, which Beagle 5.4 does not know
 - a bref3 SNV allele code whose permutation index is negative
 - a bref3 header whose sample count overflows when doubled. This case runs for the C build only, because the jar's result depends on its heap size.
 
 ## Compare trace seams
+
+`java/trace.patch` holds trace hooks for the Beagle 5.5 Java source and does not apply to the Beagle 5.4 source in `java/src/`. Until it is rebased, the gate prints `skip  <step> (5.4 trace patch pending)` for `java-trace`, `oracle-trace`, `trace` and `trace-threads`.
 
 `java/trace.patch` holds trace hooks for the Java source. `make java-trace` applies the patch to a copy in `build/java-trace/`. When that build runs with `-Dbeagle.trace=<dir>`, it writes each trace seam to `<dir>/<seam>.txt`. To change the hooks, edit a patched copy and regenerate the patch with `diff -ruN` against `java/src`.
 
@@ -154,7 +162,7 @@ The live checks need `PLINK2` naming the pinned plink2 binary, and fail without 
   - `window` below 1.1 times `overlap`
   - a value out of bounds or not a number
   - an unknown parameter
-- The script shrinks a failure to a small input and saves it in `build/fuzz-fail` with both commands. Inputs from past failures go in `tests/fuzz-regressions/`, which runs first.
+- The script shrinks a failure to a small input and saves it in `build/fuzz-fail` with both commands. Inputs from past failures go in `tests/fuzz-regressions/`, which runs first. Each one's `expect.txt` holds the C result recorded from Beagle 5.4: an exit code and a message, or exit code 0 and the VCF hash. Beagle 5.4 finishes `window-stall`, which Beagle 5.5 repeats without end. `seq-coder-full` is a reference record whose allele count reaches the sequence limit of a 3-sample panel: Beagle 5.4 throws at 1 thread and hangs after throwing at 2.
 - The full tier runs a fixed set of 200 examples (about 30 s per 100 on an M5) and 2 for each invalid-parameter change. The nightly CI run fuzzes 200 new examples. `uv run --python 3.12 --script tests/check_fuzz.py --examples 1000 --random` tries new ones.
 
 ## Model check the pipelined writer
@@ -172,6 +180,16 @@ The model represents condition-variable waits with wait sets and spurious wakeup
 ## Benchmark
 
 `tests/bench/` holds the 1000 Genomes chr20 benchmark. `fetch-chr20.sh <dir>` downloads and derives the inputs, and `bench.sh <dir> <rounds>` times Java and C alternately. [perf-baseline.md](perf-baseline.md) has the method and the current result.
+
+## Parity ratchet
+
+`tests/c54-pending.txt` lists the checks of `build/beagle` whose result still differs from Beagle 5.4's, one key per line: `oracle <case>`, `failure <case>`, `log <case>`, `fuzz-regression <directory>`, `fuzz` for the generated examples, and `fuzz-invalid <change>`. `tests/c54-ratchet.sh` holds the one rule that `tests/check-oracle.sh`, `tests/check-failures.sh`, `tests/check-log.sh` and `tests/check_fuzz.py` apply to such a result:
+
+- A key that is not listed must match, as before.
+- A listed key that differs prints `pending <key>` and passes.
+- A listed key that matches fails with `remove <key> from tests/c54-pending.txt`, so the list only shrinks.
+
+`tests/check-oracle.sh` and `tests/check-failures.sh` apply the ratchet to every command except `java`. The sanitizer, tabix and BGEN checks run oracle cases too. For a listed `oracle <case>` they require exit 0 and any hash, and keep their own checks.
 
 ## Run the pre-merge gate
 

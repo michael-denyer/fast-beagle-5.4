@@ -21,8 +21,7 @@ package vcf;
 import blbutil.BlockLineReader;
 import blbutil.FileIt;
 import blbutil.Filter;
-import blbutil.Utilities;
-import blbutil.VcfFileIt;
+import blbutil.SampleFileIt;
 import bref.SeqCoder3;
 import java.io.File;
 import java.util.ArrayDeque;
@@ -46,7 +45,7 @@ import java.util.function.Function;
  *
  * @author Brian L. Browning {@code <browning@uw.edu>}
  */
-public class RefIt implements VcfFileIt<RefGTRec> {
+public class RefIt implements SampleFileIt<RefGTRec> {
 
     /**
      * The default number of {@code GTRec} objects that are
@@ -129,11 +128,9 @@ public class RefIt implements VcfFileIt<RefGTRec> {
         String[] nonDataLines = Arrays.copyOf(head, head.length-1);
         String firstDataLine = head[head.length-1];
         boolean[] isDiploid = VcfHeader.isDiploid(firstDataLine);
-        boolean storeId = true;
-        MarkerParser filter = new MarkerParser(storeId, false, false, false);
         this.vcfHeader = new VcfHeader(src, nonDataLines, isDiploid, sampleFilter);
         this.mapper = (String s) -> {
-            return RefGTRec.alleleRefGTRec(new VcfRecGTParser(vcfHeader, s, filter));
+            return RefGTRec.alleleCodedInstance(new VcfRecGTParser(vcfHeader, s));
         } ;
         this.markerFilter = markerFilter;
         this.seqCoder = new SeqCoder3(vcfHeader.samples());
@@ -206,26 +203,19 @@ public class RefIt implements VcfFileIt<RefGTRec> {
     }
 
     private RefGTRec[] parseLines(String[] lines) {
-        RefGTRec[] recs = null;
-        try {
-            recs = Arrays.stream(lines)
-                    .parallel()
-                    .map(mapper)
-                    .filter(e -> markerFilter.accept(e.marker()))
-                    .toArray(RefGTRec[]::new);
-        }
-        catch (Throwable t) {
-            Utilities.exit(t);
-        }
-        return recs;
+        return Arrays.stream(lines)
+                .parallel()
+                .map(mapper)
+                .filter(e -> markerFilter.accept(e.marker()))
+                .toArray(RefGTRec[]::new);
     }
 
     private void flushCompressedRecords() {
         List<RefGTRec> list = seqCoder.getCompressedList();
         int index = 0;
         for (int j=0, n=lowFreqBuffer.size(); j<n; ++j) {
-            GTRec rec = lowFreqBuffer.get(j);
-            if (rec==null) {
+            GTRec ve = lowFreqBuffer.get(j);
+            if (ve==null) {
                 lowFreqBuffer.set(j, list.get(index++));
             }
         }
@@ -284,11 +274,6 @@ public class RefIt implements VcfFileIt<RefGTRec> {
     @Override
     public Samples samples() {
         return vcfHeader.samples();
-    }
-
-    @Override
-    public VcfHeader vcfHeader() {
-        return vcfHeader;
     }
 
     @Override

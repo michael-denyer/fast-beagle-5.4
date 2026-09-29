@@ -37,7 +37,7 @@ import vcf.Samples;
  */
 public class Bref3 {
 
-    private static final String PROGRAM = "bref3.27Feb25.75f.jar";
+    private static final String PROGRAM = "bref3.29Oct24.c8e.jar";
 
     /**
      * The {@code main()} method is the entry point to the bref program.
