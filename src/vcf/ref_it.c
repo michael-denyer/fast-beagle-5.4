@@ -23,6 +23,9 @@
 #include "vcf/ref_gt_rec.h"
 #include "vcf/vcf_header.h"
 
+/* RefIt.DEFAULT_BUFFER_SIZE: the lines in each BlockLineReader block. */
+#define REF_IT_BLOCK_LINES 1024
+
 /* A FIFO of owned record pointers; NULL entries are placeholders. */
 typedef struct {
     ref_gt_rec **v;
@@ -57,6 +60,7 @@ typedef struct {
     int max_seq_coded_alleles;
     int max_seq_coding_major_cnt;
     int last_chrom;
+    int n_blocks;         /* BlockLineReader blocks coded so far */
     rec_queue low_freq;   /* records in file order, NULL where SeqCoder3 holds one */
     rec_queue ready;      /* records that next() can return */
 } ref_it;
@@ -95,34 +99,43 @@ static bool apply_seq_coding(const ref_it *it, const ref_gt_rec *rec) {
     return maj_cnt <= it->max_seq_coding_major_cnt;
 }
 
-/* RefIt.fillRecBuffer */
+/* The loop body of RefIt.fillRecBuffer for one parsed record. */
+static void add_rec(ref_it *it, ref_gt_rec *rec) {
+    if (!filter_accept_marker(it->exclude, &rec->marker)) {
+        ref_gt_rec_release(rec);
+        return;
+    }
+    int chrom = rec->marker.chrom_index;
+    if (it->last_chrom == -1) it->last_chrom = chrom;
+    if (chrom != it->last_chrom) {
+        flush_compressed(it);
+        it->last_chrom = chrom;
+    }
+    if (!apply_seq_coding(it, rec)) {
+        queue_push(&it->low_freq, rec);
+    } else {
+        if (!seq_coder3_add(it->coder, rec)) {
+            flush_compressed(it);
+            /* RefIt only asserts that the retry succeeds: without -ea the
+             * record is dropped and the next flush throws. */
+            if (!seq_coder3_add(it->coder, rec)) ref_gt_rec_release(rec);
+        }
+        queue_push(&it->low_freq, NULL);
+    }
+}
+
+/* RefIt.fillRecBuffer: codes whole blocks of BlockLineReader lines, the first
+ * one line longer (RefIt.combine), until a flush has made records ready. A
+ * flush that throws anywhere in a block therefore throws when Java's does,
+ * before the records ahead of it are used. */
 static void fill(ref_it *it) {
     while (it->ready.n == 0) {
-        ref_gt_rec *rec = block_reader_next(it->blocks);
-        if (rec == NULL) {
+        int block = it->n_blocks++ == 0 ? REF_IT_BLOCK_LINES + 1 : REF_IT_BLOCK_LINES;
+        int n = 0;
+        for (ref_gt_rec *rec; n < block && (rec = block_reader_next(it->blocks)) != NULL; ++n) add_rec(it, rec);
+        if (n == 0) {   /* BlockLineReader.SENTINAL */
             flush_compressed(it);
             return;
-        }
-        if (!filter_accept_marker(it->exclude, &rec->marker)) {
-            ref_gt_rec_release(rec);
-            continue;
-        }
-        int chrom = rec->marker.chrom_index;
-        if (it->last_chrom == -1) it->last_chrom = chrom;
-        if (chrom != it->last_chrom) {
-            flush_compressed(it);
-            it->last_chrom = chrom;
-        }
-        if (!apply_seq_coding(it, rec)) {
-            queue_push(&it->low_freq, rec);
-        } else {
-            if (!seq_coder3_add(it->coder, rec)) {
-                flush_compressed(it);
-                /* RefIt only asserts that the retry succeeds: without -ea the
-                 * record is dropped and the next flush throws. */
-                if (!seq_coder3_add(it->coder, rec)) ref_gt_rec_release(rec);
-            }
-            queue_push(&it->low_freq, NULL);
         }
     }
 }
