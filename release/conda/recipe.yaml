@@ -1,0 +1,52 @@
+# The bioconda recipe for fast-beagle, in rattler-build's recipe format. The
+# release workflow fills in version and sha256 from the release's source
+# tarball, and builds and checks this recipe on every platform
+# (docs/release.md).
+context:
+  version: "5.4.0"
+
+package:
+  name: fast-beagle
+  version: ${{ version }}
+
+source:
+  url: https://github.com/michael-denyer/fast-beagle-5.4/releases/download/v${{ version }}/fast-beagle-${{ version }}.tar.gz
+  sha256: 0000000000000000000000000000000000000000000000000000000000000000
+
+build:
+  number: 0
+
+requirements:
+  build:
+    - ${{ compiler('c') }}
+    - make
+  host:
+    - htslib
+  run_exports:
+    - ${{ pin_subpackage('fast-beagle', upper_bound='x.x') }}
+
+tests:
+  - files:
+      recipe:
+        - small.vcf
+    script:
+      - fast-beagle gt=small.vcf out=small nthreads=2
+      - test "$(bgzip -dc small.vcf.gz | grep -vc '^#')" = 40
+      - "! bgzip -dc small.vcf.gz | grep -v '^#' | cut -f10- | grep /"
+
+about:
+  homepage: https://github.com/michael-denyer/fast-beagle-5.4
+  repository: https://github.com/michael-denyer/fast-beagle-5.4
+  documentation: https://github.com/michael-denyer/fast-beagle-5.4/blob/main/docs/usage.md
+  license: GPL-3.0-or-later
+  license_file: LICENSE
+  summary: C port of Beagle 5.4 phasing and imputation with byte-identical output
+  description: |
+    fast-beagle is a standalone C port of Beagle 5.4 (29Oct24), the genotype
+    phasing and imputation tool. Its output is byte-identical to the Java
+    release run with the same nthreads=. It installs as fast-beagle and takes
+    Beagle's key=value arguments.
+
+extra:
+  recipe-maintainers:
+    - michael-denyer

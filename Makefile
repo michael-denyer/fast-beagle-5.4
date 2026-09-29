@@ -8,8 +8,10 @@ FDLIBM_CFLAGS := -Wno-dangling-else -Wno-sign-compare
 LIBDEFLATE_CFLAGS := -O2
 JAVA ?= java
 JAVAC ?= javac
+PREFIX ?= /usr/local
 LDLIBS += -lm -pthread
 # htslib from Homebrew on macOS; on Linux the system package needs no flags.
+# HTSLIB_PREFIX=<dir> uses the htslib in <dir> instead, as the conda build does.
 HTSLIB_PREFIX ?= $(shell brew --prefix htslib 2>/dev/null)
 ifneq ($(HTSLIB_PREFIX),)
 override CFLAGS += -I$(HTSLIB_PREFIX)/include
@@ -22,13 +24,18 @@ JCOMPAT_FIXTURES := random math numbers utf8 parse parseint pqueue search
 LIBDEFLATE_OBJ := $(patsubst %.c,build/obj/%.o,$(wildcard third_party/libdeflate/lib/*.c third_party/libdeflate/lib/*/*.c))
 BEAGLE_OBJ := $(sort $(patsubst src/%.c,build/obj/%.o,$(wildcard src/*/*.c)) $(JCOMPAT_OBJ) $(LIBDEFLATE_OBJ))
 
-.PHONY: all check-jcompat check-bgen-unit check-records check-vcf-index check-tbi check-tracker check-interval check-block-reader check-piece-size java-trace clean
+.PHONY: all install check-jcompat check-bgen-unit check-records check-vcf-index check-tbi check-tracker check-interval check-block-reader check-snv-perms check-piece-size java-trace clean
 .SECONDARY:
 .DELETE_ON_ERROR:
 all: build/beagle
 
 build/beagle: $(BEAGLE_OBJ)
 	$(LINK)
+
+# Installs build/beagle as fast-beagle, since Beagle's own packages install beagle.
+install: build/beagle
+	install -d $(DESTDIR)$(PREFIX)/bin
+	install -m 755 build/beagle $(DESTDIR)$(PREFIX)/bin/fast-beagle
 
 check-jcompat: $(JCOMPAT_FIXTURES:%=build/jcompat/%.diff)
 
@@ -106,11 +113,19 @@ check-interval: build/vcf/interval_it_test
 check-block-reader: build/vcf/block_reader_test
 	./build/vcf/block_reader_test
 
+check-snv-perms: build/vcf/snv_perms_test
+	./build/vcf/snv_perms_test
+
 # The scheduling test includes the implementation to interpose unlock.
 # It links the engine without main.o, since the test defines its own main.
 build/vcf/block_reader_test: tests/vcf/block_reader_test.c src/vcf/block_reader.c $(filter-out build/obj/main/main.o build/obj/vcf/block_reader.o,$(BEAGLE_OBJ))
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(filter-out src/vcf/block_reader.c,$^) -lhts $(LDLIBS)
+
+# The table test includes the implementation to read its static table.
+build/vcf/snv_perms_test: tests/vcf/snv_perms_test.c src/vcf/marker.c $(filter-out build/obj/main/main.o build/obj/vcf/marker.o,$(BEAGLE_OBJ))
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(filter-out src/vcf/marker.c,$^) -lhts $(LDLIBS)
 
 build/vcf/interval_it_test: tests/vcf/interval_it_test.c build/obj/vcf/interval_it.o \
         build/obj/beagleutil/chrom_interval.o build/obj/beagleutil/chrom_ids.o build/obj/blbutil/str_set.o \

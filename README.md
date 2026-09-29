@@ -23,6 +23,27 @@ Beagle phases each target sample's genotypes into two haplotypes, then imputes t
 
 ## Install
 
+The packages below install fast-beagle as `fast-beagle`, because bioconda's `beagle` package already installs `beagle`.
+
+### Bioconda
+
+The bioconda package `fast-beagle` is not published yet. Once it is, its version is the edition (5.4.x) and it installs with:
+
+```bash
+conda install -c conda-forge -c bioconda fast-beagle
+```
+
+### Release binaries
+
+Each [release](https://github.com/michael-denyer/fast-beagle-5.4/releases) has a `fast-beagle` binary for Linux x86_64, Linux arm64 and macOS arm64, with htslib linked in. The Linux binaries need glibc 2.28 or later. Download `fast-beagle-<version>-<os>-<arch>.tar.gz` and `SHA256SUMS` from the release, then check and unpack it:
+
+```bash
+shasum -a 256 --ignore-missing -c SHA256SUMS
+tar -xzf fast-beagle-<version>-<os>-<arch>.tar.gz
+```
+
+### From source
+
 Build fast-beagle from source. It needs a C11 compiler, `make` and htslib.
 
 ```bash
@@ -32,11 +53,11 @@ sudo apt-get install libhts-dev  # Debian and Ubuntu
 make -C fast-beagle-5.4
 ```
 
-`make` builds the binary `build/beagle`.
+`make` builds the binary `build/beagle`. `make install` installs it as `$(PREFIX)/bin/fast-beagle`, with `PREFIX` `/usr/local` by default, and honours `DESTDIR`.
 
 ## Getting started
 
-Run `build/beagle` with Beagle's `key=value` arguments:
+Run `build/beagle`, or `fast-beagle` where it is installed, with Beagle's `key=value` arguments:
 
 ```bash
 build/beagle gt=target.vcf.gz ref=ref.vcf.gz map=plink.map out=result
@@ -50,6 +71,7 @@ The run writes `result.vcf.gz`. Without `ref=` it phases the target only. Add `b
 - [How fast-beagle differs from Beagle 5.4](docs/beagle-divergences.md)
 - [Architecture and source layout](docs/architecture.md)
 - [Checks and the pre-merge gate](docs/testing.md)
+- [Releases](docs/release.md)
 - [Byte identity with Beagle 5.4](docs/byte-identity.md)
 - [Performance](docs/perf-baseline.md)
 - [Domain terms](CONTEXT.md)

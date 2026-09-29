@@ -102,6 +102,8 @@ Beagle's output depends on the exact behaviour of Java library code. `src/jcompa
 
 `tests/check-local.sh` runs the lint hooks, then every check in `tests/gate-steps.sh` natively on macOS arm64 and again on Linux x86_64 in docker. The Linux leg uses the `eclipse-temurin:21-jdk` image with the distribution's gcc. The GitHub Actions workflow `.github/workflows/gate.yml` defines the same list for GitHub-hosted `macos-latest` and `ubuntu-latest` runners ([run the pre-merge gate](testing.md#run-the-pre-merge-gate)). Every oracle hash is the same on both platforms, because both run the same case table.
 
+The release workflow runs `tests/check-oracle.sh` on the binaries that users install: the conda package and the static binary, each on Linux x86_64, Linux arm64 and macOS arm64. [Releases](release.md) describes it.
+
 ### chr20 benchmark
 
 `tests/bench/bench.sh` runs the jar and fast-beagle on a 1000 Genomes chr20 imputation. The target has 321 samples at 15,879 markers, and the reference has 2,881 samples at 1,642,181 markers. The script records the output hash as `tests/check-oracle.sh` computes it. In the recorded run, all 6 Java runs and all 6 fast-beagle runs at 18 threads wrote hash `41b92f8850e50b23`. [perf-baseline.md](perf-baseline.md) has the method, the machine and the timings.

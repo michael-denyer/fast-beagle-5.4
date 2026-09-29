@@ -33,27 +33,16 @@
 static char snv_perms[N_SNV_PERMS][2 * MAX_SNV_ALLELES];
 static int n_snv_perms;
 
-static void permute(char *start, int n_start, const char *end, int n_end) {
-    if (n_end == 0 && start[0] != '*') {
-        char *s = snv_perms[n_snv_perms++];
-        int k = 0;
-        s[k++] = start[0];
-        for (int j = 1; j < n_start; ++j) {
-            s[k++] = j == 1 ? '\t' : ',';
-            s[k++] = start[j];
-        }
-        s[k] = '\0';
-        return;
+static void add_snv_perm(const char a[MAX_SNV_ALLELES]) {
+    if (a[0] == '*') return;
+    char *s = snv_perms[n_snv_perms++];
+    int k = 0;
+    s[k++] = a[0];
+    for (int j = 1; j < MAX_SNV_ALLELES; ++j) {
+        s[k++] = j == 1 ? '\t' : ',';
+        s[k++] = a[j];
     }
-    for (int j = 0; j < n_end; ++j) {
-        start[n_start] = end[j];
-        char rest[MAX_SNV_ALLELES];
-        int n = 0;
-        for (int k = 0; k < n_end; ++k) {
-            if (k != j) rest[n++] = end[k];
-        }
-        permute(start, n_start + 1, rest, n);
-    }
+    s[k] = '\0';
 }
 
 static int compare_str(const void *a, const void *b) {
@@ -61,8 +50,23 @@ static int compare_str(const void *a, const void *b) {
 }
 
 static void init_snv_perms(void) {
-    char start[MAX_SNV_ALLELES];
-    permute(start, 0, "*ACGT", 5);
+    /* Heap's algorithm visits every ordering; the qsort below fixes their order. */
+    char a[MAX_SNV_ALLELES] = {'*', 'A', 'C', 'G', 'T'};
+    int c[MAX_SNV_ALLELES] = {0};
+    add_snv_perm(a);
+    for (int i = 1; i < MAX_SNV_ALLELES;) {
+        if (c[i] < i) {
+            int j = i % 2 == 0 ? 0 : c[i];
+            char t = a[j];
+            a[j] = a[i];
+            a[i] = t;
+            add_snv_perm(a);
+            ++c[i];
+            i = 1;
+        } else {
+            c[i++] = 0;
+        }
+    }
     for (const char *b = "ACGT"; *b != '\0'; ++b) {
         char *s = snv_perms[n_snv_perms++];
         s[0] = *b;
