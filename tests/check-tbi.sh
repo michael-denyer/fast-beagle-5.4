@@ -1,7 +1,6 @@
 #!/bin/bash
 # Runs build/beagle with tbi=true on oracle cases at 1 and 18 threads. The VCF
-# must have the oracle hash (any hash while tests/c54-pending.txt lists the
-# case) and match a run without tbi=true, and
+# must have the oracle hash and match a run without tbi=true, and
 # <out>.vcf.gz.tbi must be byte-identical to the index htslib's
 # tbx_index_build3 (tabix -p vcf) builds from that VCF.
 #
@@ -25,7 +24,7 @@ while read -r name expect _ args; do
   selected "$name" || continue
   for t in 1 18; do
     out="$OUT/$name.t$t"
-    if ! case_verdict "$(c_expect "$name" "$expect")" "$args tbi=true" "$out" "$t" "$BEAGLE"; then
+    if ! case_verdict "$expect" "$args tbi=true" "$out" "$t" "$BEAGLE"; then
       echo "FAIL $name nthreads=$t $VERDICT"; tail -5 "$out.run.log"; fail=1; continue
     fi
     case_run "$args" "$out.plain" "$t" "$BEAGLE"

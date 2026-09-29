@@ -58,9 +58,6 @@ int main(void) {
         } else if (strcmp(op, "site-unphased") == 0) {
             printf("%s %s %s ", op, a, b);
             print_f((float)jmath_pow(atoi(a), -1.0 / atoi(b)));
-        } else if (strcmp(op, "site-lr") == 0) {
-            printf("%s %s %s ", op, a, b);
-            print_f((float)(4.0 * jmath_pow(d(a), d(b))));
         } else if (strcmp(op, "site-precomb") == 0) {
             printf("%s %s %s ", op, a, b);
             print_f((float)-jmath_expm1(d(a) * d(b)));

@@ -75,8 +75,7 @@ typedef struct {
  * staleness. Repeated observations keep the same composite haplotype. */
 comp_hap_change comp_hap_tracker_observe(comp_hap_tracker *t, int hap, int step, int min_steps);
 /* Random fallback only, after an empty IBS scan: adds a whole haplotype,
- * including repeated draws. Do not resume observations until _clear.
- * BasicPhaseStates instead uses _observe at step 0 to discard repeats. */
+ * including repeated draws. Do not resume observations until _clear. */
 int comp_hap_tracker_seed(comp_hap_tracker *t, int hap);
 int comp_hap_tracker_size(const comp_hap_tracker *t);
 /* The unfinished segment of composite haplotype index, until the next

@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2014-2021 Brian L. Browning
- * Ported to C from Beagle 5.5 (27Feb25) phase/PhaseLS.java; modified 2026.
+ * Ported to C from Beagle 5.4 (29Oct24) phase/PhaseLS.java; modified 2026.
  *
  * This file is part of fast-beagle, a C port of Beagle. It is free software:
  * you can redistribute it and/or modify it under the terms of the GNU General
@@ -138,13 +138,13 @@ static void initialize_parameters(const pbwt_phase_ibs *ibs, jrandom *r) {
 }
 
 typedef struct {
-    phase_baum2 baum;
+    phase_baum1 baum;
     swap_rate rate;
 } baum_worker;
 
 static void baum_task(void *worker, int sample) {
     baum_worker *bw = worker;
-    phase_baum2_phase(&bw->baum, sample, &bw->rate);
+    phase_baum1_phase(&bw->baum, sample, &bw->rate);
 }
 
 void phase_ls_run_stage1(phase_data *pd, swap_rate *rate) {
@@ -167,18 +167,27 @@ void phase_ls_run_stage1(phase_data *pd, swap_rate *rate) {
     /* Each sample is phased only against the haplotypes copied at the start
      * of the iteration, so the threads can take samples in any order. */
     int n_threads = parallel_threads(pd->par->nthreads, pd->n_samples);
+    char **trace_lines = trace_on() ? util_malloc((size_t)pd->n_samples * sizeof *trace_lines) : NULL;
     baum_worker *workers = util_malloc((size_t)n_threads * sizeof *workers);
     for (int t = 0; t < n_threads; ++t) {
-        phase_baum2_init(&workers[t].baum, &ibs);
+        phase_baum1_init(&workers[t].baum, &ibs, trace_lines);
         workers[t].rate = (swap_rate){0, 0};
     }
     parallel_for(n_threads, pd->n_samples, workers, sizeof *workers, baum_task);
     for (int t = 0; t < n_threads; ++t) {
         rate->n_swaps += workers[t].rate.n_swaps;
         rate->n_unph_hets += workers[t].rate.n_unph_hets;
-        phase_baum2_free(&workers[t].baum);
+        phase_baum1_free(&workers[t].baum);
     }
     free(workers);
+    if (trace_lines != NULL) {
+        trace_line("T3e", "it\t%d", pd->it);
+        for (int s = 0; s < pd->n_samples; ++s) {
+            trace_line("T3e", "%s", trace_lines[s]);
+            free(trace_lines[s]);
+        }
+        free(trace_lines);
+    }
     pbwt_phase_ibs_free(&ibs);
     coded_steps_free(&cs);
 }

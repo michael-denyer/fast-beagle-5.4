@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2014-2021 Brian L. Browning
- * Ported to C from Beagle 5.5 (27Feb25) phase/PbwtIbsData.java, with the
+ * Ported to C from Beagle 5.4 (29Oct24) phase/PbwtIbsData.java, with the
  * batch PBWT loop that PbwtPhaseIbs and LowFreqPbwtPhaseIbs share; modified 2026.
  *
  * This file is part of fast-beagle, a C port of Beagle. It is free software:
@@ -19,7 +19,6 @@
 static const int BURNIN_CANDIDATES = 100;
 static const int MAX_PHASE_CANDIDATES = 90;
 static const int MIN_PHASE_CANDIDATES = 5;
-static const int STAGE2_CANDIDATES = 10;
 static const float MAX_BACKOFF_CM = 0.3f;
 
 static int min_int(int a, int b) {
@@ -43,12 +42,21 @@ static int n_candidates1(const phase_data *pd) {
     return min_int(n, pd->fpd->n_haps);
 }
 
+/* PbwtIbsData.nCandidates2: stage 2 scales with rare= and the haplotype
+ * count. */
+static int n_candidates2(const phase_data *pd) {
+    int n_haps = pd->fpd->n_haps;
+    float scale_factor = 0.5f;
+    int n = jnum_d2i(floor((double)(scale_factor * pd->par->rare * n_haps)));
+    return min_int(max_int(n, MIN_PHASE_CANDIDATES), n_haps);
+}
+
 void pbwt_ibs_data_init(pbwt_ibs_data *d, const phase_data *pd, int n_steps) {
     const fixed_phase_data *fpd = pd->fpd;
     const par *p = pd->par;
     int n_its = p->burnin + p->iterations;
     d->n_steps = n_steps;
-    d->n_candidates = pd->it < n_its ? n_candidates1(pd) : min_int(STAGE2_CANDIDATES, fpd->n_haps);
+    d->n_candidates = pd->it < n_its ? n_candidates1(pd) : n_candidates2(pd);
     d->n_overlap_steps = jnum_d2i(rint((double)(p->buffer / fpd->ibs_step)));
     d->max_backoff_steps = jnum_d2i(rint((double)(MAX_BACKOFF_CM / fpd->ibs_step)));
     d->steps_per_batch = (n_steps + p->nthreads - 1) / p->nthreads;

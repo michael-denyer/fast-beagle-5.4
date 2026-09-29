@@ -8,8 +8,7 @@
 # .info sidecar matching the BGEN and VCF, tests/check_bgen_reader.py must find
 # that bgen-reader decodes the BGEN as our own decoder does, and a run that
 # fails anywhere after the writer opens must leave no .bgen, .info or .sample.
-# The VCF must keep its oracle hash (any hash while tests/c54-pending.txt
-# lists the case). Invalid
+# The VCF must keep its oracle hash. Invalid
 # bgen-bits and bgen-chr-set values must exit 1 with a message, as must every
 # refused run.
 #
@@ -103,10 +102,9 @@ pass() { echo "PASS $*"; }
 bgen_reader() { PYTHONDONTWRITEBYTECODE=1 uv run --python 3.12 --script "$ROOT/tests/check_bgen_reader.py" "$1" 2>&1; }
 failed() { echo "FAIL $*"; fail=1; }
 
-# Sets expect, tags and args to the case's row, expect as c_expect gives it.
+# Sets expect, tags and args to the case's row.
 read_case() {  # name
   read -r expect tags args <<< "$(cases "${TABLES[@]}" | awk -v n="$1" '$1 == n {$1 = ""; print; exit}')"
-  expect=$(c_expect "$1" "$expect")
 }
 
 # The run's row in tests/bgen-hashes.txt must match the SHA-256 prefixes of its
