@@ -5,6 +5,7 @@
 ![macOS](https://img.shields.io/badge/macOS-supported-D32F2F?logo=apple&logoColor=white)
 ![Linux](https://img.shields.io/badge/Linux-supported-FCC624?logo=linux&logoColor=black)
 ![License GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23049302.svg)](https://doi.org/10.5281/zenodo.23049302)
 
 <img src="docs/logo.jpg" width="144" align="right" alt="Beagle with a DNA helix">
 
