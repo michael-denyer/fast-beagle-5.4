@@ -200,7 +200,12 @@ class OutputFailures(unittest.TestCase):
                         )
                         args["ref"] = reference
                     proc = run(args)
-                    error = "java.lang.IllegalArgumentException: Window has only one position: CHROM=1 POS=100"
+                    # Beagle 5.4 parses the first 1024 target lines at startup, so a bad target allele
+                    # there fails before the first window.
+                    if source == "target":
+                        error = 'ERROR: Invalid allele [x] at character 27 in record "2\t200\t.\tA\tC\t..."'
+                    else:
+                        error = "java.lang.IllegalArgumentException: Window has only one position: CHROM=1 POS=100"
                     self.assertEqual(proc.returncode, 1, proc.stderr)
                     self.assertEqual(proc.stderr.strip(), error)
                     self.assertEqual(Path(str(prefix) + ".log").read_text().splitlines()[-1], error)
