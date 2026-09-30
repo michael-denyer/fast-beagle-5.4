@@ -12,6 +12,7 @@
 #ifndef VCF_GT_REC_H
 #define VCF_GT_REC_H
 
+#include <stdatomic.h>
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -27,7 +28,7 @@ typedef enum { GT_LOW_MAF_DIALLELIC, GT_LOW_MAF, GT_BIT_ARRAY } gt_rec_kind;
 /* A target VCF record. A haploid sample's allele fills both of its haplotypes.
  * Phase is one flag per record: false if any genotype is unphased or missing. */
 typedef struct {
-    int refs;               /* owners; see gt_rec_release */
+    atomic_int refs;        /* owners; see gt_rec_release */
     marker marker;
     gt_rec_kind kind;
     bool is_phased;
@@ -46,8 +47,9 @@ typedef struct {
  * on a format error. */
 void gt_rec_parse(gt_rec *rec, const char *line, size_t len, const vcf_header *h);
 void gt_rec_free(gt_rec *rec);
-/* For heap records shared by windows: add an owner, or drop one and free the
- * record with its last owner. */
+/* For heap records shared by windows, whose owners can be on the window reader
+ * and caller threads: add an owner, or drop one and free the record with its
+ * last owner. */
 gt_rec *gt_rec_retain(gt_rec *rec);
 void gt_rec_release(gt_rec *rec);
 

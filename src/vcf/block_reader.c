@@ -28,6 +28,7 @@
 typedef struct {
     kstring_t lines[BLOCK_READER_BATCH];
     ref_gt_rec *recs[BLOCK_READER_BATCH];
+    char *errors[BLOCK_READER_BATCH];   /* each line's parse error, or NULL */
     int n;   /* 0 marks the end of the file, as BlockLineReader.SENTINAL does */
 } batch;
 
@@ -56,15 +57,22 @@ struct block_reader {
 typedef struct {
     const vcf_header *header;
     batch *b;
+    int j;
 } parse_ctx;
+
+static void parse_line(void *arg) {
+    const parse_ctx *c = arg;
+    ref_gt_rec *rec = util_malloc(sizeof *rec);
+    jutf8_sanitize(&c->b->lines[c->j]);
+    ref_gt_rec_parse(rec, c->b->lines[c->j].s, c->b->lines[c->j].l, c->header);
+    rec->refs = 1;
+    c->b->recs[c->j] = rec;
+}
 
 static void parse_task(void *worker, int j) {
     const parse_ctx *c = worker;
-    ref_gt_rec *rec = util_malloc(sizeof *rec);
-    jutf8_sanitize(&c->b->lines[j]);
-    ref_gt_rec_parse(rec, c->b->lines[j].s, c->b->lines[j].l, c->header);
-    rec->refs = 1;
-    c->b->recs[j] = rec;
+    c->b->recs[j] = NULL;
+    c->b->errors[j] = util_try(parse_line, &(parse_ctx){c->header, c->b, j});
 }
 
 /* Indexes the line's chromosome id, sanitised as the parser will see it. The
@@ -104,7 +112,7 @@ static void read_lines(block_reader *r, batch *b) {
 
 /* VcfIt.fillEmissionBuffer: parses a batch's lines in parallel. */
 static void parse_batch(block_reader *r, batch *b) {
-    parse_ctx ctx = {r->header, b};
+    parse_ctx ctx = {r->header, b, 0};
     parallel_for(parallel_threads(r->n_threads, b->n), b->n, &ctx, 0, parse_task);
 }
 
@@ -186,7 +194,11 @@ ref_gt_rec *block_reader_next(block_reader *r) {
         r->cur_next = 0;
         if (r->cur->n == 0) return NULL;
     }
-    return r->cur->recs[r->cur_next++];
+    /* A line's parse error is reported when the line is taken, not when it is
+     * parsed: RefIt's blocks of lines do not align with these batches. */
+    int j = r->cur_next++;
+    if (r->cur->errors[j] != NULL) util_exit("%s", r->cur->errors[j]);
+    return r->cur->recs[j];
 }
 
 void block_reader_close(block_reader *r) {
@@ -204,7 +216,10 @@ void block_reader_close(block_reader *r) {
         for (int j = 0; j < b->n; ++j) ref_gt_rec_release(b->recs[j]);
     }
     for (int k = 0; k < BLOCK_READER_SLOTS; ++k) {
-        for (int j = 0; j < BLOCK_READER_BATCH; ++j) free(r->slots[k].lines[j].s);
+        for (int j = 0; j < BLOCK_READER_BATCH; ++j) {
+            free(r->slots[k].lines[j].s);
+            free(r->slots[k].errors[j]);
+        }
     }
     pthread_mutex_destroy(&r->mutex);
     pthread_cond_destroy(&r->changed);

@@ -12,6 +12,7 @@
 #include "vcf/sliding_window.h"
 
 #include <inttypes.h>
+#include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -90,8 +91,19 @@ struct sliding_window {
     ref_list ref_recs, ref_overlap;
     int window_index;
     int64_t cum_targ_markers, cum_markers;
-    bool started, done;
+    bool done;               /* the reader has read the last window */
+    /* The reader thread reads each window while the caller holds the one
+     * before, as Java's reader thread does. */
+    pthread_t reader;
+    pthread_mutex_t mutex;
+    pthread_cond_t changed;
+    bool ready;              /* ahead, or error, awaits sliding_window_next */
+    bool stop;
+    window *ahead;           /* the next window, or NULL after the last */
+    char *error;             /* the reader's util_exit message */
 };
+
+static void *read_ahead(void *arg);
 
 /* Java's `it.hasNext() ? it.next() : null`. A true hasNext() is always
  * followed by next(), so reading the record here consumes the same records. */
@@ -129,6 +141,9 @@ sliding_window *sliding_window_open(const par *p) {
     sw->window_cm = p->window;
     sw->overlap_cm = p->overlap;
     sw->impute = p->impute;
+    pthread_mutex_init(&sw->mutex, NULL);
+    pthread_cond_init(&sw->changed, NULL);
+    if (pthread_create(&sw->reader, NULL, read_ahead, sw) != 0) util_exit(PROGRAM ": cannot create thread");
     return sw;
 }
 
@@ -346,23 +361,66 @@ static window *next_ref_window(sliding_window *sw) {
     return w;
 }
 
-/* Java reads windows on a reader thread one window ahead of the caller. So
- * when the caller rejects window k (for example in MarkerMap) and window k+1
- * cannot be read, which error Java prints depends on thread timing. This
- * reads each window on demand and always reports window k's error first. */
-window *sliding_window_next(sliding_window *sw) {
-    if (!sw->started) {
-        sw->started = true;
-        sw->next_targ = targ_next(sw);
-        if (sw->ref_it.ops == NULL) {
-            if (sw->next_targ == NULL) util_exit("Error: no genotype data");
-        } else {
-            sw->next_ref = ref_next(sw);
-            if (sw->next_targ == NULL || sw->next_ref == NULL) util_exit("no genotype data");
-        }
+/* Gives the caller w, or NULL after the last window, and waits until the
+ * caller takes it. Returns false once sliding_window_close stops the reader. */
+static bool hand_over(sliding_window *sw, window *w) {
+    pthread_mutex_lock(&sw->mutex);
+    sw->ahead = w;
+    sw->ready = true;
+    pthread_cond_broadcast(&sw->changed);
+    while (sw->ready && !sw->stop) pthread_cond_wait(&sw->changed, &sw->mutex);
+    bool stop = sw->stop;
+    pthread_mutex_unlock(&sw->mutex);
+    return !stop;
+}
+
+static void read_windows(void *arg) {
+    sliding_window *sw = arg;
+    sw->next_targ = targ_next(sw);
+    if (sw->ref_it.ops == NULL) {
+        if (sw->next_targ == NULL) util_exit("Error: no genotype data");
+    } else {
+        sw->next_ref = ref_next(sw);
+        if (sw->next_targ == NULL || sw->next_ref == NULL) util_exit("no genotype data");
     }
-    if (sw->done) return NULL;
-    window *w = sw->ref_it.ops == NULL ? next_targ_window(sw) : next_ref_window(sw);
+    for (;;) {
+        window *w = NULL;
+        if (!sw->done) w = sw->ref_it.ops == NULL ? next_targ_window(sw) : next_ref_window(sw);
+        if (!hand_over(sw, w) || w == NULL) return;
+    }
+}
+
+/* The reader thread reads window k+1 only once the caller has taken window k,
+ * so at most one window is read ahead. An error reading window k+1 waits
+ * until the caller asks for window k+1, so an error the caller raises for
+ * window k is reported first. (Java's reader runs ahead of its queue of one
+ * window, so which of the two errors Java reports depends on thread timing.) */
+static void *read_ahead(void *arg) {
+    sliding_window *sw = arg;
+    char *error = util_try(read_windows, sw);
+    if (error != NULL) {
+        pthread_mutex_lock(&sw->mutex);
+        sw->error = error;
+        sw->ready = true;
+        pthread_cond_broadcast(&sw->changed);
+        pthread_mutex_unlock(&sw->mutex);
+    }
+    return NULL;
+}
+
+window *sliding_window_next(sliding_window *sw) {
+    pthread_mutex_lock(&sw->mutex);
+    while (!sw->ready) pthread_cond_wait(&sw->changed, &sw->mutex);
+    char *error = sw->error;
+    window *w = sw->ahead;
+    if (error == NULL && w != NULL) {
+        sw->ahead = NULL;
+        sw->ready = false;
+        pthread_cond_broadcast(&sw->changed);
+    }
+    pthread_mutex_unlock(&sw->mutex);
+    if (error != NULL) util_exit("%s", error);
+    if (w == NULL) return NULL;
     sw->cum_targ_markers += w->indices.n_targ_markers - w->indices.targ_overlap_end;
     sw->cum_markers += w->indices.n_markers - w->indices.overlap_end;
     return w;
@@ -386,6 +444,15 @@ void window_free(window *w) {
 }
 
 void sliding_window_close(sliding_window *sw) {
+    pthread_mutex_lock(&sw->mutex);
+    sw->stop = true;
+    pthread_cond_broadcast(&sw->changed);
+    pthread_mutex_unlock(&sw->mutex);
+    pthread_join(sw->reader, NULL);
+    pthread_mutex_destroy(&sw->mutex);
+    pthread_cond_destroy(&sw->changed);
+    if (sw->ahead != NULL) window_free(sw->ahead);
+    free(sw->error);
     gt_rec_release(sw->next_targ);
     ref_gt_rec_release(sw->ref_peek);
     ref_gt_rec_release(sw->next_ref);

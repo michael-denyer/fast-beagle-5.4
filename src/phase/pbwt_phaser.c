@@ -50,23 +50,22 @@ int_list pbwt_phaser_windows(const fixed_phase_data *fpd, int nthreads) {
 
 /* PbwtPhaser.indices: each sample's missing genotypes, and its heterozygotes
  * at or after the stage-1 overlap other than its first heterozygote. */
-static void indices(const fixed_phase_data *fpd, int_list *miss, int_list *hets) {
-    int n_samples = fpd_n_targ_haps(fpd) >> 1;
-    bool *seen_het = util_malloc((size_t)n_samples * sizeof *seen_het);
-    for (int s = 0; s < n_samples; ++s) {
+static void indices(const fixed_phase_data *fpd, int s_start, int s_end, int_list *miss, int_list *hets) {
+    bool *seen_het = util_malloc((size_t)(s_end - s_start) * sizeof *seen_het);
+    for (int s = s_start; s < s_end; ++s) {
         miss[s] = (int_list){0};
         hets[s] = (int_list){0};
-        seen_het[s] = false;
+        seen_het[s - s_start] = false;
     }
     for (int m = 0; m < fpd->n_stage1; ++m) {
-        for (int s = 0; s < n_samples; ++s) {
+        for (int s = s_start; s < s_end; ++s) {
             int a1 = fpd_targ_allele(fpd, m, s << 1);
             int a2 = fpd_targ_allele(fpd, m, (s << 1) | 1);
             if (a1 < 0 || a2 < 0) {
                 int_list_add(&miss[s], m);
             } else if (a1 != a2) {
-                if (m >= fpd->stage1_overlap && seen_het[s]) int_list_add(&hets[s], m);
-                else seen_het[s] = true;
+                if (m >= fpd->stage1_overlap && seen_het[s - s_start]) int_list_add(&hets[s], m);
+                else seen_het[s - s_start] = true;
             }
         }
     }
@@ -108,15 +107,15 @@ static void copy_haps(const fwd_pbwt_phaser *fp, int **hap1, int **hap2, const i
 }
 
 /* PbwtPhaser.pbwtPhasers and initPhase: the windows' phasers are built in
- * parallel, then each block of samples copies its haplotypes from every
- * window in order. */
+ * parallel, then each block of samples finds its indices and copies its
+ * haplotypes from every window in order. */
 typedef struct {
     const fixed_phase_data *fpd;
     const int_list *windows;
     int64_t seed;
     fwd_pbwt_phaser *fps;
     int **hap1, **hap2;
-    const int_list *hets, *miss;
+    int_list *hets, *miss;
     sample_phase *phase;
     int n_samples, block;
 } init_ctx;
@@ -131,6 +130,7 @@ static void samples_task(void *worker, int b) {
     const init_ctx *c = worker;
     int s_start = b * c->block;
     int s_end = s_start + c->block < c->n_samples ? s_start + c->block : c->n_samples;
+    indices(c->fpd, s_start, s_end, c->miss, c->hets);
     for (int s = s_start; s < s_end; ++s) {
         c->hap1[s] = util_malloc((size_t)c->fpd->n_stage1 * sizeof **c->hap1);
         c->hap2[s] = util_malloc((size_t)c->fpd->n_stage1 * sizeof **c->hap2);
@@ -145,6 +145,8 @@ static void samples_task(void *worker, int b) {
                 c->miss[s].n);
         free(c->hap1[s]);
         free(c->hap2[s]);
+        free(c->hets[s].v);
+        free(c->miss[s].v);
     }
 }
 
@@ -152,20 +154,18 @@ sample_phase *pbwt_phaser_init_phase(const fixed_phase_data *fpd, int nthreads, 
     int n_samples = fpd_n_targ_haps(fpd) >> 1;
     int_list *miss = util_malloc((size_t)n_samples * sizeof *miss);
     int_list *hets = util_malloc((size_t)n_samples * sizeof *hets);
-    indices(fpd, miss, hets);
     int_list windows = pbwt_phaser_windows(fpd, nthreads);
     int n_windows = windows.n >> 1;
+    /* PbwtPhaser.nSamplesPerBatch */
+    int block = (n_samples + nthreads - 1) / nthreads;
+    while (block > 4096) block = (block + 1) >> 1;
     init_ctx c = {fpd, &windows, seed, util_malloc((size_t)n_windows * sizeof *c.fps),
             util_malloc((size_t)n_samples * sizeof *c.hap1), util_malloc((size_t)n_samples * sizeof *c.hap2), hets, miss,
-            util_malloc((size_t)n_samples * sizeof *c.phase), n_samples, 128};
+            util_malloc((size_t)n_samples * sizeof *c.phase), n_samples, block};
     int n_blocks = (n_samples + c.block - 1) / c.block;
     parallel_for(parallel_threads(nthreads, n_windows), n_windows, &c, 0, phaser_task);
     parallel_for(parallel_threads(nthreads, n_blocks), n_blocks, &c, 0, samples_task);
     for (int j = 0; j < n_windows; ++j) fwd_pbwt_phaser_free(&c.fps[j]);
-    for (int s = 0; s < n_samples; ++s) {
-        free(hets[s].v);
-        free(miss[s].v);
-    }
     sample_phase *phase = c.phase;
     free(c.fps);
     free(c.hap1);

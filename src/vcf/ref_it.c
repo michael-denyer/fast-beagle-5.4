@@ -127,16 +127,20 @@ static void add_rec(ref_it *it, ref_gt_rec *rec) {
 /* RefIt.fillRecBuffer: codes whole blocks of BlockLineReader lines, the first
  * one line longer (RefIt.combine), until a flush has made records ready. A
  * flush that throws anywhere in a block therefore throws when Java's does,
- * before the records ahead of it are used. */
+ * before the records ahead of it are used. RefIt.parseLines parses the whole
+ * block before coding it, so a bad line is reported before a flush in its
+ * block. */
 static void fill(ref_it *it) {
+    ref_gt_rec *recs[REF_IT_BLOCK_LINES + 1];
     while (it->ready.n == 0) {
         int block = it->n_blocks++ == 0 ? REF_IT_BLOCK_LINES + 1 : REF_IT_BLOCK_LINES;
         int n = 0;
-        for (ref_gt_rec *rec; n < block && (rec = block_reader_next(it->blocks)) != NULL; ++n) add_rec(it, rec);
+        while (n < block && (recs[n] = block_reader_next(it->blocks)) != NULL) ++n;
         if (n == 0) {   /* BlockLineReader.SENTINAL */
             flush_compressed(it);
             return;
         }
+        for (int j = 0; j < n; ++j) add_rec(it, recs[j]);
     }
 }
 

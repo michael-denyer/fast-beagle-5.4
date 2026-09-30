@@ -16,11 +16,12 @@
 # examples. The default is the full gate. GATE_FUZZ=random fuzzes new examples
 # instead of the fixed 200.
 #
-# Each check names its group. GATE_GROUP=core, bgen, java or sanitizers runs
-# one group, so CI can run the groups as parallel jobs; the setup checks (the
-# fixtures and the C build) run in every group. The default, all, runs every
-# check in order. GATE_LIST=1 prints the group and name of each check the tier
-# and group select, without running it.
+# Each check names its group. GATE_GROUP=core, bgen, java, cases, sanitizers
+# or tsan runs one group, so CI can run the groups as parallel jobs; the setup
+# checks (the fixtures and the C build) run in every group. The default, all,
+# runs every check in order. The tsan check runs on macOS only and prints a
+# skip line elsewhere. GATE_LIST=1 prints the group and name of each check the
+# tier and group select, without running it.
 # shellcheck disable=SC2329  # java_build, oracle_trace and trace_threads run through step
 set -uo pipefail
 cd "$1" || exit 1
@@ -35,8 +36,8 @@ fail=0
 tier=${GATE_TIER:-full}
 case $tier in full|c) ;; *) echo "GATE_TIER must be full or c, not $tier"; exit 2 ;; esac
 group=${GATE_GROUP:-all}
-case $group in all|core|bgen|java|sanitizers) ;;
-  *) echo "GATE_GROUP must be all, core, bgen, java or sanitizers, not $group"; exit 2 ;; esac
+case $group in all|core|bgen|java|cases|sanitizers|tsan) ;;
+  *) echo "GATE_GROUP must be all, core, bgen, java, cases, sanitizers or tsan, not $group"; exit 2 ;; esac
 bgen_oracle=live logs=build/check-
 [ "$tier" = c ] && bgen_oracle=recorded logs=build/check-c-
 fuzz_args=(--examples 200)
@@ -86,10 +87,10 @@ trace_threads() {
   done
 }
 
-step setup fixtures tests/fetch-fixtures.sh
+step setup fixtures tests/fetch-fixtures.sh --ensure
 step core gate-tier tests/check-gate-tier.sh
 step core log-recording python3 tests/check_log_recording.py
-full_step core cases python3 tests/check_cases.py
+full_step cases cases python3 tests/check_cases.py
 full_step core jcompat make check-jcompat
 step core tracker make check-tracker
 step core interval make check-interval
@@ -116,6 +117,11 @@ step bgen bgen env BGEN_ORACLE="$bgen_oracle" tests/check-bgen.sh
 # shellcheck disable=SC2086  # the seam list splits into arguments
 full_step java trace tests/check-trace.sh $SEAMS
 step sanitizers sanitizers tests/check-sanitizers.sh
+if [ "$(uname -s)" = Darwin ]; then
+  step tsan tsan tests/check-tsan.sh
+elif in_group tsan && [ "${GATE_LIST:-}" != 1 ]; then
+  echo "  skip  tsan (macOS only)"
+fi
 full_step core tla tests/check-tla.sh
 full_step core fuzz uv run --python 3.12 --script tests/check_fuzz.py "${fuzz_args[@]}"
 if [ "$tier" = c ]; then

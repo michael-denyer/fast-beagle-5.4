@@ -33,6 +33,7 @@ typedef struct {
     uint64_t n_written;  /* uncompressed bytes */
     bool ap, gp;
     int n_haps;
+    int nthreads;
     kstring_t hom_ref[5];
 } window_writer;
 
@@ -86,7 +87,8 @@ void window_writer_encode(out_worker *wk, out_rec *r);
 void window_writer_put(window_writer *ww, out_rec *r);
 
 /* WindowWriter.printPhased: records for target markers [start, end) of w,
- * haploid samples with one allele. */
+ * haploid samples with one allele, formatted on nthreads threads and written
+ * in marker order. allele is called from those threads at once. */
 void window_writer_print_phased(window_writer *ww, const window *w, int start, int end, phased_allele_fn allele, const void *ctx);
 void window_writer_close(window_writer *ww);
 

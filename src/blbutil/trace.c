@@ -38,7 +38,10 @@ static FILE *seam_file(const char *seam) {
     char path[4096];
     snprintf(path, sizeof path, "%s/%s.txt", trace_dir, seam);
     FILE *out = fopen(path, "w");
-    if (out == NULL) util_exit("Error opening %s", path);
+    if (out == NULL) {
+        pthread_mutex_unlock(&lock);   /* util_exit can return to a util_try */
+        util_exit("Error opening %s", path);
+    }
     seams[n_seams].name = util_strndup(seam, strlen(seam));
     seams[n_seams].out = out;
     ++n_seams;

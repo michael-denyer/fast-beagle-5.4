@@ -18,6 +18,7 @@
 #include <string.h>
 #include <time.h>
 
+#include "blbutil/parallel.h"
 #include "blbutil/trace.h"
 #include "blbutil/utilities.h"
 #include "jcompat/jnum.h"
@@ -247,6 +248,7 @@ void window_writer_open(window_writer *ww, const par *p, const samples *s) {
     ww->samples = s;
     ww->ap = p->ap;
     ww->gp = p->gp;
+    ww->nthreads = p->nthreads;
     ww->n_haps = 0;
     for (int j = 0; j < s->n; ++j) ww->n_haps += s->is_diploid[j] ? 2 : 1;
     for (int j = 0; j < 5; ++j) ww->hom_ref[j] = (kstring_t){0};
@@ -416,23 +418,73 @@ void window_writer_put(window_writer *ww, out_rec *r) {
     if (ww->bgen != NULL) bgen_writer_put(ww->bgen, r->bgen);
 }
 
-void window_writer_print_phased(window_writer *ww, const window *w, int start, int end, phased_allele_fn allele, const void *ctx) {
-    out_worker *wk = window_writer_worker_new(ww);
-    out_rec r = {0};
-    for (int m = start; m < end; ++m) {
-        const marker *mk = &w->targ[m]->marker;
-        window_writer_rec_begin(ww, &r, mk, OUT_PHASED);
+/* WindowWriter.printPhased(Stage2Haps, ...) formats 50 records per task. At
+ * most PHASED_SLOTS_PER_THREAD * nthreads tasks' records are held at once. */
+#define PHASED_STEP 50
+#define PHASED_SLOTS_PER_THREAD 2
+
+typedef struct {
+    window_writer *ww;
+    const window *w;
+    int start, end;
+    phased_allele_fn allele;
+    const void *ctx;
+    int window;
+    out_rec *recs;  /* task i's records in slot i % window, PHASED_STEP per slot */
+} phased_ctx;
+
+typedef struct {
+    const phased_ctx *c;
+    out_worker *wk;
+} phased_worker;
+
+/* Task item's first record, and its target markers in [*m_start, *m_end). */
+static out_rec *phased_task(const phased_ctx *c, int item, int *m_start, int *m_end) {
+    *m_start = c->start + item * PHASED_STEP;
+    *m_end = c->end - *m_start < PHASED_STEP ? c->end : *m_start + PHASED_STEP;
+    return &c->recs[(size_t)(item % c->window) * PHASED_STEP];
+}
+
+static void phased_build(void *worker, int item) {
+    const phased_worker *pw = worker;
+    const phased_ctx *c = pw->c;
+    const window_writer *ww = c->ww;
+    int m_start, m_end;
+    out_rec *r = phased_task(c, item, &m_start, &m_end);
+    for (int m = m_start; m < m_end; ++m, ++r) {
+        window_writer_rec_begin(ww, r, &c->w->targ[m]->marker, OUT_PHASED);
         for (int s = 0; s < ww->samples->n; ++s) {
             int h1 = s << 1;
-            int a1 = allele(ctx, m, h1), a2 = 0;
-            if (ww->samples->is_diploid[s]) a2 = allele(ctx, m, h1 | 1);
-            window_writer_rec_gt(&r, a1, a2);
+            int a1 = c->allele(c->ctx, m, h1), a2 = 0;
+            if (ww->samples->is_diploid[s]) a2 = c->allele(c->ctx, m, h1 | 1);
+            window_writer_rec_gt(r, a1, a2);
         }
-        window_writer_encode(wk, &r);
-        window_writer_put(ww, &r);
+        window_writer_encode(pw->wk, r);
     }
-    window_writer_rec_free(&r);
-    window_writer_worker_free(wk);
+}
+
+static void phased_put(void *ctx, int item) {
+    const phased_ctx *c = ctx;
+    int m_start, m_end;
+    out_rec *r = phased_task(c, item, &m_start, &m_end);
+    for (int m = m_start; m < m_end; ++m, ++r) window_writer_put(c->ww, r);
+}
+
+void window_writer_print_phased(window_writer *ww, const window *w, int start, int end, phased_allele_fn allele, const void *ctx) {
+    int n_threads = ww->nthreads;
+    int window = PHASED_SLOTS_PER_THREAD * n_threads;
+    size_t n_recs = (size_t)window * PHASED_STEP;
+    out_rec *recs = util_malloc(n_recs * sizeof *recs);
+    for (size_t j = 0; j < n_recs; ++j) recs[j] = (out_rec){0};
+    phased_ctx c = {ww, w, start, end, allele, ctx, window, recs};
+    phased_worker *pws = util_malloc((size_t)n_threads * sizeof *pws);
+    for (int t = 0; t < n_threads; ++t) pws[t] = (phased_worker){&c, window_writer_worker_new(ww)};
+    int n_tasks = (end - start + PHASED_STEP - 1) / PHASED_STEP;
+    parallel_ordered(n_threads, n_tasks, window, pws, sizeof *pws, phased_build, &c, phased_put);
+    for (int t = 0; t < n_threads; ++t) window_writer_worker_free(pws[t].wk);
+    for (size_t j = 0; j < n_recs; ++j) window_writer_rec_free(&recs[j]);
+    free(pws);
+    free(recs);
 }
 
 void window_writer_close(window_writer *ww) {
