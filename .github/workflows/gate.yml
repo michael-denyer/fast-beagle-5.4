@@ -11,7 +11,7 @@ on:
   pull_request:
   workflow_dispatch:
   schedule:
-    - cron: '0 2 * * *'
+    - cron: '17 2 * * *'
 
 permissions:
   contents: read
@@ -63,24 +63,32 @@ jobs:
                 --jq '.workflow_runs[0].head_sha // ""')
               if [ "$last" = "$SHA" ]; then run=false; fi ;;
           esac
-          # Every check in the java group is full-tier only.
-          groups='["core","bgen","java","sanitizers"]'
-          if [ "$tier" = c ]; then groups='["core","bgen","sanitizers"]'; fi
+          # Every check in the java and cases groups is full-tier only.
+          groups='["core","bgen","java","cases","sanitizers","tsan"]'
+          if [ "$tier" = c ]; then groups='["core","bgen","sanitizers","tsan"]'; fi
           echo "run=$run tier=$tier fuzz=$fuzz groups=$groups"
           { echo "run=$run"; echo "tier=$tier"; echo "fuzz=$fuzz"; echo "groups=$groups"; } >> "$GITHUB_OUTPUT"
 
   # One job per runner and check group of tests/gate-steps.sh; the setup
-  # checks (the fixtures and the C build) run in every job.
+  # checks (the fixtures and the C build) run in every job. The cases check
+  # tests shell logic that behaves the same on both runners but takes minutes
+  # longer on macOS, so it runs on Linux only. ThreadSanitizer runs on macOS
+  # only (see tests/check-tsan.sh).
   check:
     name: check (${{ matrix.runner }}, ${{ matrix.group }})
     needs: plan
     if: needs.plan.outputs.run == 'true'
-    timeout-minutes: 150
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
         runner: [macos-latest, ubuntu-latest]
         group: ${{ fromJSON(needs.plan.outputs.groups) }}
+        exclude:
+          - runner: macos-latest
+            group: cases
+          - runner: ubuntu-latest
+            group: tsan
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -132,6 +140,13 @@ jobs:
       - name: Context before every FAIL line
         if: failure()
         run: grep -B 40 -A 5 '^FAIL' build/check-*.log | head -n 2000 || true
+      - name: Keep every check log
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: check-logs-${{ matrix.runner }}-${{ matrix.group }}
+          path: build/check-*.log
+          if-no-files-found: ignore
       - name: Keep the shrunk fuzz failure
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1

@@ -37,7 +37,7 @@ struct fixed_phase_data;
 
 /* new Ibs2(stage1TargGT, stage1Map, stage1Maf) from FixedPhaseData's
  * stage-1 genotypes, map and frequencies. Writes trace seam T3a. */
-void ibs2_init(ibs2 *ib, const struct fixed_phase_data *fpd);
+void ibs2_init(ibs2 *ib, const struct fixed_phase_data *fpd, int nthreads);
 /* Ibs2.areIbs2(targSample, otherSample, start, inclEnd): whether the samples
  * share an IBS2 segment overlapping markers [start, incl_end]. A sample is
  * IBS2 with itself. */

@@ -4,13 +4,8 @@
 # then runs every oracle case as VCF only, with bgen=plink2 and with
 # bgen=phased. Every run must exit 0 with the oracle hash and no sanitizer
 # report. On Linux LeakSanitizer also runs; it does not support macOS arm64.
-# On macOS it then builds build/beagle under ThreadSanitizer in build/tsan and
-# runs every oracle case at 18 threads, and the thread-dependent cases again
-# with trace= (parallel_for workers write trace seams). ThreadSanitizer cannot
-# start in the gate's docker leg: it needs an address layout that the x86_64
-# emulation gives only with ASLR off, and docker forbids turning ASLR off.
-# Output refusal checks also run with leak detection off: util_exit leaves
-# memory allocated by design.
+# tests/check-tsan.sh runs ThreadSanitizer. Output refusal checks also run
+# with leak detection off: util_exit leaves memory allocated by design.
 #
 # Usage: tests/check-sanitizers.sh
 # NTHREADS overrides the thread counts tried (default "1 2").
@@ -69,34 +64,4 @@ while read -r name expect tags args; do
 done < <(cases)
 
 [ $leaks -eq 1 ] && echo "leak checking on" || echo "leak checking off (not supported on $(uname -s) $(uname -m))"
-
-if [ "$(uname -s)" != Darwin ]; then
-  echo "ThreadSanitizer off: it runs on the macOS host only (see the header)"
-  exit $fail
-fi
-TSAN="$ROOT/build/tsan"
-mkdir -p "$TSAN"
-rsync -a --delete --exclude build "$ROOT/Makefile" "$ROOT/java" "$ROOT/src" "$ROOT/third_party" "$ROOT/tests" "$TSAN/"
-make -C "$TSAN" clean > /dev/null
-make -C "$TSAN" CFLAGS="-O1 -g -fno-omit-frame-pointer -fsanitize=thread" build/beagle check-block-reader \
-  > "$TSAN/make.log" 2>&1 || { echo "FAIL ThreadSanitizer build ($TSAN/make.log)"; exit 1; }
-echo "PASS ThreadSanitizer build"
-while read -r name expect _ args; do
-  selected "$name" || continue
-  for traced in no yes; do
-    [ $traced = yes ] && ! thread_dependent "$expect" && continue
-    out="$OUT/$name.tsan.$traced"
-    trace=()
-    [ $traced = yes ] && { mkdir -p "$out.trace"; trace=(trace="$out.trace"); }
-    case_verdict "$expect" "$args" "$out" 18 "$TSAN/build/beagle" ${trace[@]+"${trace[@]}"}
-    ok=$?
-    if grep -q ThreadSanitizer "$out.run.log"; then
-      echo "FAIL $name nthreads=18 traced=$traced: ThreadSanitizer report"; grep -A20 ThreadSanitizer "$out.run.log" | head -40; fail=1
-    elif [ $ok -eq 0 ]; then
-      echo "PASS $name nthreads=18 traced=$traced tsan"
-    else
-      echo "FAIL $name nthreads=18 traced=$traced tsan $VERDICT"; tail -5 "$out.run.log"; fail=1
-    fi
-  done
-done < <(cases)
 exit $fail

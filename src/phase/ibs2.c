@@ -20,6 +20,7 @@
 #include <htslib/kstring.h>
 
 #include "blbutil/int_list.h"
+#include "blbutil/parallel.h"
 #include "blbutil/trace.h"
 #include "blbutil/utilities.h"
 #include "jcompat/jnum.h"
@@ -209,8 +210,9 @@ static void seg_list_add(seg_list *l, sample_seg ss) {
     l->v[l->n++] = ss;
 }
 
-/* Appends each sample's segments for one step, as Ibs2Sets.segList lists them. */
-static void step_segments(const stage1_gt *gt, const bool *use, int start, int end, seg_list *segs) {
+/* Ibs2Sets.ibs2Sets for one step: each sample's IBS2 set, other than the
+ * sample itself, as (sample, other) pairs in sample order. */
+static int_list step_pairs(const stage1_gt *gt, const bool *use, int start, int end) {
     int_list step_markers = {0};
     for (int m = start; m < end; ++m) {
         if (use[m]) int_list_add(&step_markers, m);
@@ -237,15 +239,20 @@ static void step_segments(const stage1_gt *gt, const bool *use, int start, int e
         }
         free(part.v[c].samples);
     }
+    int_list pairs = {0};
     for (int s = 0; s < gt->n_samples; ++s) {
         for (int j = 0; j < sets[s].n; ++j) {
-            if (sets[s].v[j] != s) seg_list_add(&segs[s], (sample_seg){sets[s].v[j], start, end - 1});
+            if (sets[s].v[j] != s) {
+                int_list_add(&pairs, s);
+                int_list_add(&pairs, sets[s].v[j]);
+            }
         }
         free(sets[s].v);
     }
     free(sets);
     free(part.v);
     free(step_markers.v);
+    return pairs;
 }
 
 /* Ibs2: sort, merge, extend, merge again, then drop short segments. */
@@ -346,21 +353,67 @@ static void trace(const ibs2 *ib, const float *maf, const bool *use, const int_l
     free(s.s);
 }
 
-void ibs2_init(ibs2 *ib, const fixed_phase_data *fpd) {
+/* The Java streams over markers (Ibs2Markers), steps (Ibs2Sets) and samples
+ * (Ibs2) run in parallel; each writes only its own index. */
+typedef struct {
+    const stage1_gt *gt;
+    const marker_map *map;
+    const float *maf;
+    int max_miss;
+    bool *use;
+    const int_list *starts;
+    int_list *pairs;    /* per step */
+    seg_list *segs;     /* per sample */
+} ibs2_ctx;
+
+static void use_task(void *worker, int m) {
+    const ibs2_ctx *c = worker;
+    c->use[m] = use_marker(c->gt, m, c->maf, c->max_miss);
+}
+
+static void step_task(void *worker, int j) {
+    const ibs2_ctx *c = worker;
+    int end = j + 1 < c->starts->n ? c->starts->v[j + 1] : c->gt->n_markers;
+    c->pairs[j] = step_pairs(c->gt, c->use, c->starts->v[j], end);
+}
+
+static void sample_task(void *worker, int s) {
+    const ibs2_ctx *c = worker;
+    seg_list *l = &c->segs[s];
+    if (l->n > 1) qsort(l->v, (size_t)l->n, sizeof *l->v, compare_segs);
+    merge_segments(l, c->map);
+    extend_segments(c->gt, s, l);
+    merge_segments(l, c->map);
+    apply_length_filter(l, c->map);
+}
+
+void ibs2_init(ibs2 *ib, const fixed_phase_data *fpd, int nthreads) {
     const marker_map *map = &fpd->stage1_map;
     const float *maf = fpd->stage1_maf;
     stage1_gt gt = {fpd, map->n, fpd_n_targ_haps(fpd) >> 1};
     int max_miss = jnum_d2i(ceil((double)(MAX_MISS_FREQ * (float)(gt.n_samples << 1))));
     bool *use = util_malloc((size_t)gt.n_markers * sizeof *use);
-    for (int m = 0; m < gt.n_markers; ++m) use[m] = use_marker(&gt, m, maf, max_miss);
+    ibs2_ctx c = {&gt, map, maf, max_miss, use, NULL, NULL, NULL};
+    parallel_for(parallel_threads(nthreads, gt.n_markers), gt.n_markers, &c, 0, use_task);
     int_list starts = step_starts(map, use);
+    int_list *pairs = util_malloc((size_t)(starts.n > 0 ? starts.n : 1) * sizeof *pairs);
+    c.starts = &starts;
+    c.pairs = pairs;
+    parallel_for(parallel_threads(nthreads, starts.n), starts.n, &c, 0, step_task);
 
+    /* Ibs2Sets.segList: each sample's segments in step order. */
     seg_list *segs = util_malloc((size_t)gt.n_samples * sizeof *segs);
     for (int s = 0; s < gt.n_samples; ++s) segs[s] = (seg_list){0};
     for (int j = 0; j < starts.n; ++j) {
         int end = j + 1 < starts.n ? starts.v[j + 1] : gt.n_markers;
-        step_segments(&gt, use, starts.v[j], end, segs);
+        for (int k = 0; k < pairs[j].n; k += 2) {
+            seg_list_add(&segs[pairs[j].v[k]], (sample_seg){pairs[j].v[k + 1], starts.v[j], end - 1});
+        }
+        free(pairs[j].v);
     }
+    free(pairs);
+    c.segs = segs;
+    parallel_for(parallel_threads(nthreads, gt.n_samples), gt.n_samples, &c, 0, sample_task);
 
     ib->n_markers = gt.n_markers;
     ib->n_samples = gt.n_samples;
@@ -368,11 +421,6 @@ void ibs2_init(ibs2 *ib, const fixed_phase_data *fpd) {
     ib->segs = util_malloc((size_t)gt.n_samples * sizeof *ib->segs);
     for (int s = 0; s < gt.n_samples; ++s) {
         seg_list *l = &segs[s];
-        if (l->n > 1) qsort(l->v, (size_t)l->n, sizeof *l->v, compare_segs);
-        merge_segments(l, map);
-        extend_segments(&gt, s, l);
-        merge_segments(l, map);
-        apply_length_filter(l, map);
         ib->n_segs[s] = l->n;
         ib->segs[s] = l->v;
     }

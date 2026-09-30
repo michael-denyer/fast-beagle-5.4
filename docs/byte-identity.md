@@ -19,9 +19,9 @@ Each check below runs in the pre-merge gate, `tests/gate-steps.sh`, except the c
 | [Oracle hashes](#oracle-hashes) | The VCF hash of each case against the hash that the jar writes | 53 cases, each at 1, 2 and 18 threads, for the jar, a build of the Java source, the Java trace build and fast-beagle | `tests/check-oracle.sh build/beagle` |
 | [Trace seams](#trace-seams) | Intermediate values at 21 points in the pipeline, against an instrumented Java build | 60 cases at 2 threads, and 10 seams again at 1 and 18 threads on the 3 thread-dependent cases | `tests/check-trace.sh T1a T1b ... T5d` |
 | [Differential fuzzing](#differential-fuzzing) | Generated inputs and options run through the jar and fast-beagle | 200 examples at 1, 2, 3 or 5 threads, plus 2 examples for each of 42 invalid-parameter changes, plus 4 saved regressions | `uv run --python 3.12 --script tests/check_fuzz.py --examples 200` |
-| [Refused inputs](#refused-inputs) | Inputs that Beagle rejects, with the exit code and Java's message | 26 cases for fast-beagle, 25 of them also on the jar, and 107 fast-beagle-only output collision runs | `tests/check-failures.sh build/beagle`, `python3 tests/check_output_failures.py build/beagle` |
+| [Refused inputs](#refused-inputs) | Inputs that Beagle rejects, with the exit code and Java's message | 29 cases for fast-beagle, 26 of them also on the jar, and 107 fast-beagle-only output collision runs | `tests/check-failures.sh build/beagle`, `python3 tests/check_output_failures.py build/beagle` |
 | [Java library fixtures](#java-library-fixtures) | C reproductions of the Java library behaviour that Beagle depends on, against a real JVM | 8 fixture sets | `make check-jcompat` |
-| [Thread safety and ordering](#thread-safety-and-ordering) | Memory errors, undefined behaviour and data races on the oracle cases, the ordered writer protocol, and the imputation work-item size | Sanitizers on 53 cases, TLC on 8 model sizes, piece size on 30 cases at 2 and 18 threads | `tests/check-sanitizers.sh`, `tests/check-tla.sh`, `make check-piece-size` |
+| [Thread safety and ordering](#thread-safety-and-ordering) | Memory errors, undefined behaviour and data races on the oracle cases, the ordered writer protocol, and the imputation work-item size | Sanitizers on 53 cases, TLC on 8 model sizes, piece size on 30 cases at 2 and 18 threads | `tests/check-sanitizers.sh`, `tests/check-tsan.sh`, `tests/check-tla.sh`, `make check-piece-size` |
 | [Platforms](#platforms) | The whole gate on two operating systems and two CPU architectures | macOS arm64 and Linux x86_64 | `tests/check-local.sh` |
 | [chr20 benchmark](#chr20-benchmark) | A realistic imputation run, outside the gate | 1000 Genomes chr20, 6 runs per tool at 18 threads | `tests/bench/bench.sh <dir> 3` |
 
@@ -60,7 +60,7 @@ The full gate runs a fixed set of 200 examples and 2 examples per invalid-parame
 
 ### Refused inputs
 
-`tests/check-failures.sh` runs inputs that Beagle rejects at 2 threads. Each run must exit 1 and print the same message that the jar prints. Where `out=` names an input, the input must stay unchanged. Where `out=` names a directory or `window` is too small, no VCF may be written. The 26 cases are:
+`tests/check-failures.sh` runs inputs that Beagle rejects at 2 threads. Each run must exit 1 and print the same message that the jar prints. Where `out=` names an input, the input must stay unchanged. Where `out=` names a directory or `window` is too small, no VCF may be written. The 29 cases are:
 
 - 6 parameter errors: `out=` equal to the `gt=` file (three times: as given, with a doubled slash in `out=`, and with a doubled slash in `gt=`), `out=` equal to the `ref=` file, `out=` naming a directory, and `window` less than 1.1 times `overlap`. The `out=` messages must name the input by its normalized path, as `java.io.File` prints it.
 - a `window` shorter than the marker spacing, which leaves a window with no marker
@@ -72,8 +72,9 @@ The full gate runs a fixed set of 200 examples and 2 examples per invalid-parame
 - a bref3 SNV allele code with a negative permutation index
 - `imp-segment` below half of `imp-step`, which divides by zero in Java
 - a bref3 header whose sample count overflows when doubled
+- 3 runs with a first window of one position and a malformed GT allele in a later line: in the target's first 1024 lines, which both tools parse at startup, and in the second block of 1024 target or reference lines, where fast-beagle must report the first window's error
 
-The gate runs the script on the jar and on fast-beagle. The bref3 sample-count case runs for fast-beagle only, because the jar's result depends on its heap size.
+The gate runs the script on the jar and on fast-beagle. The bref3 sample-count case runs for fast-beagle only, because the jar's result depends on its heap size. So do the two second-block cases, because the error the jar reports for them depends on thread timing.
 
 `tests/check_output_failures.py` runs 107 checks of the [output collision refusal](beagle-divergences.md#errors-and-exit-status) on fast-beagle, which Beagle does not have. In 103 runs an output is an existing input file: each output file against each input file parameter in both BGEN modes, the log without BGEN output, and each output through a relative path, a symlink and a hard link. Each run must exit 1 with the `fast-beagle:` message, or with Beagle's message for a VCF output path equal to the `gt=` or `ref=` path, leave the input unchanged and write no other output. In the other 4 runs an input is named like an output that is not enabled, and the run must succeed.
 
@@ -92,7 +93,7 @@ Beagle's output depends on the exact behaviour of Java library code. `src/jcompa
 
 ### Thread safety and ordering
 
-`tests/check-sanitizers.sh` builds fast-beagle and the unit tests with AddressSanitizer and UndefinedBehaviorSanitizer at `-O1`. It runs every oracle case at 1 and 2 threads, as VCF only, with `bgen=plink2` and with `bgen=phased`. Each run must exit 0 with the oracle hash and no sanitizer report. The `bgen=plink2` runs skip the 3 cases on non-autosomes. On Linux, LeakSanitizer also runs. On macOS, the script builds fast-beagle with ThreadSanitizer and runs every oracle case at 18 threads, and the 3 thread-dependent cases again with tracing on.
+`tests/check-sanitizers.sh` builds fast-beagle and the unit tests with AddressSanitizer and UndefinedBehaviorSanitizer at `-O1`. It runs every oracle case at 1 and 2 threads, as VCF only, with `bgen=plink2` and with `bgen=phased`. Each run must exit 0 with the oracle hash and no sanitizer report. The `bgen=plink2` runs skip the 3 cases on non-autosomes. On Linux, LeakSanitizer also runs. On macOS, `tests/check-tsan.sh` builds fast-beagle with ThreadSanitizer and runs every oracle case at 18 threads, and the 3 thread-dependent cases again with tracing on.
 
 `tests/check-tla.sh` model-checks [tla/ParallelOrdered.tla](../tla/ParallelOrdered.tla), the protocol of the pipelined imputed writer in `src/blbutil/parallel.c`. Workers build records in parallel, and the calling thread writes them in order. TLC checks 8 model sizes, from 1 worker and 3 items to 4 workers and 8 items, with windows of 1 to 5. It checks that items are consumed in order, that no slot is overwritten before it is consumed, that there is no deadlock, and that every run consumes every item. The model includes spurious wakeups, so a lost wakeup fails the check.
 
@@ -163,6 +164,7 @@ tests/check-failures.sh build/beagle
 uv run --python 3.12 --script tests/check_fuzz.py --examples 200
 make check-jcompat check-piece-size
 tests/check-sanitizers.sh
+tests/check-tsan.sh        # macOS only
 tests/check-tla.sh
 ```
 

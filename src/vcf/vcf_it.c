@@ -13,8 +13,10 @@
 #include <stdlib.h>
 
 #include "blbutil/line_reader.h"
+#include "blbutil/parallel.h"
 #include "blbutil/trace.h"
 #include "blbutil/utilities.h"
+#include "jcompat/jutf8.h"
 #include "vcf/filter_util.h"
 #include "vcf/gt_rec.h"
 #include "vcf/vcf_header.h"
@@ -27,8 +29,14 @@ typedef struct {
     line_reader *reader;
     vcf_header header;
     const str_set *exclude;
+    int n_threads;
     kstring_t line;
-    bool have_line;     /* line holds the next unparsed data line */
+    bool have_line;     /* line holds the next unread data line */
+    /* The block of lines parsed together, with each line's record or error. */
+    kstring_t lines[BUFFER_SIZE];
+    gt_rec *recs[BUFFER_SIZE];
+    char *errors[BUFFER_SIZE];
+    int n_lines;
     gt_rec **buf;       /* parsed records that passed the marker filter */
     int head, n;
 } vcf_it;
@@ -49,11 +57,12 @@ static bool is_blank(const kstring_t *s) {
     return true;
 }
 
+/* Lines are sanitised on the parse workers; a blank line is blank either way. */
 static void read_line(vcf_it *it) {
-    it->have_line = line_reader_next(it->reader, &it->line);
+    it->have_line = line_reader_next_raw(it->reader, &it->line);
     kstring_t probe = {0, 0, NULL};
     while (it->have_line && is_blank(&it->line)) {
-        if (!line_reader_next(it->reader, &probe)) break;
+        if (!line_reader_next_raw(it->reader, &probe)) break;
         kstring_t tmp = it->line;
         it->line = probe;
         probe = tmp;
@@ -75,20 +84,54 @@ static void trace_rec(const gt_rec *rec) {
     free(s.s);
 }
 
-/* VcfIt.fillEmissionBuffer: parses blocks of BUFFER_SIZE lines until
- * BUFFER_SIZE records have passed the marker filter or the input ends, so a
- * malformed record stops the run before the records ahead of it are used. */
+static void read_block(void *self) {
+    vcf_it *it = self;
+    it->n_lines = 0;
+    while (it->n_lines < BUFFER_SIZE && it->have_line) {
+        kstring_t t = it->lines[it->n_lines];
+        it->lines[it->n_lines++] = it->line;
+        it->line = t;
+        read_line(it);
+    }
+}
+
+typedef struct {
+    vcf_it *it;
+    int j;
+} parse_ctx;
+
+static void parse_line(void *arg) {
+    const parse_ctx *c = arg;
+    kstring_t *line = &c->it->lines[c->j];
+    jutf8_sanitize(line);
+    gt_rec *rec = util_malloc(sizeof *rec);
+    gt_rec_parse(rec, line->s, line->l, &c->it->header);
+    rec->refs = 1;
+    c->it->recs[c->j] = rec;
+}
+
+static void parse_task(void *worker, int j) {
+    vcf_it *it = worker;
+    it->errors[j] = util_try(parse_line, &(parse_ctx){it, j});
+}
+
+/* VcfIt.fillEmissionBuffer: parses blocks of BUFFER_SIZE lines in parallel
+ * until BUFFER_SIZE records have passed the marker filter or the input ends,
+ * so a malformed record stops the run before the records ahead of it are
+ * used. As when the lines are parsed one at a time, a block's first bad line
+ * is reported ahead of an error reading past its last line. */
 static void fill_buffer(vcf_it *it) {
     it->head = 0;
     while (it->have_line && it->n < BUFFER_SIZE) {
-        for (int k = 0; k < BUFFER_SIZE && it->have_line; ++k) {
-            gt_rec *rec = util_malloc(sizeof *rec);
-            gt_rec_parse(rec, it->line.s, it->line.l, &it->header);
-            rec->refs = 1;
-            read_line(it);
+        char *read_error = util_try(read_block, it);
+        parallel_for(parallel_threads(it->n_threads, it->n_lines), it->n_lines, it, 0, parse_task);
+        for (int j = 0; j < it->n_lines; ++j) {
+            if (it->errors[j] != NULL) util_exit("%s", it->errors[j]);
+            gt_rec *rec = it->recs[j];
             if (filter_accept_marker(it->exclude, &rec->marker)) it->buf[it->n++] = rec;
             else gt_rec_release(rec);
         }
+        if (read_error != NULL) util_exit("%s", read_error);
     }
 }
 
@@ -115,6 +158,7 @@ static void vcf_it_close(void *self) {
         --it->n;
     }
     free(it->buf);
+    for (int j = 0; j < BUFFER_SIZE; ++j) free(it->lines[j].s);
     vcf_header_free(&it->header);
     free(it->line.s);
     line_reader_close(it->reader);
@@ -138,6 +182,7 @@ sample_file_it vcf_it_open(const char *path, const str_set *exclude_samples, con
     *it = (vcf_it){0};
     it->reader = line_reader_open(path, n_threads);
     it->exclude = exclude_markers;
+    it->n_threads = n_threads;
     vcf_header_read(&it->header, it->reader, &it->line, exclude_samples);
     it->have_line = true;
     if (trace_on()) vcf_header_trace(&it->header, "T1b-target");

@@ -11,7 +11,7 @@ The bioconda package `fast-beagle` builds from the source tarball with the recip
 ## Cut a release
 
 1. Merge every change for the release into `main`, with the gate passing.
-2. Tag the `main` commit `v5.4.<n>` and push the tag. The release workflow fails on any other tag name.
+2. Tag the `main` commit `v5.4.<n>` and push the tag. The release workflow fails on any other tag name, on a commit that is not on `main`, and on a commit without a successful `gate` check run.
 
    ```bash
    git tag v5.4.0 origin/main
@@ -25,9 +25,10 @@ The bioconda package `fast-beagle` builds from the source tarball with the recip
 
 `.github/workflows/release.yml` runs on a pushed `v*` tag, on pull requests that change the workflow, `release/` or the `Makefile`, and by hand. Pull requests and manual runs do everything but publish. They use the version in `release/conda/recipe.yaml`.
 
+- On a tag or a manual run, the `source` job first checks the commit against the GitHub API. The commit must be on `main`, so the compare of `main` with the commit reports `identical` or `behind`, and it must have a `gate` check run that succeeded. Otherwise the job fails and nothing builds. A manual run takes the check so that it can be tried without pushing a tag.
 - The `source` job makes the tarball with `git archive`, with every path under `fast-beagle-<version>/`. It fills in the recipe's version and sha256 from the tarball. Every other job builds from this tarball.
 - The `conda` jobs build the recipe with rattler-build on `linux-64`, `linux-aarch64` and `osx-arm64`, from conda-forge and bioconda, as bioconda does. The build uses conda's compilers and its `CFLAGS` (`-O3` on `linux-aarch64`), and the Makefile appends its fixed floating-point flags after them. The Makefile's `-Werror` applies, so a warning from conda's compilers fails the build. rattler-build runs the recipe's test, a phasing run on `small.vcf`. The job then installs the package into a new environment and runs `tests/check-oracle.sh` on the installed `fast-beagle`, so every oracle case must match its hash at 1, 2 and 18 threads.
 - The `binaries` jobs run `release/build-static.sh`. It builds htslib 1.24, the version that bioconda packages, from its checksum-verified release tarball, without libcurl, GCS and S3 support, plugins, bzip2, lzma and libdeflate, so that it needs only zlib. It links htslib statically and fails if the binary loads a shared htslib. The Linux binaries build in `manylinux_2_28` containers pinned by digest, so they need glibc 2.28 or later, and run on the runner itself for the check. Each job runs `tests/check-oracle.sh` on the binary unpacked from its package.
-- The `publish` job runs only on a pushed tag, after every other job has passed. It writes `SHA256SUMS` and creates the GitHub Release with the default `GITHUB_TOKEN`, which has `contents: write` in this job only.
+- The `publish` job runs only on a pushed tag, after every other job has passed. It writes `SHA256SUMS`, attests every tarball and `SHA256SUMS` with `actions/attest-build-provenance`, and creates the GitHub Release with the default `GITHUB_TOKEN`, which has `contents: write`, `id-token: write` and `attestations: write` in this job only. A failed attestation stops the job before the release is created. Anyone can check a downloaded file's provenance with `gh attestation verify <file> --repo michael-denyer/fast-beagle-5.4`.
 
 rattler-build 0.76.1, micromamba 2.9.0-0 and htslib 1.24 are pinned by version and SHA-256 in the workflow and in `release/build-static.sh`.

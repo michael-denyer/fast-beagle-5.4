@@ -26,6 +26,11 @@ _Noreturn void util_exit(const char *fmt, ...) __attribute__((format(printf, 1, 
 /* fast-beagle only: util_exit also writes its message to log, or stops when log
  * is NULL. Beagle's log never records why a run failed. */
 void util_exit_log(FILE *log);
+/* fast-beagle only: runs fn(arg) and returns NULL, or, if fn calls util_exit on
+ * this thread, returns that call's message (the caller frees it) instead of
+ * exiting. Memory that fn allocated before the call is not freed. Readers that
+ * work ahead of their consumer keep an error until the consumer reaches it. */
+char *util_try(void (*fn)(void *), void *arg);
 
 void *util_malloc(size_t size);
 void *util_realloc(void *p, size_t size);

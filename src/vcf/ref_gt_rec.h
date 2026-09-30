@@ -13,6 +13,7 @@
 #ifndef VCF_REF_GT_REC_H
 #define VCF_REF_GT_REC_H
 
+#include <stdatomic.h>
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -23,7 +24,7 @@
  * SeqCodedRefGTRec records of one group. Later stages compare groups by
  * identity. */
 typedef struct {
-    int refs;
+    atomic_int refs;
     int n_haps;
     int *hap_to_seq;
     int n_seq;
@@ -43,7 +44,7 @@ typedef enum { REF_TWO_ALLELE, REF_ALLELE, REF_HAP } ref_gt_rec_kind;
  * increasing haplotype lists of each non-major allele; the sequence-coded kind
  * keeps its group and the allele of each sequence. */
 typedef struct {
-    int refs;               /* owners; see ref_gt_rec_release */
+    atomic_int refs;        /* owners; see ref_gt_rec_release */
     marker marker;
     ref_gt_rec_kind kind;
     int n_haps;
@@ -61,8 +62,9 @@ void ref_gt_rec_parse(ref_gt_rec *rec, const char *line, size_t len, const vcf_h
  * allele-coded record's haplotype lists with a sequence coding. Retains g and
  * takes ownership of seq_to_allele, which has g->n_seq entries. */
 void ref_gt_rec_set_seq_coded(ref_gt_rec *rec, seq_group *g, uint8_t *seq_to_allele);
-/* For heap records shared by windows: add an owner, or drop one and free the
- * record with its last owner. */
+/* For heap records shared by windows, whose owners can be on the window reader
+ * and caller threads: add an owner, or drop one and free the record with its
+ * last owner. */
 ref_gt_rec *ref_gt_rec_retain(ref_gt_rec *rec);
 void ref_gt_rec_release(ref_gt_rec *rec);
 

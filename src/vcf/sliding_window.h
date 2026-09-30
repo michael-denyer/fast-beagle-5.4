@@ -49,7 +49,9 @@ const samples *sliding_window_targ_samples(const sliding_window *sw);
 /* The reference samples after excludesamples=, 0 without a reference. */
 int sliding_window_n_ref_samples(const sliding_window *sw);
 const genetic_map *sliding_window_gen_map(const sliding_window *sw);
-/* The next window, or NULL after the last. The caller frees it with window_free. */
+/* The next window, or NULL after the last. The caller frees it with window_free.
+ * A reader thread reads it while the caller works on the previous window, and
+ * an error reading it exits here. */
 window *sliding_window_next(sliding_window *sw);
 /* SlidingWindow.cumTargMarkers and cumMarkers: the target and all markers of
  * the windows returned so far, each counted once. */

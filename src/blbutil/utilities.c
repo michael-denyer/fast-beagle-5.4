@@ -9,6 +9,7 @@
  */
 #include "blbutil/utilities.h"
 
+#include <setjmp.h>
 #include <stdarg.h>
 #include <stdatomic.h>
 #include <stdio.h>
@@ -19,11 +20,48 @@
 static FILE *exit_log;
 static atomic_flag exiting = ATOMIC_FLAG_INIT;
 
+/* The innermost util_try on this thread, and the message util_exit passes it. */
+typedef struct try_frame {
+    jmp_buf env;
+    struct try_frame *prev;
+    void (*fn)(void *);
+    void *arg;
+} try_frame;
+static _Thread_local try_frame *trying;
+static _Thread_local char *caught;
+
 void util_exit_log(FILE *log) {
     exit_log = log;
 }
 
+char *util_try(void (*fn)(void *), void *arg) {
+    /* Only f, which is in memory, is used after setjmp: nothing a longjmp
+     * could clobber. */
+    try_frame f = {.prev = trying, .fn = fn, .arg = arg};
+    trying = &f;
+    if (setjmp(f.env) != 0) return caught;
+    f.fn(f.arg);
+    trying = f.prev;
+    return NULL;
+}
+
 void util_exit(const char *fmt, ...) {
+    if (trying != NULL) {
+        va_list ap;
+        va_start(ap, fmt);
+        va_list ap2;
+        va_copy(ap2, ap);
+        int n = vsnprintf(NULL, 0, fmt, ap);
+        caught = n < 0 ? NULL : malloc((size_t)n + 1);
+        if (caught != NULL) vsnprintf(caught, (size_t)n + 1, fmt, ap2);
+        va_end(ap2);
+        va_end(ap);
+        if (caught != NULL) {
+            try_frame *f = trying;
+            trying = f->prev;
+            longjmp(f->env, 1);
+        }
+    }
     if (atomic_flag_test_and_set(&exiting)) {
         for (;;) pause();
     }

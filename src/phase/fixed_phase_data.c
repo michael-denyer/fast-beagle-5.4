@@ -19,6 +19,7 @@
 
 #include "blbutil/bit_array.h"
 #include "blbutil/int_list.h"
+#include "blbutil/parallel.h"
 #include "blbutil/trace.h"
 #include "blbutil/utilities.h"
 #include "jcompat/jnum.h"
@@ -65,6 +66,16 @@ static marker_carriers carriers_at(const window *w, int m, int max_carriers) {
     }
     free(lists);
     return (marker_carriers){n_alleles, c};
+}
+
+typedef struct {
+    fixed_phase_data *fpd;
+    int max_carriers;
+} carriers_ctx;
+
+static void carriers_task(void *worker, int m) {
+    const carriers_ctx *c = worker;
+    c->fpd->carriers[m] = carriers_at(c->fpd->win, m, c->max_carriers);
 }
 
 static int max_carriers(const par *p, const window *w) {
@@ -146,8 +157,38 @@ static int *rand_haps(int n_haps, int max_haps, jrandom *r, int *n_out) {
     return haps;
 }
 
+typedef struct {
+    const fixed_phase_data *fpd;
+    const int *targ_haps, *ref_haps;
+    int n_targ, n_ref;
+    float *maf;
+} maf_ctx;
+
 /* The second most frequent allele's share of the non-missing sampled alleles. */
-static float *stage1_maf(const fixed_phase_data *fpd, const window *w, int max_haps, int64_t seed) {
+static void maf_task(void *worker, int j) {
+    const maf_ctx *c = worker;
+    const window *w = c->fpd->win;
+    int m = c->fpd->stage1_to2[j];
+    int n_cnts = marker_n_alleles(&w->targ[m]->marker) + 1;
+    int *cnts = util_malloc((size_t)n_cnts * sizeof *cnts);
+    memset(cnts, 0, (size_t)n_cnts * sizeof *cnts);
+    for (int k = 0; k < c->n_targ; ++k) ++cnts[fpd_spliced_allele(c->fpd, m, c->targ_haps[k]) + 1];
+    if (c->n_ref > 0) {
+        const ref_gt_rec *ref = w->ref[w->indices.targ_marker_to_marker[m]];
+        for (int k = 0; k < c->n_ref; ++k) ++cnts[ref_gt_rec_get(ref, c->ref_haps[k]) + 1];
+    }
+    cnts[0] = 0;
+    qsort(cnts, (size_t)n_cnts, sizeof *cnts, util_compare_ints);
+    int den = 0;
+    for (int a = 1; a < n_cnts; ++a) den += cnts[a];
+    c->maf[j] = (float)(den == 0 ? 0.0 : (double)cnts[n_cnts - 2] / den);
+    free(cnts);
+}
+
+/* The haplotypes are drawn serially, as in Java; only the per-marker counts
+ * run in parallel. */
+static float *stage1_maf(const fixed_phase_data *fpd, int max_haps, int64_t seed, int nthreads) {
+    const window *w = fpd->win;
     jrandom r;
     jrandom_init(&r, seed);
     int n_targ, n_ref = 0;
@@ -155,27 +196,20 @@ static float *stage1_maf(const fixed_phase_data *fpd, const window *w, int max_h
     int *ref_haps = NULL;
     if (n_targ < max_haps && w->n_ref > 0) ref_haps = rand_haps(w->ref[0]->n_haps, max_haps - n_targ, &r, &n_ref);
     float *maf = util_malloc((size_t)fpd->n_stage1 * sizeof *maf);
-    for (int j = 0; j < fpd->n_stage1; ++j) {
-        int m = fpd->stage1_to2[j];
-        const gt_rec *targ = w->targ[m];
-        int n_cnts = marker_n_alleles(&targ->marker) + 1;
-        int *cnts = util_malloc((size_t)n_cnts * sizeof *cnts);
-        memset(cnts, 0, (size_t)n_cnts * sizeof *cnts);
-        for (int k = 0; k < n_targ; ++k) ++cnts[fpd_spliced_allele(fpd, m, targ_haps[k]) + 1];
-        if (n_ref > 0) {
-            const ref_gt_rec *ref = w->ref[w->indices.targ_marker_to_marker[m]];
-            for (int k = 0; k < n_ref; ++k) ++cnts[ref_gt_rec_get(ref, ref_haps[k]) + 1];
-        }
-        cnts[0] = 0;
-        qsort(cnts, (size_t)n_cnts, sizeof *cnts, util_compare_ints);
-        int den = 0;
-        for (int a = 1; a < n_cnts; ++a) den += cnts[a];
-        maf[j] = (float)(den == 0 ? 0.0 : (double)cnts[n_cnts - 2] / den);
-        free(cnts);
-    }
+    maf_ctx c = {fpd, targ_haps, ref_haps, n_targ, n_ref, maf};
+    parallel_for(parallel_threads(nthreads, fpd->n_stage1), fpd->n_stage1, &c, 0, maf_task);
     free(targ_haps);
     free(ref_haps);
     return maf;
+}
+
+/* XRefGT.fromPhasedGT: reference haplotype h's stage-1 alleles. */
+static void ref_hap_task(void *worker, int h) {
+    fixed_phase_data *fpd = worker;
+    fpd->stage1_ref_haps[h] = bit_array_new((size_t)fpd->stage1_hap_bits[fpd->n_stage1]);
+    for (int j = 0; j < fpd->n_stage1; ++j) {
+        bit_array_set_allele(fpd->stage1_ref_haps[h], fpd->stage1_hap_bits, j, fpd_ref_allele(fpd, j, h));
+    }
 }
 
 /* The number of stage-1 markers before marker index `overlap`. */
@@ -202,9 +236,10 @@ void fixed_phase_data_init(fixed_phase_data *fpd, const par *p, const genetic_ma
 
     int max = max_carriers(p, w);
     fpd->carriers = util_malloc((size_t)n * sizeof *fpd->carriers);
+    carriers_ctx cc = {fpd, max};
+    parallel_for(parallel_threads(p->nthreads, n), n, &cc, 0, carriers_task);
     int_list hi_freq = {0};
     for (int m = 0; m < n; ++m) {
-        fpd->carriers[m] = carriers_at(w, m, max);
         if (is_hi_freq(fpd->carriers[m])) int_list_add(&hi_freq, m);
     }
 
@@ -237,17 +272,12 @@ void fixed_phase_data_init(fixed_phase_data *fpd, const par *p, const genetic_ma
     }
     fpd->n_ref_haps = w->n_ref > 0 ? w->ref[0]->n_haps : 0;
     fpd->stage1_ref_haps = util_malloc((size_t)(fpd->n_ref_haps > 0 ? fpd->n_ref_haps : 1) * sizeof *fpd->stage1_ref_haps);
-    for (int h = 0; h < fpd->n_ref_haps; ++h) {
-        fpd->stage1_ref_haps[h] = bit_array_new((size_t)fpd->stage1_hap_bits[fpd->n_stage1]);
-        for (int j = 0; j < fpd->n_stage1; ++j) {
-            bit_array_set_allele(fpd->stage1_ref_haps[h], fpd->stage1_hap_bits, j, fpd_ref_allele(fpd, j, h));
-        }
-    }
+    parallel_for(parallel_threads(p->nthreads, fpd->n_ref_haps), fpd->n_ref_haps, fpd, 0, ref_hap_task);
     fpd->ibs_step = p->step_scale * median_diff(&fpd->stage1_map);
     steps_init(&fpd->stage1_steps, &fpd->stage1_map, fpd->ibs_step);
     int max_maf_haps = 10000;
-    fpd->stage1_maf = stage1_maf(fpd, w, max_maf_haps, p->seed);
-    ibs2_init(&fpd->stage1_ibs2, fpd);
+    fpd->stage1_maf = stage1_maf(fpd, max_maf_haps, p->seed, p->nthreads);
+    ibs2_init(&fpd->stage1_ibs2, fpd, p->nthreads);
 }
 
 void fixed_phase_data_free(fixed_phase_data *fpd) {

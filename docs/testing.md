@@ -32,6 +32,8 @@ To check fast-beagle, run `tests/check-oracle.sh build/beagle`.
 - a 2-marker target and a 3-marker, 2-sample reference, whose middle marker `err=0` imputes with `AF=NaN`
 - for `tests/check-bgen.sh`, the chrX split moved to chromosome 22 and the reference/target split moved to chromosome 38
 
+The script records in `data/.fixtures.sha256` a hash of itself, the three case tables, the jars and every fixture. With `--ensure` it keeps the existing fixtures while every hash still matches, and regenerates them otherwise. Without `--ensure` it always regenerates the derived fixtures. The gate's `fixtures` step and the case runners pass `--ensure`. CI restores `data/` from a cache keyed on the hash of `tests/fetch-fixtures.sh`, so a job with a cache hit only checks the hashes.
+
 ## Oracle hashes
 
 `tests/check-oracle.sh` runs an implementation on the fixtures at 1, 2 and 18 threads and compares its output with the hashes in `tests/oracle-cases.txt`. `NTHREADS` overrides the thread counts.
@@ -43,7 +45,7 @@ To check fast-beagle, run `tests/check-oracle.sh build/beagle`.
 
 Every case table row holds a name, the expected outcome, tags and Beagle's arguments. The expected outcome is a hash, or `exit=N` where the row records no hash. The tags (`nonautosome`, `multiallelic`, `nonfinite`) tell `tests/check-bgen.sh` how plink2 reads the output and whether `bgen=phased` must refuse it.
 
-- `tests/cases.sh` reads the tables. It holds the one verdict that `tests/check-oracle.sh`, `tests/check-sanitizers.sh` and `tests/check-bgen.sh` apply to a run. The verdict requires the expected exit and, for a case with a hash, the hash for the run's thread count.
+- `tests/cases.sh` reads the tables. It holds the one verdict that `tests/check-oracle.sh`, `tests/check-sanitizers.sh`, `tests/check-tsan.sh` and `tests/check-bgen.sh` apply to a run. The verdict requires the expected exit and, for a case with a hash, the hash for the run's thread count.
 - `tests/cases.sh` also holds the one refusal rule that `tests/check-failures.sh` and `tests/check-bgen.sh` apply. The rule requires exit 1, the expected message, and no file at the paths the caller lists.
 - `tests/check_cases.py` tests the verdict and the refusal rule with a fake Beagle.
 
@@ -77,6 +79,8 @@ Every log run must also pass its recorded exit and VCF hash checks. Recording st
 - the Beagle 5.5 parameters `initial-lr=` and `window-markers=`, which Beagle 5.4 does not know
 - a bref3 SNV allele code whose permutation index is negative
 - a bref3 header whose sample count overflows when doubled. This case runs for the C build only, because the jar's result depends on its heap size.
+- a first window that MarkerMap rejects, followed by a malformed target line in the target's first 1024 lines. Both tools parse those lines at startup and report the malformed line.
+- a first window that MarkerMap rejects, followed by a malformed target or reference line in the second block of 1024 lines. fast-beagle reads the second window while it phases the first, and must report the first window's error. These cases run for the C build only, because which error the jar reports depends on thread timing ([divergences](beagle-divergences.md)).
 
 `tests/check_output_failures.py build/beagle` checks that log, VCF, BGEN and tabix destinations refuse collisions with input files before writing. It covers both BGEN modes, the tabix index, relative paths, symbolic links and hard links. It also checks that disabled outputs do not cause refusals, that nonfinite phased BGEN probabilities fail with a message and leave no BGEN files, and that a large `ne=` saturates the reported population size as Java does. The gate runs these checks normally and under the sanitizers, with leak detection off for the expected failures.
 
@@ -202,7 +206,8 @@ The live checks need `PLINK2` naming the pinned plink2 binary, and fail without 
 `tests/check-sanitizers.sh` builds `build/beagle` and the unit tests of `make check-bgen-unit`, `make check-records`, `make check-tracker` and `make check-block-reader` with AddressSanitizer and UndefinedBehaviorSanitizer in `build/san`. It runs those tests. It then runs every oracle case at 1 and 2 threads as VCF only, with `bgen=plink2` and with `bgen=phased`. The `bgen=plink2` runs skip the cases tagged `nonautosome`, and the `bgen=phased` runs skip the cases tagged `nonfinite`. Every run must exit 0 with the oracle hash and no sanitizer report.
 
 - On Linux, LeakSanitizer also runs, so any memory still allocated at a normal exit fails the check. LeakSanitizer does not support macOS arm64.
-- On macOS, the script then builds `build/beagle` with ThreadSanitizer in `build/tsan`. It runs every oracle case at 18 threads, and runs the cases with per-thread hashes again with `trace=`. ThreadSanitizer runs on macOS only, because it cannot start under the x86_64 emulation of the gate's docker leg.
+
+`tests/check-tsan.sh` builds `build/beagle` with ThreadSanitizer in `build/tsan`. It runs every oracle case at 18 threads, and runs the cases with per-thread hashes again with `trace=`. Every run must pass the oracle verdict with no ThreadSanitizer report. The script runs on macOS only, because ThreadSanitizer cannot start under the x86_64 emulation of the gate's docker leg. On other systems it refuses to run, and `tests/gate-steps.sh` prints a `skip` line for it.
 
 ## Differential fuzzing
 
@@ -249,10 +254,12 @@ Each check belongs to one group, so CI can run the groups as parallel jobs. `GAT
 | Group | Checks |
 | --- | --- |
 | `setup` | `fixtures` and `c-build`. They run in every group, because every other group needs the fixtures and the `bgen`, `trace`, `trace-threads` and C-binary checks need `build/beagle`. |
-| `core` | `gate-tier`, `log-recording`, `cases`, `jcompat`, `tracker`, `interval`, `block-reader`, `snv-perms`, `oracle-c`, `failures-c`, `output-failures`, `log-c`, `piece-size`, `bgen-unit`, `records`, `vcf-index`, `tbi`, `tla`, `fuzz` and `fuzz-regressions` |
+| `core` | `gate-tier`, `log-recording`, `jcompat`, `tracker`, `interval`, `block-reader`, `snv-perms`, `oracle-c`, `failures-c`, `output-failures`, `log-c`, `piece-size`, `bgen-unit`, `records`, `vcf-index`, `tbi`, `tla`, `fuzz` and `fuzz-regressions` |
 | `bgen` | `bgen` |
 | `java` | `oracle-jar`, `failures-jar`, `log-jar`, `java-build`, `oracle-source`, `java-trace`, `oracle-trace`, `trace` and `trace-threads` |
-| `sanitizers` | `sanitizers`, which builds its own binaries in `build/san` and `build/tsan` |
+| `cases` | `cases` |
+| `sanitizers` | `sanitizers`, which builds its own binaries in `build/san` |
+| `tsan` | `tsan`, which builds its own binary in `build/tsan`. It runs on macOS only and prints a `skip` line elsewhere. |
 
 `GATE_LIST=1` prints the group and name of each check that the tier and group select, and runs none of them.
 
@@ -264,7 +271,7 @@ tests/check-local.sh
 
 Two GitHub Actions workflows define the same checks:
 
-- `.github/workflows/gate.yml` runs `tests/gate-steps.sh` on GitHub-hosted `macos-latest` (arm64) and `ubuntu-latest` (x86_64) runners. Its `check` jobs run one job for each runner and group, `check (<runner>, <group>)`. The C tier runs no `java` jobs, because every check in that group is full-tier only. Pushes to `main` run the C tier. A pull request runs no checks when it changes only documentation: files under `docs/`, Markdown files, images and `LICENSE`. It runs the C tier when every other changed file is under `src/` (except `src/jcompat/`) or `third_party/`, and the full tier otherwise, so a change to any test script or table runs the full tier. `tests/gate-tier.sh` holds that rule, and the `gate-tier` step checks it with `tests/check-gate-tier.sh`. Manual runs use the full tier with random fuzz examples. The nightly run does the same, and skips itself when `main` has not moved since the last nightly run that passed.
+- `.github/workflows/gate.yml` runs `tests/gate-steps.sh` on GitHub-hosted `macos-latest` (arm64) and `ubuntu-latest` (x86_64) runners. Its `check` jobs run one job for each runner and group, `check (<runner>, <group>)`, except that `cases` runs on Linux only and `tsan` on macOS only. The `cases` check tests shell logic that behaves the same on both runners but takes minutes longer on macOS. The C tier runs no `java` or `cases` jobs, because every check in those groups is full-tier only. Pushes to `main` run the C tier. A pull request runs no checks when it changes only documentation: files under `docs/`, Markdown files, images and `LICENSE`. It runs the C tier when every other changed file is under `src/` (except `src/jcompat/`) or `third_party/`, and the full tier otherwise, so a change to any test script or table runs the full tier. `tests/gate-tier.sh` holds that rule, and the `gate-tier` step checks it with `tests/check-gate-tier.sh`. Manual runs use the full tier with random fuzz examples. The nightly run does the same, and skips itself when `main` has not moved since the last nightly run that passed.
   - The `gate` job is the one check that a pull request must pass. It passes when every `check` job passed, or when the plan ran no checks. It fails in every other case, including a failed or cancelled plan.
 - `.github/workflows/lint.yml` runs every hook in `.pre-commit-config.yaml` on the macOS runner.
 
