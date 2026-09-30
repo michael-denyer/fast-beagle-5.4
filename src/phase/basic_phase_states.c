@@ -12,7 +12,6 @@
 
 #include <math.h>
 #include <stdlib.h>
-#include <string.h>
 
 #include "blbutil/bit_array.h"
 #include "blbutil/utilities.h"
@@ -27,7 +26,7 @@ void basic_phase_states_init(basic_phase_states *bps, const pbwt_phase_ibs *ibs,
     bps->max_states = max_states;
     int ceil_steps = jnum_d2i(ceil((double)(1.0f / fpd->ibs_step)));
     bps->min_steps = ceil_steps > 200 ? ceil_steps : 200;
-    comp_hap_tracker_init(&bps->t, max_states);
+    comp_hap_tracker_init(&bps->t, max_states, ibs->cs->n_haps);
     bps->comp_haps = util_malloc((size_t)max_states * sizeof *bps->comp_haps);
     for (int j = 0; j < max_states; ++j) bps->comp_haps[j] = bit_array_new((size_t)fpd->stage1_hap_bits[fpd->n_stage1]);
     bps->column = util_malloc((size_t)max_states * sizeof *bps->column);
@@ -105,6 +104,15 @@ typedef struct {
     int word;   /* the word held in bps->column, or -1 */
 } column_cursor;
 
+static inline const uint64_t *column_word(column_cursor *cc, int word) {
+    const basic_phase_states *bps = cc->bps;
+    if (word != cc->word) {
+        for (int j = 0; j < cc->n_comp_haps; ++j) bps->column[j] = bps->comp_haps[j][word];
+        cc->word = word;
+    }
+    return bps->column;
+}
+
 /* out1[j] and out2[j]: whether composite haplotype j differs from hap1 and
  * from hap2 over bits [from, to). A range within one word compares that word
  * of every composite haplotype at once. */
@@ -114,11 +122,7 @@ static inline __attribute__((always_inline)) void set_mismatches(column_cursor *
     int n = cc->n_comp_haps;
     int word = from >> 6;
     if (from < to && word == (to - 1) >> 6) {
-        uint64_t *column = bps->column;
-        if (word != cc->word) {
-            for (int j = 0; j < n; ++j) column[j] = bps->comp_haps[j][word];
-            cc->word = word;
-        }
+        const uint64_t *column = column_word(cc, word);
         uint64_t mask = (~(uint64_t)0 << (from & 63)) & (~(uint64_t)0 >> ((unsigned)-to & 63));
         uint64_t t1 = hap1[word] & mask;
         uint64_t t2 = hap2[word] & mask;
@@ -135,6 +139,20 @@ static inline __attribute__((always_inline)) void set_mismatches(column_cursor *
     }
 }
 
+static inline __attribute__((always_inline)) void set_mismatch(column_cursor *cc, const uint64_t *hap, int from, int to, uint8_t *restrict out) {
+    const basic_phase_states *bps = cc->bps;
+    int n = cc->n_comp_haps;
+    int word = from >> 6;
+    if (from < to && word == (to - 1) >> 6) {
+        const uint64_t *column = column_word(cc, word);
+        uint64_t mask = (~(uint64_t)0 << (from & 63)) & (~(uint64_t)0 >> ((unsigned)-to & 63));
+        uint64_t t = hap[word] & mask;
+        for (int j = 0; j < n; ++j) out[j] = (column[j] & mask) != t;
+    } else {
+        for (int j = 0; j < n; ++j) out[j] = !bit_array_equal_range(hap, bps->comp_haps[j], from, to);
+    }
+}
+
 int basic_phase_states_ibs_states(basic_phase_states *bps, int sample, uint8_t ***mismatch) {
     int n_comp_haps = set_comp_ref_haps(bps, sample);
     const int *hap_bits = bps->ibs->pd->fpd->stage1_hap_bits;
@@ -148,8 +166,11 @@ int basic_phase_states_ibs_states(basic_phase_states *bps, int sample, uint8_t *
 }
 
 /* Row 0 is the homozygous-cluster HMM: it matches rows 1 and 2 at a
- * homozygous cluster and has no mismatches at a heterozygous one. */
-int basic_phase_states_cluster_states(basic_phase_states *bps, const marker_cluster *mc, int **ref_at_missing, uint8_t ***mismatch) {
+ * homozygous cluster and has no mismatches at a heterozygous one. So a
+ * homozygous cluster has one distinct row, a heterozygous cluster two, and a
+ * missing-genotype cluster none. */
+int basic_phase_states_cluster_states(basic_phase_states *bps, const marker_cluster *mc, int **ref_at_missing,
+        const uint8_t **mismatch[3], uint8_t *rows, const uint8_t *zero_row) {
     int n_comp_haps = set_comp_ref_haps(bps, mc->sp->sample);
     size_t n = (size_t)n_comp_haps;
     const int *hap_bits = bps->ibs->pd->fpd->stage1_hap_bits;
@@ -158,21 +179,24 @@ int basic_phase_states_cluster_states(basic_phase_states *bps, const marker_clus
     column_cursor cc = {bps, n_comp_haps, -1};
     int miss_index = 0;
     for (int c = 0; c < mc->n_clusters; ++c) {
-        uint8_t *m0 = mismatch[0][c], *m1 = mismatch[1][c], *m2 = mismatch[2][c];
         int m_start = marker_cluster_start(mc, c);
         int b_start = hap_bits[m_start];
         int b_end = hap_bits[mc->ends[c]];
         if (mc->has_missing[c]) {
-            memset(m0, 0, n);
-            memset(m1, 0, n);
-            memset(m2, 0, n);
+            mismatch[0][c] = mismatch[1][c] = mismatch[2][c] = zero_row;
             int *ref_alleles = ref_at_missing[miss_index++];
             for (int j = 0; j < n_comp_haps; ++j) ref_alleles[j] = bit_array_allele(bps->comp_haps[j], hap_bits, m_start);
-            continue;
+        } else if (bit_array_equal_range(hap1, hap2, b_start, b_end)) {
+            set_mismatch(&cc, hap1, b_start, b_end, rows);
+            mismatch[0][c] = mismatch[1][c] = mismatch[2][c] = rows;
+            rows += n;
+        } else {
+            set_mismatches(&cc, hap1, hap2, b_start, b_end, rows, rows + n);
+            mismatch[0][c] = zero_row;
+            mismatch[1][c] = rows;
+            mismatch[2][c] = rows + n;
+            rows += 2 * n;
         }
-        set_mismatches(&cc, hap1, hap2, b_start, b_end, m1, m2);
-        if (bit_array_equal_range(hap1, hap2, b_start, b_end)) memcpy(m0, m1, n);
-        else memset(m0, 0, n);
     }
     return n_comp_haps;
 }

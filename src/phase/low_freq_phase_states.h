@@ -34,10 +34,12 @@ typedef struct {
 } low_freq_phase_states;
 
 void low_freq_phase_states_init(low_freq_phase_states *st, const low_freq_phase_ibs *ibs, int max_states);
-/* LowFreqPhaseStates.ibsStates(targHap, haps, nMismatches): haps[m][j] is
- * state j's haplotype at stage-1 marker m and mismatch[m][j] whether its
- * allele differs from targ_hap's. Returns the number of states. */
-int low_freq_phase_states_ibs_states(low_freq_phase_states *st, int targ_hap, int **haps, uint8_t **mismatch);
+/* LowFreqPhaseStates.ibsStates(targHap, haps, nMismatches). Sets
+ * mismatch[m * max_states + j], whether state j's allele at stage-1 marker m
+ * differs from targ_hap's, for every marker m, and copies the states'
+ * haplotypes at each marker with slot[m] >= 0 to row slot[m] of haps. Rows
+ * are max_states long. Returns the number of states. */
+int low_freq_phase_states_ibs_states(low_freq_phase_states *st, int targ_hap, const int *slot, int *haps, uint8_t *mismatch);
 void low_freq_phase_states_free(low_freq_phase_states *st);
 
 #endif

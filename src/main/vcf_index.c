@@ -22,20 +22,18 @@ typedef struct {
 } index_rec;
 
 struct vcf_index {
-    char *vcf_path;
+    char *vcf_path, *tbi_path;
     uint64_t u_header_end;
     str_set *chroms;   /* tid order, as tabix numbers them */
     index_rec *recs;
     size_t n_recs, cap;
 };
 
-vcf_index *vcf_index_new(const char *vcf_path, uint64_t u_header_end) {
-    kstring_t tbi = {0, 0, NULL};
-    ksprintf(&tbi, "%s.tbi", vcf_path);
-    remove(tbi.s);
-    free(tbi.s);
+vcf_index *vcf_index_new(const char *vcf_path, const char *tbi_path, uint64_t u_header_end) {
+    remove(tbi_path);
     vcf_index *x = util_malloc(sizeof *x);
-    *x = (vcf_index){.vcf_path = util_strndup(vcf_path, strlen(vcf_path)), .u_header_end = u_header_end,
+    *x = (vcf_index){.vcf_path = util_strndup(vcf_path, strlen(vcf_path)),
+        .tbi_path = util_strndup(tbi_path, strlen(tbi_path)), .u_header_end = u_header_end,
         .chroms = str_set_new()};
     return x;
 }
@@ -175,10 +173,11 @@ void vcf_index_write(vcf_index *x, uint64_t u_total) {
     if (bl.uend != u_total) util_exit("Error reading %s: it is longer than was written", vcf_path);
     if (hclose(bl.f) != 0) util_exit("Error reading %s", vcf_path);
     set_meta(idx, x->chroms);
-    if (hts_idx_save_as(idx, vcf_path, NULL, HTS_FMT_TBI) != 0) util_exit("Error writing %s.tbi", vcf_path);
+    if (hts_idx_save_as(idx, vcf_path, x->tbi_path, HTS_FMT_TBI) != 0) util_exit("Error writing %s", x->tbi_path);
     hts_idx_destroy(idx);
     str_set_free(x->chroms);
     free(x->recs);
     free(x->vcf_path);
+    free(x->tbi_path);
     free(x);
 }

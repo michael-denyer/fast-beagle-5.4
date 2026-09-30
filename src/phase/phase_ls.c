@@ -138,13 +138,15 @@ static void initialize_parameters(const pbwt_phase_ibs *ibs, jrandom *r) {
 }
 
 typedef struct {
-    phase_baum1 baum;
+    phase_baum1 baum[2];
     swap_rate rate;
 } baum_worker;
 
-static void baum_task(void *worker, int sample) {
+static void baum_task(void *worker, int pair) {
     baum_worker *bw = worker;
-    phase_baum1_phase(&bw->baum, sample, &bw->rate);
+    int sample0 = pair << 1;
+    int sample1 = sample0 + 1 < bw->baum[0].pd->n_samples ? sample0 + 1 : -1;
+    phase_baum1_phase_pair(&bw->baum[0], sample0, &bw->baum[1], sample1, &bw->rate);
 }
 
 void phase_ls_run_stage1(phase_data *pd, swap_rate *rate) {
@@ -165,19 +167,23 @@ void phase_ls_run_stage1(phase_data *pd, swap_rate *rate) {
         else if (pd->it < pd->par->burnin) update_parameters(&ibs, &r);
     }
     /* Each sample is phased only against the haplotypes copied at the start
-     * of the iteration, so the threads can take samples in any order. */
-    int n_threads = parallel_threads(pd->par->nthreads, pd->n_samples);
+     * of the iteration, so the threads can take pairs of samples in any
+     * order. */
+    int n_pairs = (pd->n_samples + 1) / 2;
+    int n_threads = parallel_threads(pd->par->nthreads, n_pairs);
     char **trace_lines = trace_on() ? util_malloc((size_t)pd->n_samples * sizeof *trace_lines) : NULL;
     baum_worker *workers = util_malloc((size_t)n_threads * sizeof *workers);
     for (int t = 0; t < n_threads; ++t) {
-        phase_baum1_init(&workers[t].baum, &ibs, trace_lines);
+        phase_baum1_init(&workers[t].baum[0], &ibs, trace_lines);
+        phase_baum1_init(&workers[t].baum[1], &ibs, trace_lines);
         workers[t].rate = (swap_rate){0, 0};
     }
-    parallel_for(n_threads, pd->n_samples, workers, sizeof *workers, baum_task);
+    parallel_for(n_threads, n_pairs, workers, sizeof *workers, baum_task);
     for (int t = 0; t < n_threads; ++t) {
         rate->n_swaps += workers[t].rate.n_swaps;
         rate->n_unph_hets += workers[t].rate.n_unph_hets;
-        phase_baum1_free(&workers[t].baum);
+        phase_baum1_free(&workers[t].baum[0]);
+        phase_baum1_free(&workers[t].baum[1]);
     }
     free(workers);
     if (trace_lines != NULL) {

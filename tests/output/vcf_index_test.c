@@ -94,7 +94,10 @@ static void open_writer(writer *w, const char *path, int nthreads) {
 }
 
 static void start_index(writer *w, const char *path) {
-    w->index = vcf_index_new(path, w->n_written);
+    kstring_t tbi = {0, 0, NULL};
+    ksprintf(&tbi, "%s.tbi", path);
+    w->index = vcf_index_new(path, tbi.s, w->n_written);
+    free(tbi.s);
 }
 
 static void close_writer(writer *w) {

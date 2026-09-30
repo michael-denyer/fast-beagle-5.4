@@ -46,7 +46,7 @@ static void imp_states_init(imp_states *st, const imp_data *id, const imp_ibs *i
     st->id = id;
     st->ibs = ibs;
     st->max_states = max_states;
-    comp_hap_tracker_init(&st->t, max_states);
+    comp_hap_tracker_init(&st->t, max_states, id->n_haps);
     st->comp_hap_hap = util_malloc(n * sizeof *st->comp_hap_hap);
     st->comp_hap_end = util_malloc(n * sizeof *st->comp_hap_end);
     for (int j = 0; j < max_states; ++j) st->comp_hap_hap[j] = st->comp_hap_end[j] = (int_list){0};

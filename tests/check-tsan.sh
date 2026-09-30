@@ -23,7 +23,7 @@ mkdir -p "$TSAN"
 rsync -a --delete --exclude build "$ROOT/Makefile" "$ROOT/java" "$ROOT/src" "$ROOT/third_party" "$ROOT/tests" "$TSAN/"
 # make does not rebuild objects when only CFLAGS change.
 make -C "$TSAN" clean > /dev/null
-make -C "$TSAN" CFLAGS="-O1 -g -fno-omit-frame-pointer -fsanitize=thread" build/beagle check-block-reader \
+make -C "$TSAN" CFLAGS="-O1 -g -fno-omit-frame-pointer -fsanitize=thread" build/beagle check-block-reader build/output/bgen_files_fixture \
   > "$TSAN/make.log" 2>&1 || { echo "FAIL ThreadSanitizer build ($TSAN/make.log)"; exit 1; }
 echo "PASS ThreadSanitizer build"
 OUT=$(mktemp -d)
@@ -31,6 +31,19 @@ trap 'rm -rf "$OUT"' EXIT
 
 check_selection "$ROOT/tests/oracle-cases.txt" || exit 1
 fail=0
+if python3 "$ROOT/tests/check_bgen_files.py" "$TSAN/build/output/bgen_files_fixture"; then
+  echo "PASS ThreadSanitizer BGEN partial-file cleanup"
+else
+  echo "FAIL ThreadSanitizer BGEN partial-file cleanup"; fail=1
+fi
+# Fatal util_exit paths deliberately leave readers unjoined. Suppress only
+# thread-leak reports for these expected exits; keep race detection enabled.
+if TSAN_OPTIONS="${TSAN_OPTIONS:+$TSAN_OPTIONS:}report_thread_leaks=0" \
+    python3 "$ROOT/tests/check_output_failures.py" "$TSAN/build/beagle"; then
+  echo "PASS ThreadSanitizer output refusals and read-ahead failures"
+else
+  echo "FAIL ThreadSanitizer output refusals and read-ahead failures"; fail=1
+fi
 while read -r name expect _ args; do
   selected "$name" || continue
   for traced in no yes; do

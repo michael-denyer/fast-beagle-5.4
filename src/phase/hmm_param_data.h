@@ -18,15 +18,23 @@
 
 /* Runs the forward-backward HMM of each of a sample's haplotypes against its
  * composite reference haplotypes and sums the posterior mismatch and switch
- * probabilities that the parameter estimates are made from. */
+ * probabilities that the parameter estimates are made from. The two
+ * haplotypes' HMMs step through the markers together. */
 typedef struct {
     const phase_data *pd;
     int n_markers;
+    int max_states;
     basic_phase_states states;
-    uint8_t ***al_match;   /* [2][marker][state] */
-    float *fwd;
-    float *bwd;
-    float **saved_bwd;     /* [marker][state] */
+    uint8_t ***al_match;       /* [2][marker][state] */
+    float *fwd[2];             /* per haplotype */
+    float *bwd[2];
+    float *block_end_bwd[2];   /* [block][state]: the backward values at each block's last marker */
+    float *block_bwd[2];       /* [marker in block][state]: the block the forward pass is in */
+    float *joint[2];           /* one marker's per-state terms, before they are summed */
+    float *state[2];
+    float *discord[2];
+    float *hap2_mismatch;      /* [marker]: the second haplotype's terms, added after all of the first's */
+    double *hap2_switch;
     float em_probs[2];
     int mismatch_cnt;
     double sum_mismatch_prob;

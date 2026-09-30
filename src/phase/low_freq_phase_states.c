@@ -12,6 +12,7 @@
 
 #include <math.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "blbutil/bit_array.h"
 #include "blbutil/utilities.h"
@@ -26,7 +27,7 @@ void low_freq_phase_states_init(low_freq_phase_states *st, const low_freq_phase_
     st->max_states = max_states;
     int ceil_steps = jnum_d2i(ceil((double)(1.0f / pd->fpd->ibs_step)));
     st->min_steps = ceil_steps > 200 ? ceil_steps : 200;
-    comp_hap_tracker_init(&st->t, max_states);
+    comp_hap_tracker_init(&st->t, max_states, ibs->cs.n_haps);
     size_t n = (size_t)max_states;
     st->comp_hap_hap = util_malloc(n * sizeof *st->comp_hap_hap);
     st->comp_hap_end = util_malloc(n * sizeof *st->comp_hap_end);
@@ -89,7 +90,7 @@ static int set_final_ref_segs(low_freq_phase_states *st) {
     return n_comp_haps;
 }
 
-int low_freq_phase_states_ibs_states(low_freq_phase_states *st, int targ_hap, int **haps, uint8_t **mismatch) {
+int low_freq_phase_states_ibs_states(low_freq_phase_states *st, int targ_hap, const int *slot, int *haps, uint8_t *mismatch) {
     comp_hap_tracker_clear(&st->t);
     for (int j = 0; j < st->max_states; ++j) st->comp_hap_hap[j].n = st->comp_hap_end[j].n = 0;
     for (int step = 0; step < st->ibs->n_steps; ++step) {
@@ -101,18 +102,19 @@ int low_freq_phase_states_ibs_states(low_freq_phase_states *st, int targ_hap, in
 
     const int *hap_bits = st->ibs->pd->fpd->stage1_hap_bits;
     const uint64_t *const *all_haps = st->ibs->cs.haps;
+    size_t row = (size_t)st->max_states;
     for (int m = 0; m < st->n_markers; ++m) {
         int obs_allele = bit_array_allele(all_haps[targ_hap], hap_bits, m);
+        uint8_t *mis = mismatch + (size_t)m * row;
         for (int j = 0; j < n_comp_haps; ++j) {
             if (m == st->comp_hap_to_end[j]) {
                 ++st->segment_index[j];
                 st->comp_hap_to_hap[j] = st->comp_hap_hap[j].v[st->segment_index[j]];
                 st->comp_hap_to_end[j] = st->comp_hap_end[j].v[st->segment_index[j]];
             }
-            int ref_hap = st->comp_hap_to_hap[j];
-            haps[m][j] = ref_hap;
-            mismatch[m][j] = bit_array_allele(all_haps[ref_hap], hap_bits, m) == obs_allele ? 0 : 1;
+            mis[j] = bit_array_allele(all_haps[st->comp_hap_to_hap[j]], hap_bits, m) == obs_allele ? 0 : 1;
         }
+        if (slot[m] >= 0) memcpy(haps + (size_t)slot[m] * row, st->comp_hap_to_hap, (size_t)n_comp_haps * sizeof *haps);
     }
     return n_comp_haps;
 }

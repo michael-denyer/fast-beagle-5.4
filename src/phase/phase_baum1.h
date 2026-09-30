@@ -11,6 +11,7 @@
 #define PHASE_PHASE_BAUM1_H
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #include "phase/basic_phase_states.h"
@@ -23,7 +24,7 @@ typedef struct {
     int64_t n_unph_hets;
 } swap_rate;
 
-/* One sample at a time, runs the backward then the forward algorithm over the
+/* For one sample, runs the backward then the forward algorithm over the
  * sample's clusters with three HMMs (the homozygous clusters, and each
  * haplotype since the last unphased heterozygote), phases each unphased
  * heterozygote from the posterior odds, and imputes missing genotypes. After
@@ -36,7 +37,10 @@ typedef struct {
     int max_states;
     basic_phase_states states;
     int n_states;
-    uint8_t ***mismatch;   /* [3][cluster][state]; rows 1 and 2 swap with the haplotypes */
+    const uint8_t **mismatch[3];   /* [3][cluster] -> [state]; rows 1 and 2 swap with the haplotypes */
+    uint8_t *rows;         /* the distinct mismatch rows of the sample being phased */
+    size_t rows_cap;
+    uint8_t *zero_row;     /* max_states zeros: a row with no mismatches */
     float p_mismatch;
     float em_probs[2];
     float *fwd[3];
@@ -63,9 +67,10 @@ typedef struct {
 /* new PhaseBaum1(phaseIbs). With trace_lines, each sample's T3e line is
  * stored there for the caller to write in sample order. */
 void phase_baum1_init(phase_baum1 *pb, const pbwt_phase_ibs *ibs, char **trace_lines);
-/* PhaseBaum1.phase(sample): updates the sample's SamplePhase and adds its
- * swaps to rate. */
-void phase_baum1_phase(phase_baum1 *pb, int sample, swap_rate *rate);
+/* PhaseBaum1.phase(sample) for sample0 with pb0 and, unless sample1 is -1,
+ * for sample1 with pb1: updates each sample's SamplePhase and adds its swaps
+ * to rate. pb0 and pb1 must be different objects. */
+void phase_baum1_phase_pair(phase_baum1 *pb0, int sample0, phase_baum1 *pb1, int sample1, swap_rate *rate);
 void phase_baum1_free(phase_baum1 *pb);
 
 #endif

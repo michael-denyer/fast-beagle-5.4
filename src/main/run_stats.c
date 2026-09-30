@@ -16,7 +16,6 @@
 
 #include "main/run_stats.h"
 
-#include <htslib/kstring.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
@@ -101,13 +100,10 @@ static void print_nanos(run_stats *rs, const char *message, int64_t nanos) {
     duo_print(rs, "%-31s%s\n", message, elapsed(buf, sizeof buf, nanos));
 }
 
-void run_stats_open(run_stats *rs, const par *p, const char *program) {
-    *rs = (run_stats){.par = p, .start_nanos = run_stats_nanos()};
-    kstring_t path = KS_INITIALIZE;
-    ksprintf(&path, "%s.log", p->out);
-    rs->log = fopen(path.s, "w");
-    if (rs->log == NULL) util_exit("Error opening %s", path.s);
-    ks_free(&path);
+void run_stats_open(run_stats *rs, const par *p, const char *log_path, const char *program) {
+    *rs = (run_stats){.par = p, .log_path = log_path, .start_nanos = run_stats_nanos()};
+    rs->log = fopen(rs->log_path, "w");
+    if (rs->log == NULL) util_exit("Error opening %s", rs->log_path);
     util_exit_log(rs->log);
     /* Java's System.out flushes at each line; a pipe would otherwise hold the
      * progress lines until the run ends. */
@@ -216,5 +212,5 @@ void run_stats_close(run_stats *rs, int64_t n_targ_markers, int64_t n_markers) {
     duo_print(rs, "\nEnd time: %s\n", time_stamp(ts, sizeof ts));
     duo_print(rs, PROGRAM " finished\n");
     util_exit_log(NULL);
-    if (fclose(rs->log) != 0) util_exit("Error writing %s.log", rs->par->out);
+    if (fclose(rs->log) != 0) util_exit("Error writing %s", rs->log_path);
 }

@@ -33,10 +33,12 @@ void phase_baum1_init(phase_baum1 *pb, const pbwt_phase_ibs *ibs, char **trace_l
     pb->max_states = p->phase_states;
     basic_phase_states_init(&pb->states, ibs, pb->max_states);
     pb->n_states = 0;
-    pb->mismatch = util_malloc(3 * sizeof *pb->mismatch);
+    pb->rows = NULL;
+    pb->rows_cap = 0;
+    pb->zero_row = util_malloc((size_t)pb->max_states);
+    memset(pb->zero_row, 0, (size_t)pb->max_states);
     for (int i = 0; i < 3; ++i) {
-        pb->mismatch[i] = util_malloc((size_t)n_markers * sizeof **pb->mismatch);
-        for (int m = 0; m < n_markers; ++m) pb->mismatch[i][m] = util_malloc((size_t)pb->max_states);
+        pb->mismatch[i] = util_malloc((size_t)n_markers * sizeof *pb->mismatch[i]);
         pb->fwd[i] = util_malloc((size_t)pb->max_states * sizeof *pb->fwd[i]);
         pb->bwd[i] = util_malloc((size_t)pb->max_states * sizeof *pb->bwd[i]);
     }
@@ -54,14 +56,13 @@ void phase_baum1_init(phase_baum1 *pb, const pbwt_phase_ibs *ibs, char **trace_l
 }
 
 void phase_baum1_free(phase_baum1 *pb) {
-    int n_markers = pb->pd->fpd->n_stage1;
     for (int i = 0; i < 3; ++i) {
-        for (int m = 0; m < n_markers; ++m) free(pb->mismatch[i][m]);
         free(pb->mismatch[i]);
         free(pb->fwd[i]);
         free(pb->bwd[i]);
     }
-    free(pb->mismatch);
+    free(pb->rows);
+    free(pb->zero_row);
     for (int j = 0; j < pb->n_miss_cap; ++j) {
         free(pb->ref_alleles[j]);
         free(pb->miss_probs1[j]);
@@ -81,8 +82,14 @@ void phase_baum1_free(phase_baum1 *pb) {
     basic_phase_states_free(&pb->states);
 }
 
-static void ensure_capacity(phase_baum1 *pb, int n_unph, int n_miss) {
+static void ensure_capacity(phase_baum1 *pb, int n_clusters, int n_unph, int n_miss) {
     size_t row = (size_t)pb->max_states;
+    size_t n_rows_bytes = 2 * (size_t)n_clusters * row;
+    if (pb->rows_cap < n_rows_bytes) {
+        free(pb->rows);
+        pb->rows = util_malloc(n_rows_bytes);
+        pb->rows_cap = n_rows_bytes;
+    }
     if (pb->n_miss_cap < n_miss) {
         pb->ref_alleles = util_realloc(pb->ref_alleles, (size_t)n_miss * sizeof *pb->ref_alleles);
         pb->miss_probs1 = util_realloc(pb->miss_probs1, (size_t)n_miss * sizeof *pb->miss_probs1);
@@ -126,56 +133,79 @@ static int cluster_size(const marker_cluster *mc, int c) {
     return mc->ends[c] - marker_cluster_start(mc, c);
 }
 
-/* Backward over clusters [start_clust, end_clust), the haplotype HMMs
- * restarting from the homozygous one. The step from cluster c + 1 to c takes
- * the size of cluster c with the mismatches of cluster c + 1, as Beagle 5.4
- * does. */
-static void bwd_segment(phase_baum1 *pb, const marker_cluster *mc, int start_clust, int end_clust) {
-    copy_states(pb, pb->bwd[1], pb->bwd[0]);
-    copy_states(pb, pb->bwd[2], pb->bwd[0]);
-    for (int c = end_clust - 1; c >= start_clust; --c) {
-        int c_p1 = c + 1;
-        float p_rec = mc->p_recomb[c_p1];
-        set_em_probs(pb, cluster_size(mc, c));
-        hmm_bwd_update3(pb->bwd, p_rec, pb->em_probs, pb->mismatch[0][c_p1], pb->mismatch[1][c_p1], pb->mismatch[2][c_p1], pb->n_states);
-        if (mc->has_missing[c]) {
-            --pb->miss_index;
-            copy_states(pb, pb->miss_probs1[pb->miss_index], pb->bwd[1]);
-            copy_states(pb, pb->miss_probs2[pb->miss_index], pb->bwd[2]);
-        }
-    }
-}
+/* The backward pass over a sample's clusters, held as a position so that
+ * two samples can take their steps together. It stores the haplotype HMMs'
+ * backward values at each missing genotype and at the cluster just before
+ * each unphased heterozygote, where the haplotype HMMs restart from the
+ * homozygous one. */
+typedef struct {
+    phase_baum1 *pb;
+    const marker_cluster *mc;
+    int c;   /* the cluster the next step reaches, from n_clusters - 2 down to 0 */
+    int unph_index;
+} bwd_pass;
 
-/* Stores the haplotype HMMs' backward values after each unphased
- * heterozygote's segment, and at each missing genotype. */
-static void bwd_alg(phase_baum1 *pb, const marker_cluster *mc) {
+static void bwd_begin(bwd_pass *bp, phase_baum1 *pb, const marker_cluster *mc) {
+    *bp = (bwd_pass){pb, mc, mc->n_clusters - 2, mc->n_unph - 1};
     for (int k = 0; k < pb->n_states; ++k) pb->bwd[0][k] = 1.0f / pb->n_states;
-    int end_clust = mc->n_clusters - 1;
-    if (mc->has_missing[end_clust]) {
+    if (mc->has_missing[mc->n_clusters - 1]) {
         --pb->miss_index;
         copy_states(pb, pb->miss_probs1[pb->miss_index], pb->bwd[0]);
         copy_states(pb, pb->miss_probs2[pb->miss_index], pb->bwd[0]);
     }
-    for (int j = mc->n_unph - 1; j >= 0; --j) {
-        int start_clust = mc->unph_clusters[j] - 1;
-        bwd_segment(pb, mc, start_clust, end_clust);
-        copy_states(pb, pb->bwd_het1[j], pb->bwd[1]);
-        copy_states(pb, pb->bwd_het2[j], pb->bwd[2]);
-        end_clust = start_clust;
-    }
-    bwd_segment(pb, mc, 0, end_clust);
+    copy_states(pb, pb->bwd[1], pb->bwd[0]);
+    copy_states(pb, pb->bwd[2], pb->bwd[0]);
 }
 
-static void swap_haps(phase_baum1 *pb, sample_phase *sp, const marker_cluster *mc, int start_clust, int end_clust) {
+/* The update that takes the backward values from cluster c + 1 to cluster c.
+ * It takes the size of cluster c with the mismatches of cluster c + 1, as
+ * Beagle 5.4 does. */
+static hmm3_step bwd_step(bwd_pass *bp) {
+    phase_baum1 *pb = bp->pb;
+    int c_p1 = bp->c + 1;
+    set_em_probs(pb, cluster_size(bp->mc, bp->c));
+    return (hmm3_step){pb->bwd, NULL, bp->mc->p_recomb[c_p1], pb->em_probs,
+            {pb->mismatch[0][c_p1], pb->mismatch[1][c_p1], pb->mismatch[2][c_p1]}, pb->n_states};
+}
+
+static void bwd_end_step(bwd_pass *bp) {
+    phase_baum1 *pb = bp->pb;
+    const marker_cluster *mc = bp->mc;
+    int c = bp->c;
+    if (mc->has_missing[c]) {
+        --pb->miss_index;
+        copy_states(pb, pb->miss_probs1[pb->miss_index], pb->bwd[1]);
+        copy_states(pb, pb->miss_probs2[pb->miss_index], pb->bwd[2]);
+    }
+    int j = bp->unph_index;
+    if (j >= 0 && c + 1 == mc->unph_clusters[j]) {
+        copy_states(pb, pb->bwd_het1[j], pb->bwd[1]);
+        copy_states(pb, pb->bwd_het2[j], pb->bwd[2]);
+        copy_states(pb, pb->bwd[1], pb->bwd[0]);
+        copy_states(pb, pb->bwd[2], pb->bwd[0]);
+        --bp->unph_index;
+    }
+    --bp->c;
+}
+
+static void bwd_finish(bwd_pass *bp) {
+    while (bp->c >= 0) {
+        hmm3_step s = bwd_step(bp);
+        hmm_bwd_update3(s.val, s.p_switch, s.p_mismatch, s.m[0], s.m[1], s.m[2], s.n_states);
+        bwd_end_step(bp);
+    }
+}
+
+static void swap_haps(phase_baum1 *pb, const marker_cluster *mc, int start_clust, int end_clust) {
     for (int c = start_clust; c < end_clust; ++c) {
-        uint8_t *tmp = pb->mismatch[1][c];
+        const uint8_t *tmp = pb->mismatch[1][c];
         pb->mismatch[1][c] = pb->mismatch[2][c];
         pb->mismatch[2][c] = tmp;
     }
-    sample_phase_swap_haps(sp, marker_cluster_start(mc, start_clust), mc->ends[end_clust - 1]);
+    sample_phase_swap_haps(mc->sp, marker_cluster_start(mc, start_clust), mc->ends[end_clust - 1]);
 }
 
-static void impute_alleles(phase_baum1 *pb, sample_phase *sp, const marker_cluster *mc, int cluster) {
+static void impute_alleles(phase_baum1 *pb, const marker_cluster *mc, int cluster) {
     int mi = pb->miss_index;
     if (pb->swap_haps) {
         float *tmp = pb->miss_probs1[mi];
@@ -204,26 +234,11 @@ static void impute_alleles(phase_baum1 *pb, sample_phase *sp, const marker_clust
         if (al_freq1[j] > al_freq1[a1]) a1 = j;
         if (al_freq2[j] > al_freq2[a2]) a2 = j;
     }
-    sample_phase_set_allele1(sp, marker, a1);
-    sample_phase_set_allele2(sp, marker, a2);
+    sample_phase_set_allele1(mc->sp, marker, a1);
+    sample_phase_set_allele2(mc->sp, marker, a2);
     free(al_freq1);
     free(al_freq2);
     ++pb->miss_index;
-}
-
-/* Forward over clusters [start_clust, end_clust), first applying the phase
- * switch decided at the previous heterozygote. */
-static void fwd_segment(phase_baum1 *pb, sample_phase *sp, const marker_cluster *mc, int start_clust, int end_clust) {
-    if (pb->swap_haps) swap_haps(pb, sp, mc, start_clust, end_clust);
-    copy_states(pb, pb->fwd[1], pb->fwd[0]);
-    copy_states(pb, pb->fwd[2], pb->fwd[0]);
-    pb->sum[1] = pb->sum[2] = pb->sum[0];
-    for (int c = start_clust; c < end_clust; ++c) {
-        float p_rec = mc->p_recomb[c];
-        set_em_probs(pb, cluster_size(mc, c));
-        hmm_fwd_update3(pb->fwd, pb->sum, p_rec, pb->em_probs, pb->mismatch[0][c], pb->mismatch[1][c], pb->mismatch[2][c], pb->n_states);
-        if (mc->has_missing[c]) impute_alleles(pb, sp, mc, c);
-    }
 }
 
 static void phase_het(phase_baum1 *pb, int het_index) {
@@ -244,17 +259,58 @@ static void phase_het(phase_baum1 *pb, int het_index) {
     pb->lr[pb->n_lr++] = pb->swap_haps ? den / num : num / den;
 }
 
-static void fwd_alg(phase_baum1 *pb, sample_phase *sp, const marker_cluster *mc) {
+/* The forward pass, held as a position in the same way. */
+typedef struct {
+    phase_baum1 *pb;
+    const marker_cluster *mc;
+    int c;   /* the cluster the next step reaches */
+    int unph_index;
+} fwd_pass;
+
+static void fwd_begin(fwd_pass *fp, phase_baum1 *pb, const marker_cluster *mc) {
+    *fp = (fwd_pass){pb, mc, 0, 0};
     for (int k = 0; k < pb->n_states; ++k) pb->fwd[0][k] = 1.0f / pb->n_states;
     pb->sum[0] = 1.0f;
-    int start_clust = 0;
-    for (int j = 0; j < mc->n_unph; ++j) {
-        int end_clust = mc->unph_clusters[j];
-        fwd_segment(pb, sp, mc, start_clust, end_clust);
-        phase_het(pb, j);
-        start_clust = end_clust;
+    copy_states(pb, pb->fwd[1], pb->fwd[0]);
+    copy_states(pb, pb->fwd[2], pb->fwd[0]);
+    pb->sum[1] = pb->sum[2] = pb->sum[0];
+}
+
+/* At an unphased heterozygote's cluster, phases it, applies the phase switch
+ * to the clusters up to the next one, and restarts the haplotype HMMs from the
+ * homozygous one. Then gives the update that takes the forward values to
+ * cluster c. */
+static hmm3_step fwd_step(fwd_pass *fp) {
+    phase_baum1 *pb = fp->pb;
+    const marker_cluster *mc = fp->mc;
+    int c = fp->c;
+    if (fp->unph_index < mc->n_unph && c == mc->unph_clusters[fp->unph_index]) {
+        phase_het(pb, fp->unph_index);
+        ++fp->unph_index;
+        if (pb->swap_haps) {
+            int swap_end = fp->unph_index < mc->n_unph ? mc->unph_clusters[fp->unph_index] : mc->n_clusters;
+            swap_haps(pb, mc, c, swap_end);
+        }
+        copy_states(pb, pb->fwd[1], pb->fwd[0]);
+        copy_states(pb, pb->fwd[2], pb->fwd[0]);
+        pb->sum[1] = pb->sum[2] = pb->sum[0];
     }
-    if (start_clust < mc->n_clusters) fwd_segment(pb, sp, mc, start_clust, mc->n_clusters);
+    set_em_probs(pb, cluster_size(mc, c));
+    return (hmm3_step){pb->fwd, pb->sum, mc->p_recomb[c], pb->em_probs,
+            {pb->mismatch[0][c], pb->mismatch[1][c], pb->mismatch[2][c]}, pb->n_states};
+}
+
+static void fwd_end_step(fwd_pass *fp) {
+    if (fp->mc->has_missing[fp->c]) impute_alleles(fp->pb, fp->mc, fp->c);
+    ++fp->c;
+}
+
+static void fwd_finish(fwd_pass *fp) {
+    while (fp->c < fp->mc->n_clusters) {
+        hmm3_step s = fwd_step(fp);
+        hmm_fwd_update3(s.val, s.sums, s.p_switch, s.p_mismatch, s.m[0], s.m[1], s.m[2], s.n_states);
+        fwd_end_step(fp);
+    }
 }
 
 /* Float.compare order, as Arrays.sort(float[]) leaves it: -0.0 before 0.0,
@@ -333,31 +389,70 @@ static void trace_update(const phase_baum1 *pb, const sample_phase *sp, kstring_
     put_ints(s, sp->unphased, sp->n_unphased);
 }
 
-void phase_baum1_phase(phase_baum1 *pb, int sample, swap_rate *rate) {
+/* Clusters a sample and builds its states. False if the sample has nothing
+ * to phase or impute. */
+static bool begin_sample(phase_baum1 *pb, int sample, marker_cluster *mc, kstring_t *s) {
     sample_phase *sp = &pb->pd->phase[sample];
     pb->swap_haps = false;
     pb->swap_cnt = 0;
     int n_unph = sp->n_unphased;
     int n_miss = sp->n_missing;
-    kstring_t s = {0, 0, NULL};
-    if (pb->trace) ksprintf(&s, "sample\t%d\t%d\t%d", sample, n_unph, n_miss);
-    if (n_miss > 0 || n_unph > 0) {
-        pb->n_lr = 0;
-        ensure_capacity(pb, n_unph, n_miss);
-        marker_cluster mc;
-        marker_cluster_init(&mc, pb->pd, sample);
-        pb->miss_index = mc.n_missing_clusters;
-        pb->n_states = basic_phase_states_cluster_states(&pb->states, &mc, pb->ref_alleles, pb->mismatch);
-        if (pb->trace) trace_states(pb, &mc, &s);
-        pb->em_digest = TRACE_FNV_BASIS;
-        pb->threshold = NAN;
-        bwd_alg(pb, &mc);
-        fwd_alg(pb, sp, &mc);
+    if (pb->trace) ksprintf(s, "sample\t%d\t%d\t%d", sample, n_unph, n_miss);
+    if (n_miss == 0 && n_unph == 0) return false;
+    pb->n_lr = 0;
+    marker_cluster_init(mc, pb->pd, sample);
+    ensure_capacity(pb, mc->n_clusters, n_unph, n_miss);
+    pb->miss_index = mc->n_missing_clusters;
+    pb->n_states = basic_phase_states_cluster_states(&pb->states, mc, pb->ref_alleles, pb->mismatch, pb->rows, pb->zero_row);
+    if (pb->trace) trace_states(pb, mc, s);
+    pb->em_digest = TRACE_FNV_BASIS;
+    pb->threshold = NAN;
+    return true;
+}
+
+static void end_sample(phase_baum1 *pb, int sample, marker_cluster *mc, bool ran, kstring_t *s, swap_rate *rate) {
+    sample_phase *sp = &pb->pd->phase[sample];
+    int n_unph = sp->n_unphased;   /* before update_phase drops the committed heterozygotes */
+    if (ran) {
         update_phase(pb, sample, sp);
-        if (pb->trace) trace_update(pb, sp, &s);
-        marker_cluster_free(&mc);
+        if (pb->trace) trace_update(pb, sp, s);
+        marker_cluster_free(mc);
     }
-    if (pb->trace) pb->trace_lines[sample] = s.s;
+    if (pb->trace) pb->trace_lines[sample] = s->s;
     rate->n_unph_hets += n_unph;
     rate->n_swaps += pb->swap_cnt;
+}
+
+/* Each sample is phased as PhaseBaum1.phase phases it. The samples are
+ * independent, so their backward passes, and then their forward passes, take
+ * their steps together until the shorter one ends. */
+void phase_baum1_phase_pair(phase_baum1 *pb0, int sample0, phase_baum1 *pb1, int sample1, swap_rate *rate) {
+    marker_cluster mc0 = {0}, mc1 = {0};
+    kstring_t s0 = {0, 0, NULL}, s1 = {0, 0, NULL};
+    bool run0 = begin_sample(pb0, sample0, &mc0, &s0);
+    bool run1 = sample1 >= 0 && begin_sample(pb1, sample1, &mc1, &s1);
+    bwd_pass b0 = {0}, b1 = {0};
+    if (run0) bwd_begin(&b0, pb0, &mc0);
+    if (run1) bwd_begin(&b1, pb1, &mc1);
+    while (run0 && run1 && b0.c >= 0 && b1.c >= 0) {
+        hmm3_step t0 = bwd_step(&b0), t1 = bwd_step(&b1);
+        hmm_bwd_update3x2(&t0, &t1);
+        bwd_end_step(&b0);
+        bwd_end_step(&b1);
+    }
+    if (run0) bwd_finish(&b0);
+    if (run1) bwd_finish(&b1);
+    fwd_pass f0 = {0}, f1 = {0};
+    if (run0) fwd_begin(&f0, pb0, &mc0);
+    if (run1) fwd_begin(&f1, pb1, &mc1);
+    while (run0 && run1 && f0.c < mc0.n_clusters && f1.c < mc1.n_clusters) {
+        hmm3_step t0 = fwd_step(&f0), t1 = fwd_step(&f1);
+        hmm_fwd_update3x2(&t0, &t1);
+        fwd_end_step(&f0);
+        fwd_end_step(&f1);
+    }
+    if (run0) fwd_finish(&f0);
+    if (run1) fwd_finish(&f1);
+    end_sample(pb0, sample0, &mc0, run0, &s0, rate);
+    if (sample1 >= 0) end_sample(pb1, sample1, &mc1, run1, &s1, rate);
 }

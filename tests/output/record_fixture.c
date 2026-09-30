@@ -11,8 +11,9 @@ int main(int argc, char **argv) {
     samples s = {3, ids, diploid};
     par p = {.out = argv[1], .nthreads = 1, .ap = true, .gp = true,
         .bgen = (bgen_mode)atoi(argv[2]), .bgen_bits = 16, .bgen_chr_set = 22};
+    run_outputs *out = run_outputs_new(&p);
     window_writer ww;
-    window_writer_open(&ww, &p, &s);
+    window_writer_open(&ww, &p, out, &s);
     out_worker *wk = window_writer_worker_new(&ww);
     out_rec r = {0};
     const char *lines[] = {
@@ -53,5 +54,6 @@ int main(int argc, char **argv) {
     window_writer_rec_free(&r);
     window_writer_worker_free(wk);
     window_writer_close(&ww);
+    run_outputs_free(out);
     return 0;
 }

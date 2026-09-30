@@ -10,7 +10,6 @@
  */
 #include "vcf/markers.h"
 
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -26,9 +25,19 @@ bool marker_equals(const marker *a, const marker *b) {
             && span_equals(marker_alleles(a), marker_alleles(b)) && a->end == b->end;
 }
 
-static void print_marker(const marker *m) {
-    span id = marker_id(m), al = marker_alleles(m);
-    fprintf(stderr, "\n%s\t%d\t%.*s\t%.*s", marker_chrom(m), m->pos, id.n, id.s, al.n, al.s);
+static _Noreturn void marker_order_error(const marker *const *m) {
+    span id[3], al[3];
+    for (int j = 0; j < 3; ++j) {
+        id[j] = marker_id(m[j]);
+        al[j] = marker_alleles(m[j]);
+    }
+    util_exit("java.lang.IllegalArgumentException: markers not in chromosomal order: "
+            "\n%s\t%d\t%.*s\t%.*s"
+            "\n%s\t%d\t%.*s\t%.*s"
+            "\n%s\t%d\t%.*s\t%.*s",
+            marker_chrom(m[0]), m[0]->pos, id[0].n, id[0].s, al[0].n, al[0].s,
+            marker_chrom(m[1]), m[1]->pos, id[1].n, id[1].s, al[1].n, al[1].s,
+            marker_chrom(m[2]), m[2]->pos, id[2].n, id[2].s, al[2].n, al[2].s);
 }
 
 /* A hash consistent with marker_equals, for the duplicate check. */
@@ -54,12 +63,8 @@ void markers_check(const marker *const *markers, int n) {
             if (chr0 == chr1 && chr1 == chr2) {
                 int32_t pos0 = markers[j - 2]->pos, pos1 = markers[j - 1]->pos, pos2 = markers[j]->pos;
                 if ((pos1 < pos0 && pos1 < pos2) || (pos1 > pos0 && pos1 > pos2)) {
-                    fprintf(stderr, "java.lang.IllegalArgumentException: markers not in chromosomal order: ");
-                    print_marker(markers[j - 2]);
-                    print_marker(markers[j - 1]);
-                    print_marker(markers[j]);
-                    fputc('\n', stderr);
-                    exit(1);
+                    free(seen);
+                    marker_order_error(markers + j - 2);
                 }
             } else if (chr1 != chr2) {
                 for (int k = 0; k < n_seen; ++k) {
@@ -79,10 +84,11 @@ void markers_check(const marker *const *markers, int n) {
         size_t slot = marker_hash(markers[j]) & (cap - 1);
         while (table[slot] != NULL) {
             if (marker_equals(table[slot], markers[j])) {
-                span id = marker_id(markers[j]), al = marker_alleles(markers[j]);
-                fprintf(stderr, "java.lang.IllegalArgumentException: Duplicate marker: %s\t%d\t%.*s\t%.*s\n",
-                        marker_chrom(markers[j]), markers[j]->pos, id.n, id.s, al.n, al.s);
-                exit(1);
+                const marker *m = markers[j];
+                span id = marker_id(m), al = marker_alleles(m);
+                free(table);
+                util_exit("java.lang.IllegalArgumentException: Duplicate marker: %s\t%d\t%.*s\t%.*s",
+                        marker_chrom(m), m->pos, id.n, id.s, al.n, al.s);
             }
             slot = (slot + 1) & (cap - 1);
         }
