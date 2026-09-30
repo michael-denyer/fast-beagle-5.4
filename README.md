@@ -2,7 +2,6 @@
 
 ![C11](https://img.shields.io/badge/C-C11-00599C?logo=c&logoColor=white)
 ![Python test scripts](https://img.shields.io/badge/Python-test_scripts-3776AB?logo=python&logoColor=white)
-![Beagle 5.4 byte-identical](https://img.shields.io/badge/Beagle_5.4-byte--identical-2E7D32)
 ![macOS](https://img.shields.io/badge/macOS-supported-D32F2F?logo=apple&logoColor=white)
 ![Linux](https://img.shields.io/badge/Linux-supported-FCC624?logo=linux&logoColor=black)
 ![License GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue)
