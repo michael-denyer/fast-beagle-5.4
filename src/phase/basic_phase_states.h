@@ -43,8 +43,12 @@ int basic_phase_states_ibs_states(basic_phase_states *bps, int sample, uint8_t *
  * the sample's clusters c, mismatch[0][c][j] says whether composite haplotype
  * j differs from a homozygous cluster, and mismatch[1] and mismatch[2] whether
  * it differs from the sample's first and second haplotype there. For the k-th
- * missing-genotype cluster, ref_at_missing[k][j] is haplotype j's allele. */
-int basic_phase_states_cluster_states(basic_phase_states *bps, const marker_cluster *mc, int **ref_at_missing, uint8_t ***mismatch);
+ * missing-genotype cluster, ref_at_missing[k][j] is haplotype j's allele.
+ * Java fills three rows per cluster. Here mismatch[i][c] points at the row:
+ * rows that are always equal share one row in rows, which must hold two rows
+ * of max_states per cluster, and rows that are always zero are zero_row. */
+int basic_phase_states_cluster_states(basic_phase_states *bps, const marker_cluster *mc, int **ref_at_missing,
+        const uint8_t **mismatch[3], uint8_t *rows, const uint8_t *zero_row);
 void basic_phase_states_free(basic_phase_states *bps);
 
 #endif

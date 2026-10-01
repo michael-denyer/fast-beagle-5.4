@@ -5,7 +5,7 @@
 # build/check-<name>.log, or build/check-c-<name>.log in the C tier.
 #
 # Usage: [GATE_TIER=c] [GATE_GROUP=<group>] [GATE_FUZZ=random] [GATE_LIST=1]
-#   tests/gate-steps.sh <root>
+#   [GATE_LIST_GROUPS=1] tests/gate-steps.sh <root>
 # Needs Java 21, htslib and uv; the full tier also needs PLINK2 naming the
 # pinned plink2 binary (see tests/check-bgen.sh). GATE_TIER=c runs only the checks that compare the C
 # binary against recorded results; Java then only builds the bref3 fixtures.
@@ -13,15 +13,16 @@
 # fixture-cache check and the TLA+ model. It checks the
 # BGEN output against the hashes in tests/bgen-hashes.txt instead of
 # plink2, and runs the saved fuzz regressions but no new fuzz
-# examples. The default is the full gate. GATE_FUZZ=random fuzzes new examples
-# instead of the fixed 200.
+# examples. The default is the full gate. GATE_FUZZ=random fuzzes 1000 new
+# examples instead of the fixed 200.
 #
-# Each check names its group. GATE_GROUP=core, bgen, java, cases, sanitizers
-# or tsan runs one group, so CI can run the groups as parallel jobs; the setup
-# checks (the fixtures and the C build) run in every group. The default, all,
-# runs every check in order. The tsan check runs on macOS only and prints a
-# skip line elsewhere. GATE_LIST=1 prints the group and name of each check the
-# tier and group select, without running it.
+# Each check names its group, after an optional tier (full or c) and an
+# optional macos, which limits it to macOS and prints a skip line elsewhere.
+# GATE_GROUP selects one declared group, so CI can run the groups as parallel
+# jobs; the setup checks run in every group. The default, all, runs every check
+# in order. GATE_LIST=1 prints the group and name of each check the tier and
+# group select, without running it. GATE_LIST_GROUPS=1 prints the groups other
+# than setup that have a check in the tier, on any OS, without creating files.
 # shellcheck disable=SC2329  # java_build, oracle_trace and trace_threads run through step
 set -uo pipefail
 cd "$1" || exit 1
@@ -31,37 +32,43 @@ SEAMS="T1a T1b T1c T1d T2 T2b T3a T3b0 T3b1 T3b T3c T3d T3e T4a T4b T4c T4d T5a 
 # cases with per-thread hashes.
 THREAD_SEAMS="T3b0 T3b1 T3b T3c T3d T3e T4a T4b T4c T4d"
 
-mkdir -p build
 fail=0
 tier=${GATE_TIER:-full}
 case $tier in full|c) ;; *) echo "GATE_TIER must be full or c, not $tier"; exit 2 ;; esac
 group=${GATE_GROUP:-all}
-case $group in all|core|bgen|java|cases|sanitizers|tsan) ;;
-  *) echo "GATE_GROUP must be all, core, bgen, java, cases, sanitizers or tsan, not $group"; exit 2 ;; esac
 bgen_oracle=live logs=build/check-
 [ "$tier" = c ] && bgen_oracle=recorded logs=build/check-c-
 fuzz_args=(--examples 200)
 case ${GATE_FUZZ:-fixed} in
   fixed) ;;
-  random) fuzz_args+=(--random) ;;
+  random) fuzz_args=(--examples 1000 --random) ;;
   *) echo "GATE_FUZZ must be fixed or random, not $GATE_FUZZ"; exit 2 ;;
 esac
 in_group() { [ "$group" = all ] || [ "$1" = setup ] || [ "$1" = "$group" ]; }
-step() {  # group name command...
+# mode is declare (record each check's tier and group), list or run.
+step() {  # [full|c] [macos] group name command...
+  local only_tier=any only_macos=
+  case $1 in full|c) only_tier=$1; shift ;; esac
+  if [ "$1" = macos ]; then only_macos=1; shift; fi
   local owner=$1 name=$2; shift 2
+  if [ "$mode" = declare ]; then
+    [ "$owner" = setup ] || declared+=("$only_tier $owner")
+    return 0
+  fi
   in_group "$owner" || return 0
-  if [ "${GATE_LIST:-}" = 1 ]; then echo "$owner $name"; return 0; fi
+  if [ "$only_tier" != any ] && [ "$only_tier" != "$tier" ]; then
+    if [ "$mode" = run ] && [ "$only_tier" = full ]; then echo "  skip  $name (full tier only)"; fi
+    return 0
+  fi
+  if [ -n "$only_macos" ] && [ "$(uname -s)" != Darwin ]; then
+    if [ "$mode" = run ]; then echo "  skip  $name (macOS only)"; fi
+    return 0
+  fi
+  if [ "$mode" = list ]; then echo "$owner $name"; return 0; fi
   if "$@" > "$logs$name.log" 2>&1; then
     echo "  pass  $name"
   else
     echo "  FAIL  $name ($logs$name.log)"; fail=1
-  fi
-}
-full_step() {  # group name command...: runs only in the full tier
-  if [ "$tier" = full ]; then
-    step "$@"
-  elif in_group "$1" && [ "${GATE_LIST:-}" != 1 ]; then
-    echo "  skip  $2 (full tier only)"
   fi
 }
 
@@ -87,45 +94,59 @@ trace_threads() {
   done
 }
 
+checks() {
 step setup fixtures tests/fetch-fixtures.sh --ensure
 step core gate-tier tests/check-gate-tier.sh
 step core log-recording python3 tests/check_log_recording.py
-full_step cases cases python3 tests/check_cases.py
-full_step core jcompat make check-jcompat
+step full cases cases python3 tests/check_cases.py
+step full core jcompat make check-jcompat
 step core tracker make check-tracker
 step core interval make check-interval
+step core markers make check-markers
 step core block-reader make check-block-reader
 step core snv-perms make check-snv-perms
-full_step java oracle-jar tests/check-oracle.sh java -ea -jar data/beagle.29Oct24.c8e.jar
-full_step java failures-jar tests/check-failures.sh java -ea -jar data/beagle.29Oct24.c8e.jar
-full_step java log-jar tests/check-log.sh java -ea -jar data/beagle.29Oct24.c8e.jar
-full_step java java-build java_build
-full_step java oracle-source tests/check-oracle.sh java -ea -cp build/classes main.Main
-full_step java java-trace make java-trace
-full_step java oracle-trace oracle_trace
+step full java oracle-jar tests/check-oracle.sh java -ea -jar data/beagle.29Oct24.c8e.jar
+step full java failures-jar tests/check-failures.sh java -ea -jar data/beagle.29Oct24.c8e.jar
+step full java log-jar tests/check-log.sh java -ea -jar data/beagle.29Oct24.c8e.jar
+step full java java-build java_build
+step full java oracle-source tests/check-oracle.sh java -ea -cp build/classes main.Main
+step full java java-trace make java-trace
+step full java oracle-trace oracle_trace
 step setup c-build make build/beagle
 step core oracle-c tests/check-oracle.sh build/beagle
+step core gate-planning tests/check-gate-planning.sh
 step core failures-c tests/check-failures.sh build/beagle
 step core output-failures python3 tests/check_output_failures.py build/beagle
 step core log-c tests/check-log.sh build/beagle
 step core piece-size make check-piece-size
 step core bgen-unit make check-bgen-unit
 step core records make check-records
+step core bgen-files make check-bgen-files
 step core vcf-index make check-vcf-index
 step core tbi make check-tbi
 step bgen bgen env BGEN_ORACLE="$bgen_oracle" tests/check-bgen.sh
 # shellcheck disable=SC2086  # the seam list splits into arguments
-full_step java trace tests/check-trace.sh $SEAMS
+step full java trace tests/check-trace.sh $SEAMS
 step sanitizers sanitizers tests/check-sanitizers.sh
-if [ "$(uname -s)" = Darwin ]; then
-  step tsan tsan tests/check-tsan.sh
-elif in_group tsan && [ "${GATE_LIST:-}" != 1 ]; then
-  echo "  skip  tsan (macOS only)"
+step macos tsan tsan tests/check-tsan.sh
+step full core tla tests/check-tla.sh
+step full core fuzz uv run --python 3.12 --script tests/check_fuzz.py "${fuzz_args[@]}"
+step c core fuzz-regressions uv run --python 3.12 --script tests/check_fuzz.py --examples 0 --invalid-examples 0
+step full java trace-threads trace_threads
+}
+
+mode=declare declared=()
+checks
+groups_in() {  # tier: each group with a check in that tier (any: in any tier), in declaration order
+  printf '%s\n' "${declared[@]}" | awk -v t="$1" '(t == "any" || $1 == "any" || $1 == t) && !seen[$2]++ {print $2}'
+}
+if [ "$group" != all ] && [[ " $(groups_in any | tr '\n' ' ') " != *" $group "* ]]; then
+  echo "GATE_GROUP must be all or a group declared in tests/gate-steps.sh, not $group"; exit 2
 fi
-full_step core tla tests/check-tla.sh
-full_step core fuzz uv run --python 3.12 --script tests/check_fuzz.py "${fuzz_args[@]}"
-if [ "$tier" = c ]; then
-  step core fuzz-regressions uv run --python 3.12 --script tests/check_fuzz.py --examples 0 --invalid-examples 0
-fi
-full_step java trace-threads trace_threads
+if [ "${GATE_LIST_GROUPS:-}" = 1 ]; then groups_in "$tier"; exit 0; fi
+
+mode=run
+[ "${GATE_LIST:-}" = 1 ] && mode=list
+mkdir -p build
+checks
 exit $fail

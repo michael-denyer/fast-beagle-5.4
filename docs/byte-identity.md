@@ -56,7 +56,7 @@ For each example, both tools must succeed with the same VCF hash, or both must f
 
 The invalid-parameter examples change one parameter of a generated input so that Beagle rejects it. There are 42 changes: `out` naming an input or a directory, 15 `window` and `overlap` pairs, 19 values out of bounds or not numbers, the Beagle 5.5 parameters `initial-lr` and `window-markers`, and an unknown parameter. Both tools must exit 1 with the same message, and the input files must stay unchanged. Java may prefix the message with the exception class.
 
-The full gate runs a fixed set of 200 examples and 2 examples per invalid-parameter change, and the nightly CI run fuzzes 200 new examples. Each directory in `tests/fuzz-regressions/` runs first. It holds 4 inputs: `window-stall`, `seq-coder-full`, `seq-coder-last` and `seq-coder-block` ([differential fuzzing](testing.md#differential-fuzzing)).
+The full gate runs a fixed set of 200 examples and 2 examples per invalid-parameter change, and the nightly CI run fuzzes 1000 new examples on each runner. Each directory in `tests/fuzz-regressions/` runs first. It holds 4 inputs: `window-stall`, `seq-coder-full`, `seq-coder-last` and `seq-coder-block` ([differential fuzzing](testing.md#differential-fuzzing)).
 
 ### Refused inputs
 
@@ -114,7 +114,7 @@ The release workflow runs `tests/check-oracle.sh` on the binaries that users ins
 Floating-point results depend on the order of operations. fast-beagle keeps Java's order and Java's library behaviour.
 
 - The Makefile appends `-ffp-contract=off -fno-fast-math -fwrapv` after any user `CFLAGS`, so every build uses them. `-ffp-contract=off` stops the compiler from fusing a multiply and an add, which Java never does. `-fno-fast-math` stops it from reordering floating-point operations. `-fwrapv` makes signed integer overflow wrap, as Java's `int` and `long` do.
-- The C source has no `fma` calls, no SIMD intrinsics and no pragmas.
+- The C source has no `fma` calls and no SIMD intrinsics. Its only pragma is `#pragma omp simd`, on loops that have no sum, so vectorising them changes no value.
 - Beagle calls `Math.log`, `Math.log10`, `Math.pow` and `Math.expm1`. fast-beagle calls the fdlibm 5.3 functions that define `StrictMath`, from `src/jcompat/fdlibm/`. At each Beagle call site the result is cast to `float` or floored, and the `math` fixture checks that `Math` and the fdlibm port then give the same value.
 - `src/jcompat/jrandom.c` reproduces `java.util.Random`. `src/jcompat/jnum.c` reproduces Java's narrowing casts, `Math.round`, number parsing and number formatting.
 - `nthreads=` sets both the thread count and the partitions that Beagle's output depends on, as in Beagle.

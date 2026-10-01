@@ -14,7 +14,7 @@ static void change(comp_hap_change c, int index, int old_hap, int start, int end
 
 int main(void) {
     comp_hap_tracker t;
-    comp_hap_tracker_init(&t, 3);
+    comp_hap_tracker_init(&t, 3, 61);
     change(comp_hap_tracker_observe(&t, 10, 0, INT_MAX), 0, -1, 0, 0);
     change(comp_hap_tracker_observe(&t, 20, 0, INT_MAX), 1, -1, 0, 0);
     change(comp_hap_tracker_observe(&t, 30, 0, INT_MAX), 2, -1, 0, 0);
@@ -54,7 +54,7 @@ int main(void) {
     comp_hap_tracker_free(&t);
     puts("PASS disabled staleness, clear, distinct and repeated fallback draws");
 
-    comp_hap_tracker_init(&t, 1);
+    comp_hap_tracker_init(&t, 1, 21);
     comp_hap_tracker_observe(&t, 10, 0, 3);
     change(comp_hap_tracker_observe(&t, 20, 0, 3), 0, 10, 0, 0);
     comp_hap_tracker_free(&t);

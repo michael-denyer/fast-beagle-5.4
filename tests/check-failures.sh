@@ -114,6 +114,24 @@ if [ "$1" != java ]; then
     for p in $(seq 100 100 10000); do if [ "$p" = 5000 ]; then rec 3 "$p" '1|x'; else rec 3 "$p"; fi; done
   } | gzip > "$OUT/in-next-ref.vcf.gz"
   check next-window-ref "$lone" ref="$OUT/in-next-ref.vcf.gz" gt="$OUT/in-next-targ.vcf.gz" out="$OUT/next-ref"
+
+  # Marker validation used to call exit directly, bypassing the reader's
+  # util_try. Reject any extra next-window diagnostic as well as a wrong exit.
+  first_window_error() {  # name args...
+    local name=$1; shift
+    check "$name" "$lone" "$@"
+    if grep -Eq 'Duplicate marker:|markers not in chromosomal order:' "$OUT/$name.log"; then
+      failed "$name reported the next window's marker error"
+    fi
+  }
+  { vcf_head; rec 1 100; rec 2 100; rec 2 200; rec 2 200; } | gzip > "$OUT/in-next-duplicate.vcf.gz"
+  { vcf_head; rec 1 100; rec 2 100; rec 2 300; rec 2 200; } | gzip > "$OUT/in-next-order.vcf.gz"
+  for bad in duplicate order; do
+    first_window_error "next-window-$bad-target" \
+      gt="$OUT/in-next-$bad.vcf.gz" out="$OUT/next-$bad-target"
+    first_window_error "next-window-$bad-ref" \
+      ref="$OUT/in-next-$bad.vcf.gz" gt="$OUT/in-next-targ.vcf.gz" out="$OUT/next-$bad-ref"
+  done
 fi
 
 # PlinkGenMap throws IllegalArgumentException, and prints a genetic position

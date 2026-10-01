@@ -17,6 +17,7 @@
 #include <stdint.h>
 
 #include "main/par.h"
+#include "main/run_outputs.h"
 #include "vcf/marker.h"
 #include "vcf/samples.h"
 
@@ -56,7 +57,7 @@ typedef struct bgen_scratch bgen_scratch;
 typedef struct bgen_rec bgen_rec;
 
 /* s must outlive the writer. */
-bgen_writer *bgen_writer_open(const par *p, const samples *s);
+bgen_writer *bgen_writer_open(const par *p, const run_outputs *out, const samples *s);
 /* For bgen=plink2, exits, removing the partial .bgen, unless chrom is an
  * autosome: plink2 needs sex information for the others. */
 void bgen_writer_check_chrom(bgen_writer *bw, const char *chrom);

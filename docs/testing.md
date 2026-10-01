@@ -80,7 +80,7 @@ Every log run must also pass its recorded exit and VCF hash checks. Recording st
 - a bref3 SNV allele code whose permutation index is negative
 - a bref3 header whose sample count overflows when doubled. This case runs for the C build only, because the jar's result depends on its heap size.
 - a first window that MarkerMap rejects, followed by a malformed target line in the target's first 1024 lines. Both tools parse those lines at startup and report the malformed line.
-- a first window that MarkerMap rejects, followed by a malformed target or reference line in the second block of 1024 lines. fast-beagle reads the second window while it phases the first, and must report the first window's error. These cases run for the C build only, because which error the jar reports depends on thread timing ([divergences](beagle-divergences.md)).
+- a first window that MarkerMap rejects, followed by a malformed target or reference line in the second block of 1024 lines, or by a duplicate marker or invalid marker order in the second window. fast-beagle reads the second window while it phases the first, and must report only the first window's error. These cases run for the C build only, because which error the jar reports for a malformed line depends on thread timing ([divergences](beagle-divergences.md)).
 
 `tests/check_output_failures.py build/beagle` checks that log, VCF, BGEN and tabix destinations refuse collisions with input files before writing. It covers both BGEN modes, the tabix index, relative paths, symbolic links and hard links. It also checks that disabled outputs do not cause refusals, that nonfinite phased BGEN probabilities fail with a message and leave no BGEN files, and that a large `ne=` saturates the reported population size as Java does. The gate runs these checks normally and under the sanitizers, with leak detection off for the expected failures.
 
@@ -144,6 +144,7 @@ The check builds `build/beagle-piece1` with one marker per work item. It runs `b
 
 - `make check-jcompat` compares each Java library reproduction in `src/jcompat/` against output printed by real Java (`tests/jcompat/JcompatFixtures.java`), including DecimalFormat's NaN and infinity output.
 - `make check-interval` tests `src/vcf/interval_it.c` over an in-memory record source (`tests/vcf/interval_it_test.c`).
+- `make check-markers` requires duplicate-marker and marker-order errors to return through `util_try` with their original messages, so the read-ahead reader can defer them (`tests/vcf/markers_test.c`).
 - `make check-block-reader` forces a published batch to be consumed and refilled with EOF before the parser resumes. The parser must still publish the EOF sentinel (`tests/vcf/block_reader_test.c`).
 - `make check-records`: `tests/output/record_fixture.c` writes phased, imputed, genotyped, haploid and multiallelic records through the window writer with no BGEN and in both `bgen=` modes. `tests/check_records.py` requires the same VCF from all three runs and the expected VCF fields. It also requires phased BGEN probabilities captured before the VCF rounds them.
 - `make check-tracker` tests the composite haplotype tracker in `src/beagleutil/comp_hap_queue.c` through the interface every caller uses (`tests/beagleutil/tracker_test.c`).
@@ -206,8 +207,11 @@ The live checks need `PLINK2` naming the pinned plink2 binary, and fail without 
 `tests/check-sanitizers.sh` builds `build/beagle` and the unit tests of `make check-bgen-unit`, `make check-records`, `make check-tracker` and `make check-block-reader` with AddressSanitizer and UndefinedBehaviorSanitizer in `build/san`. It runs those tests. It then runs every oracle case at 1 and 2 threads as VCF only, with `bgen=plink2` and with `bgen=phased`. The `bgen=plink2` runs skip the cases tagged `nonautosome`, and the `bgen=phased` runs skip the cases tagged `nonfinite`. Every run must exit 0 with the oracle hash and no sanitizer report.
 
 - On Linux, LeakSanitizer also runs, so any memory still allocated at a normal exit fails the check. LeakSanitizer does not support macOS arm64.
+- The build adds `-Wno-pass-failed`. clang cannot vectorise a `#pragma omp simd` loop that holds UndefinedBehaviorSanitizer checks, and `-Werror` would stop the build on its warning. The normal build keeps the warning as an error. GCC ignores the flag.
 
-`tests/check-tsan.sh` builds `build/beagle` with ThreadSanitizer in `build/tsan`. It runs every oracle case at 18 threads, and runs the cases with per-thread hashes again with `trace=`. Every run must pass the oracle verdict with no ThreadSanitizer report. The script runs on macOS only, because ThreadSanitizer cannot start under the x86_64 emulation of the gate's docker leg. On other systems it refuses to run, and `tests/gate-steps.sh` prints a `skip` line for it.
+`make check-bgen-files` checks BGEN partial-file cleanup through subprocess exits and real files. It covers closed partial members, completed members surviving a later failure, captured reader errors, a normal exit, and a concurrent sample open after terminal cleanup. ASan/UBSan and ThreadSanitizer run these checks too. The output refusal checks cover both BGEN modes with read-ahead errors and a pre-existing sample file. On Linux they also verify that completed BGEN files survive a log close failure using `/dev/full`.
+
+`tests/check-tsan.sh` builds `build/beagle` with ThreadSanitizer in `build/tsan`. It runs the BGEN cleanup and output refusal checks, then every oracle case at 18 threads, and runs the cases with per-thread hashes again with `trace=`. Every run must pass the oracle verdict with no ThreadSanitizer report. Only the expected fatal output refusals disable thread-leak reports, since `util_exit` deliberately exits without joining readers. Race detection remains enabled for them. The script runs on macOS only, because ThreadSanitizer cannot start under the x86_64 emulation of the gate's docker leg. On other systems it refuses to run, and `tests/gate-steps.sh` prints a `skip` line for it.
 
 ## Differential fuzzing
 
@@ -225,7 +229,7 @@ The live checks need `PLINK2` naming the pinned plink2 binary, and fail without 
   - `seq-coder-last` ends the reference with that record, so no coded record is left to take its place and Beagle 5.4 throws a different exception.
   - `seq-coder-block` has a second such failure in the first block of reference lines. Beagle 5.4 codes the whole block when it opens the reference, so it throws before the first window, whose single target position would fail otherwise. It hangs after throwing.
 - The runner stops a run after 120 s, and stops a Java run as soon as its main thread throws, because another thread can keep the JVM alive.
-- The full tier runs a fixed set of 200 examples (about 30 s per 100 on an M5) and 2 for each invalid-parameter change. The nightly CI run fuzzes 200 new examples. `uv run --python 3.12 --script tests/check_fuzz.py --examples 1000 --random` tries new ones.
+- The full tier runs a fixed set of 200 examples (about 30 s per 100 on an M5) and 2 for each invalid-parameter change. The nightly CI run fuzzes 1000 new examples on each runner. `uv run --python 3.12 --script tests/check_fuzz.py --examples 1000 --random` tries new ones.
 
 ## Model check the pipelined writer
 
@@ -247,21 +251,21 @@ The model represents condition-variable waits with wait sets and spurious wakeup
 
 `tests/gate-steps.sh` holds the gate's list of checks. It needs Java 21, htslib and uv. The full tier also needs `PLINK2` naming the [pinned plink2 build](#pinned-plink2-build).
 
-The script has two tiers. The full tier, the default, runs every check. `GATE_TIER=c` runs the C tier, which compares `build/beagle` against recorded results only. Java then only builds the bref3 fixtures. The C tier skips every check that runs Java or the jar next to the C binary (`jcompat`, `oracle-jar`, `failures-jar`, `java-build`, `oracle-source`, `java-trace`, `oracle-trace`, `log-jar`, `trace`, `fuzz` and `trace-threads`), the fixture-cache check `cases` and the TLA+ model check. It runs the [sanitizers](#sanitizers). Its `bgen` step checks the BGEN output against `tests/bgen-hashes.txt` instead of plink2 ([recorded hashes](#recorded-bgen-hashes)). It runs the saved fuzz regressions in `tests/fuzz-regressions/` as `fuzz-regressions`. It prints a `skip` line for each check it leaves out. `GATE_FUZZ=random` makes the full tier fuzz 200 new examples instead of the fixed 200.
+The script has two tiers. The full tier, the default, runs every check. `GATE_TIER=c` runs the C tier, which compares `build/beagle` against recorded results only. Java then only builds the bref3 fixtures. The C tier skips every check that runs Java or the jar next to the C binary (`jcompat`, `oracle-jar`, `failures-jar`, `java-build`, `oracle-source`, `java-trace`, `oracle-trace`, `log-jar`, `trace`, `fuzz` and `trace-threads`), the fixture-cache check `cases` and the TLA+ model check. It runs the [sanitizers](#sanitizers). Its `bgen` step checks the BGEN output against `tests/bgen-hashes.txt` instead of plink2 ([recorded hashes](#recorded-bgen-hashes)). It runs the saved fuzz regressions in `tests/fuzz-regressions/` as `fuzz-regressions`. It prints a `skip` line for each check it leaves out. `GATE_FUZZ=random` makes the full tier fuzz 1000 new examples instead of the fixed 200.
 
-Each check belongs to one group, so CI can run the groups as parallel jobs. `GATE_GROUP` selects a group. The default, `all`, runs every check in order.
+Each check belongs to one group, so CI can run the groups as parallel jobs. `GATE_GROUP` selects a declared group. The default, `all`, runs every check in order. `GATE_LIST_GROUPS=1` prints, in declaration order, each group other than `setup` that has a check in the tier. It runs no checks, creates no files, and prints the same list on every OS. CI builds its job matrix from that list. A check can be limited to one tier (`full` or `c`) or to macOS (`macos`) where it is declared in `tests/gate-steps.sh`.
 
 | Group | Checks |
 | --- | --- |
 | `setup` | `fixtures` and `c-build`. They run in every group, because every other group needs the fixtures and the `bgen`, `trace`, `trace-threads` and C-binary checks need `build/beagle`. |
-| `core` | `gate-tier`, `log-recording`, `jcompat`, `tracker`, `interval`, `block-reader`, `snv-perms`, `oracle-c`, `failures-c`, `output-failures`, `log-c`, `piece-size`, `bgen-unit`, `records`, `vcf-index`, `tbi`, `tla`, `fuzz` and `fuzz-regressions` |
+| `core` | `gate-tier`, `log-recording`, `jcompat`, `tracker`, `interval`, `markers`, `block-reader`, `snv-perms`, `oracle-c`, `gate-planning`, `failures-c`, `output-failures`, `log-c`, `piece-size`, `bgen-unit`, `records`, `bgen-files`, `vcf-index`, `tbi`, `tla`, `fuzz` and `fuzz-regressions` |
 | `bgen` | `bgen` |
 | `java` | `oracle-jar`, `failures-jar`, `log-jar`, `java-build`, `oracle-source`, `java-trace`, `oracle-trace`, `trace` and `trace-threads` |
 | `cases` | `cases` |
 | `sanitizers` | `sanitizers`, which builds its own binaries in `build/san` |
 | `tsan` | `tsan`, which builds its own binary in `build/tsan`. It runs on macOS only and prints a `skip` line elsewhere. |
 
-`GATE_LIST=1` prints the group and name of each check that the tier and group select, and runs none of them.
+`GATE_LIST=1` prints the group and name of each check that the tier and group select, and runs none of them. `tests/check-gate-planning.sh` checks both tiers' group lists, selector validation, setup membership and ordering. On a copy of `tests/gate-steps.sh` it also checks that a C-only group is planned and accepted in the C tier only, and that a `macos` check is skipped off macOS whatever its group.
 
 `tests/check-local.sh` is the pre-merge gate. It runs the lint hooks once, then every check in `tests/gate-steps.sh` natively and on Linux x86_64 in docker. On each platform it runs the full tier, then the C tier without plink2, as CI runs it on pull requests. It prints one pass or fail line per check. The C tier writes its logs to `build/check-c-<name>.log`.
 

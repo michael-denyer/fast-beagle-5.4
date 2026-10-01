@@ -71,22 +71,24 @@ comp_hap_segment *comp_hap_queue_poll(comp_hap_queue *q) {
 
 static const int NIL = -103;
 
-void comp_hap_tracker_init(comp_hap_tracker *t, int max_states) {
+void comp_hap_tracker_init(comp_hap_tracker *t, int max_states, int n_haps) {
     comp_hap_queue_init(&t->q, max_states);
     t->segs = util_malloc((size_t)max_states * sizeof *t->segs);
-    t->last_ibs_step = int_int_map_new();
+    t->last_ibs_step = util_malloc((size_t)n_haps * sizeof *t->last_ibs_step);
+    for (int h = 0; h < n_haps; ++h) t->last_ibs_step[h] = NIL;
     t->max_states = max_states;
 }
 
 void comp_hap_tracker_free(comp_hap_tracker *t) {
-    int_int_map_free(t->last_ibs_step);
+    free(t->last_ibs_step);
     free(t->segs);
     comp_hap_queue_free(&t->q);
 }
 
+/* Every haplotype with a step is the haplotype of a queued segment. */
 void comp_hap_tracker_clear(comp_hap_tracker *t) {
+    for (int j = 0; j < t->q.size; ++j) t->last_ibs_step[t->segs[j].hap] = NIL;
     comp_hap_queue_clear(&t->q);
-    int_int_map_clear(t->last_ibs_step);
 }
 
 /* Re-sorts segments whose haplotype was an IBS neighbour again after they
@@ -94,13 +96,13 @@ void comp_hap_tracker_clear(comp_hap_tracker *t) {
 static void update_head_of_q(comp_hap_tracker *t) {
     comp_hap_segment *head = comp_hap_queue_peek(&t->q);
     if (head == NULL) return;
-    int last_ibs_step = int_int_map_get(t->last_ibs_step, head->hap, NIL);
+    int last_ibs_step = t->last_ibs_step[head->hap];
     while (head->last_ibs_step != last_ibs_step) {
         head = comp_hap_queue_poll(&t->q);
         head->last_ibs_step = last_ibs_step;
         comp_hap_queue_offer(&t->q, head);
         head = comp_hap_queue_peek(&t->q);
-        last_ibs_step = int_int_map_get(t->last_ibs_step, head->hap, NIL);
+        last_ibs_step = t->last_ibs_step[head->hap];
     }
 }
 
@@ -113,7 +115,7 @@ static int add_segment(comp_hap_tracker *t, int hap, int step) {
 
 comp_hap_change comp_hap_tracker_observe(comp_hap_tracker *t, int hap, int step, int min_steps) {
     comp_hap_change change = {-1, -1, 0, 0};
-    if (int_int_map_get(t->last_ibs_step, hap, NIL) == NIL) {
+    if (t->last_ibs_step[hap] == NIL) {
         update_head_of_q(t);
         comp_hap_segment *head = comp_hap_queue_peek(&t->q);
         bool full = t->q.size == t->max_states;
@@ -122,7 +124,7 @@ comp_hap_change comp_hap_tracker_observe(comp_hap_tracker *t, int hap, int step,
             head = comp_hap_queue_poll(&t->q);
             int mid_step = (int)((unsigned)(head->last_ibs_step + step) >> 1);
             change = (comp_hap_change){head->comp_hap_index, head->hap, head->start_step, mid_step};
-            int_int_map_remove(t->last_ibs_step, head->hap);
+            t->last_ibs_step[head->hap] = NIL;
             head->hap = hap;
             head->start_step = mid_step;
             head->last_ibs_step = step;
@@ -131,7 +133,7 @@ comp_hap_change comp_hap_tracker_observe(comp_hap_tracker *t, int hap, int step,
             change.index = add_segment(t, hap, step);
         }
     }
-    int_int_map_put(t->last_ibs_step, hap, step);
+    t->last_ibs_step[hap] = step;
     return change;
 }
 

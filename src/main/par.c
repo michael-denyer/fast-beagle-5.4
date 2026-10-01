@@ -23,6 +23,7 @@
 #include "blbutil/utilities.h"
 #include "jcompat/jmath.h"
 #include "jcompat/jnum.h"
+#include "main/run_outputs.h"
 
 /* Validate.argsToMap, kept in argument order; `used` marks removed keys.
  * Values point into argv, so the parameters taken from them outlive the map. */
@@ -138,60 +139,9 @@ static bool boolean_arg(args_map *m, const char *key, bool def) {
     util_exit("%s is not \"true\" or \"false\"", v);
 }
 
-/* java.io.File's path, normalized in place: repeated slashes become one and a
- * trailing slash is dropped. File.equals compares these paths. */
-static char *file_path(char *s) {
-    size_t k = 0;
-    for (size_t j = 0; s[j] != '\0'; ++j) {
-        if (s[j] != '/' || k == 0 || s[k - 1] != '/') s[k++] = s[j];
-    }
-    if (k > 1 && s[k - 1] == '/') --k;
-    s[k] = '\0';
-    return s;
-}
-
-/* Check log, VCF, BGEN and tabix destinations before their writers open files.
- * Main.checkOutputPrefix compares only the VCF path with ref=, then gt=; every
- * other collision is fast-beagle's. stat also detects aliases through
- * relative paths, symlinks and hard links. */
-static void check_output_file(const par *p, const char *suffix) {
-    size_t size = strlen(p->out) + strlen(suffix) + 1;
-    char *output = util_malloc(size);
-    snprintf(output, size, "%s%s", p->out, suffix);
-    file_path(output);
-    struct stat output_stat;
-    bool exists = stat(output, &output_stat) == 0;
-    bool vcf = strcmp(suffix, ".vcf.gz") == 0;
-    const char *inputs[] = {p->ref, p->gt, p->map, p->excludesamples, p->excludemarkers, p->ped, p->truth};
-    for (size_t j = 0; j < sizeof inputs / sizeof *inputs; ++j) {
-        if (inputs[j] == NULL) continue;
-        char *input = file_path(util_strndup(inputs[j], strlen(inputs[j])));
-        bool same_path = strcmp(output, input) == 0;
-        if (vcf && j < 2 && same_path) util_exit("ERROR: VCF output file equals input file: %s", input);
-        struct stat input_stat;
-        if (same_path || (exists && stat(input, &input_stat) == 0
-                && output_stat.st_dev == input_stat.st_dev && output_stat.st_ino == input_stat.st_ino)) {
-            util_exit(PROGRAM ": output file %s equals input file %s", output, input);
-        }
-        free(input);
-    }
-    free(output);
-}
-
 /* Main.checkOutputPrefix and Main.parameters, after Par has read every argument. */
 static void check_parameters(const par *p) {
-    struct stat st;
-    if (stat(p->out, &st) == 0 && S_ISDIR(st.st_mode)) {
-        util_exit("ERROR: \"out\" parameter cannot be a directory: \"%s\"", p->out);
-    }
-    check_output_file(p, ".vcf.gz");
-    check_output_file(p, ".log");
-    if (p->bgen != BGEN_NONE) {
-        check_output_file(p, ".bgen");
-        check_output_file(p, ".info");
-        check_output_file(p, ".sample");
-    }
-    if (p->tbi) check_output_file(p, ".vcf.gz.tbi");
+    run_outputs_check(p);
     if (p->window < 1.1 * p->overlap) {
         util_exit("ERROR: The \"window\" parameter must be at least 1.1 times the \"overlap\" parameter");
     }

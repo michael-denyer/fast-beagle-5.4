@@ -11,6 +11,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+#include "bgen/bgen_files.h"
 #include "blbutil/trace.h"
 #include "blbutil/utilities.h"
 #include "imp/imp_data.h"
@@ -18,6 +19,7 @@
 #include "imp/imputed_writer.h"
 #include "jcompat/jrandom.h"
 #include "main/par.h"
+#include "main/run_outputs.h"
 #include "main/run_stats.h"
 #include "main/window_writer.h"
 #include "phase/fixed_phase_data.h"
@@ -142,10 +144,12 @@ int main(int argc, char **argv) {
     par p;
     par_parse(&p, argc - 1, argv + 1);
     if (p.trace != NULL) trace_init(p.trace);
+    run_outputs *outputs = run_outputs_new(&p);
+    bgen_files_register_cleanup();
     beagle_run run = {.p = &p};
-    run_stats_open(&run.rs, &p, argv[0]);
+    run_stats_open(&run.rs, &p, run_outputs_path(outputs, RUN_OUTPUT_LOG), argv[0]);
     run.sw = sliding_window_open(&p);
-    window_writer_open(&run.ww, &p, sliding_window_targ_samples(run.sw));
+    window_writer_open(&run.ww, &p, outputs, sliding_window_targ_samples(run.sw));
     jrandom rand;
     jrandom_init(&rand, p.seed);
     phased_overlap overlap = {0, 0, NULL};
@@ -172,5 +176,6 @@ int main(int argc, char **argv) {
     run_stats_close(&run.rs, sliding_window_cum_targ_markers(run.sw), sliding_window_cum_markers(run.sw));
     sliding_window_close(run.sw);
     trace_close();
+    run_outputs_free(outputs);
     return 0;
 }

@@ -25,7 +25,7 @@
  * tbi=true, and the BGEN output when bgen= is set. Only window_writer.c reads the fields. */
 typedef struct {
     BGZF *out;
-    char *path;
+    const char *path;   /* borrowed from the run outputs */
     const samples *samples;
     kstring_t line;
     bgen_writer *bgen;   /* NULL without bgen= */
@@ -40,7 +40,7 @@ typedef struct {
 /* new WindowWriter(par, samples): writes the meta-information and header
  * lines, including the DS and INFO lines Beagle writes even when it only
  * phases. Opens the BGEN output when bgen= is set. */
-void window_writer_open(window_writer *ww, const par *p, const samples *s);
+void window_writer_open(window_writer *ww, const par *p, const run_outputs *out, const samples *s);
 /* Before a window's work: fails now if the outputs cannot take its first
  * target marker. */
 void window_writer_begin_window(window_writer *ww, const window *w);

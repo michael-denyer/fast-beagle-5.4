@@ -22,6 +22,7 @@
 #include <htslib/kstring.h>
 #include <libdeflate.h>
 
+#include "bgen/bgen_files.h"
 #include "bgen/plink2_num.h"
 #include "blbutil/utilities.h"
 
@@ -41,8 +42,8 @@ typedef struct {
 
 struct bgen_writer {
     bgen_mode mode;
-    FILE *bgen, *info_file, *sample_file;  /* non-NULL once this run has created the file */
-    char *bgen_path, *sample_path, *info_path;
+    FILE *bgen, *info_file;
+    const char *bgen_path, *sample_path, *info_path;
     const samples *samples;
     bool has_min_dr2;
     double min_dr2, min_maf;
@@ -112,18 +113,6 @@ static void write_bytes(bgen_writer *bw, const void *p, size_t n) {
     if (fwrite(p, 1, n, bw->bgen) != n) util_exit("Error writing %s", bw->bgen_path);
 }
 
-/* The writer whose files exit() removes: set from bgen_writer_open until
- * bgen_writer_close has written them all, so a run that fails anywhere in
- * between leaves no partial output. One BGEN writer per process. */
-static const bgen_writer *open_writer;
-
-static void remove_partial(void) {
-    if (open_writer == NULL) return;
-    if (open_writer->bgen != NULL) remove(open_writer->bgen_path);
-    if (open_writer->info_file != NULL) remove(open_writer->info_path);
-    if (open_writer->sample_file != NULL) remove(open_writer->sample_path);
-}
-
 /* GetChrCodeRaw for the autosomes, an optional "chr" and one or two digits:
  * the code of chrom if GetChrCode makes it an autosome under --chr-set
  * autosome_ct, or 0 for any other chromosome. */
@@ -146,19 +135,13 @@ void bgen_writer_check_chrom(bgen_writer *bw, const char *chrom) {
     }
 }
 
-bgen_writer *bgen_writer_open(const par *p, const samples *s) {
+bgen_writer *bgen_writer_open(const par *p, const run_outputs *out, const samples *s) {
     bgen_writer *bw = util_malloc(sizeof *bw);
     *bw = (bgen_writer){0};
     bw->mode = p->bgen;
-    kstring_t path = {0, 0, NULL};
-    ksprintf(&path, "%s.bgen", p->out);
-    bw->bgen_path = path.s;
-    path = (kstring_t){0, 0, NULL};
-    ksprintf(&path, "%s.sample", p->out);
-    bw->sample_path = path.s;
-    path = (kstring_t){0, 0, NULL};
-    ksprintf(&path, "%s.info", p->out);
-    bw->info_path = path.s;
+    bw->bgen_path = run_outputs_path(out, RUN_OUTPUT_BGEN);
+    bw->sample_path = run_outputs_path(out, RUN_OUTPUT_SAMPLE);
+    bw->info_path = run_outputs_path(out, RUN_OUTPUT_INFO);
     bw->samples = s;
     bw->has_min_dr2 = p->has_bgen_min_dr2;
     bw->min_dr2 = p->bgen_min_dr2;
@@ -170,11 +153,9 @@ bgen_writer *bgen_writer_open(const par *p, const samples *s) {
     bw->n_missing = util_malloc((size_t)(s->n > 0 ? s->n : 1) * sizeof *bw->n_missing);
     for (int j = 0; j < s->n; ++j) bw->n_missing[j] = 0;
     bw->chrom_index = -1;
-    open_writer = bw;
-    atexit(remove_partial);
-    bw->bgen = fopen(bw->bgen_path, "wb");
+    bw->bgen = bgen_files_open(bw->bgen_path);
     if (bw->bgen == NULL) util_exit("Error opening %s", bw->bgen_path);
-    bw->info_file = fopen(bw->info_path, "wb");
+    bw->info_file = bgen_files_open(bw->info_path);
     if (bw->info_file == NULL) util_exit("Error opening %s", bw->info_path);
     fputs("CHROM\tPOS\tID\tREF\tALT\tDR2\tAF\tIMP\n", bw->info_file);
 
@@ -672,7 +653,7 @@ void bgen_writer_put(bgen_writer *bw, bgen_rec *rec) {
 
 /* ExportOxSample: no phenotypes, FID 0, sex unknown. */
 static void write_sample_file(bgen_writer *bw) {
-    FILE *f = bw->sample_file = fopen(bw->sample_path, "wb");
+    FILE *f = bgen_files_open(bw->sample_path);
     if (f == NULL) util_exit("Error opening %s", bw->sample_path);
     fputs("ID_1 ID_2 missing sex\n0 0 0 D\n", f);
     double recip = bw->n_variants == 0 ? 0.0 : 1.0 / (double)bw->n_variants;
@@ -698,11 +679,8 @@ void bgen_writer_close(bgen_writer *bw) {
     if (fclose(bw->bgen) != 0) util_exit("Error writing %s", bw->bgen_path);
     if (fclose(bw->info_file) != 0) util_exit("Error writing %s", bw->info_path);
     write_sample_file(bw);
-    open_writer = NULL;
+    bgen_files_complete();
     free(bw->rec.s);
     free(bw->n_missing);
-    free(bw->sample_path);
-    free(bw->info_path);
-    free(bw->bgen_path);
     free(bw);
 }

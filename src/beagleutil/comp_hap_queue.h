@@ -17,8 +17,6 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-#include "blbutil/int_int_map.h"
-
 /* A reference haplotype segment copied into one composite haplotype. */
 typedef struct {
     int hap;
@@ -48,16 +46,17 @@ static inline void comp_hap_queue_clear(comp_hap_queue *q) {
 void comp_hap_queue_free(comp_hap_queue *q);
 
 /* The queue of at most max_states segments, the segments it points into, and
- * the step at which each queued haplotype was last an IBS neighbour.
+ * the step at which each queued haplotype was last an IBS neighbour (Java's
+ * IntIntMap, here an array over every haplotype index below n_haps).
  * Only comp_hap_queue.c reads these fields. */
 typedef struct {
     comp_hap_queue q;
     comp_hap_segment *segs;
-    int_int_map *last_ibs_step;
+    int *last_ibs_step;
     int max_states;
 } comp_hap_tracker;
 
-void comp_hap_tracker_init(comp_hap_tracker *t, int max_states);
+void comp_hap_tracker_init(comp_hap_tracker *t, int max_states, int n_haps);
 void comp_hap_tracker_free(comp_hap_tracker *t);
 void comp_hap_tracker_clear(comp_hap_tracker *t);
 /* One completed observation. index == -1 means an existing haplotype was

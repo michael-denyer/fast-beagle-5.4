@@ -27,15 +27,21 @@
 #include "phase/low_freq_phase_ibs.h"
 #include "phase/low_freq_phase_states.h"
 
-/* HmmStateProbs: forward-backward state probabilities of one target
- * haplotype at each stage-1 marker. The last marker keeps its forward
- * values, as in Java. */
+/* HmmStateProbs: forward-backward state probabilities of a sample's two
+ * haplotypes at stage-1 markers. Java runs one haplotype at a time and keeps
+ * a row for every marker. Only the markers with slot[m] >= 0 are read
+ * afterwards, so only they get row slot[m] of states and probs; the forward
+ * and backward values at every other marker are computed and dropped. The
+ * two haplotypes' HMMs are independent and step through the markers
+ * together. The last marker keeps its forward values, as in Java. */
 typedef struct {
     const phase_data *pd;
     low_freq_phase_states states;
     int n_markers;
-    uint8_t **mismatch;
-    float *bwd;
+    int max_states;
+    uint8_t *mismatch[2];   /* per haplotype: [marker][state] */
+    float *fwd[2][2];       /* per haplotype: the forward values at a marker without a row, by marker parity */
+    float *bwd[2];
     float p_mismatch[2];
 } hmm_state_probs;
 
@@ -44,61 +50,85 @@ static void hmm_state_probs_init(hmm_state_probs *hp, const low_freq_phase_ibs *
     int max_states = pd->par->phase_states / 2;
     hp->pd = pd;
     hp->n_markers = pd->fpd->n_stage1;
+    hp->max_states = max_states;
     low_freq_phase_states_init(&hp->states, ibs, max_states);
-    hp->mismatch = util_malloc((size_t)hp->n_markers * sizeof *hp->mismatch);
-    for (int m = 0; m < hp->n_markers; ++m) hp->mismatch[m] = util_malloc((size_t)max_states);
-    hp->bwd = util_malloc((size_t)max_states * sizeof *hp->bwd);
+    for (int i = 0; i < 2; ++i) {
+        hp->mismatch[i] = util_malloc((size_t)hp->n_markers * (size_t)max_states);
+        hp->fwd[i][0] = util_malloc((size_t)max_states * sizeof *hp->fwd[i][0]);
+        hp->fwd[i][1] = util_malloc((size_t)max_states * sizeof *hp->fwd[i][1]);
+        hp->bwd[i] = util_malloc((size_t)max_states * sizeof *hp->bwd[i]);
+    }
     hp->p_mismatch[0] = 1.0f - pd->p_mismatch;
     hp->p_mismatch[1] = pd->p_mismatch;
 }
 
 static void hmm_state_probs_free(hmm_state_probs *hp) {
-    for (int m = 0; m < hp->n_markers; ++m) free(hp->mismatch[m]);
-    free(hp->mismatch);
-    free(hp->bwd);
+    for (int i = 0; i < 2; ++i) {
+        free(hp->mismatch[i]);
+        free(hp->fwd[i][0]);
+        free(hp->fwd[i][1]);
+        free(hp->bwd[i]);
+    }
     low_freq_phase_states_free(&hp->states);
 }
 
-static void run_fwd(const hmm_state_probs *hp, float **probs, int n_states) {
+static const uint8_t *mismatch_row(const hmm_state_probs *hp, int i, int m) {
+    return hp->mismatch[i] + (size_t)m * (size_t)hp->max_states;
+}
+
+static float *fwd_row(const hmm_state_probs *hp, int i, const int *slot, float *probs, int m) {
+    return slot[m] >= 0 ? probs + (size_t)slot[m] * (size_t)hp->max_states : hp->fwd[i][m & 1];
+}
+
+static void run_fwd(const hmm_state_probs *hp, const int *slot, float *const probs[2], const int n_states[2]) {
     const float *p_recomb = hp->pd->p_recomb;
-    float last_sum = 0.0f;
-    for (int j = 0; j < n_states; ++j) {
-        probs[0][j] = hp->p_mismatch[hp->mismatch[0][j]];
-        last_sum += probs[0][j];
+    const float *prev[2] = {NULL, NULL};
+    float sum[2] = {0.0f, 0.0f};
+    for (int i = 0; i < 2; ++i) {
+        float *row = fwd_row(hp, i, slot, probs[i], 0);
+        for (int j = 0; j < n_states[i]; ++j) {
+            row[j] = hp->p_mismatch[hp->mismatch[i][j]];
+            sum[i] += row[j];
+        }
+        prev[i] = row;
     }
     for (int m = 1; m < hp->n_markers; ++m) {
-        last_sum = hmm_fwd_update(probs[m - 1], probs[m], last_sum, p_recomb[m], hp->p_mismatch, hp->mismatch[m], n_states);
+        float *fwd[2] = {fwd_row(hp, 0, slot, probs[0], m), fwd_row(hp, 1, slot, probs[1], m)};
+        const uint8_t *mismatch[2] = {mismatch_row(hp, 0, m), mismatch_row(hp, 1, m)};
+        hmm_fwd_update2(prev, fwd, sum, p_recomb[m], hp->p_mismatch, mismatch, n_states);
+        prev[0] = fwd[0];
+        prev[1] = fwd[1];
     }
 }
 
-static void run_bwd(hmm_state_probs *hp, float **probs, int n_states) {
+static void run_bwd(hmm_state_probs *hp, const int *slot, float *const probs[2], const int n_states[2]) {
     const float *p_recomb = hp->pd->p_recomb;
-    float *bwd = hp->bwd;
-    for (int j = 0; j < n_states; ++j) bwd[j] = 1.0f / n_states;
+    for (int i = 0; i < 2; ++i) {
+        for (int j = 0; j < n_states[i]; ++j) hp->bwd[i][j] = 1.0f / n_states[i];
+    }
     for (int m = hp->n_markers - 2; m >= 0; --m) {
-        float sum = 0.0f;
-        for (int j = 0; j < n_states; ++j) {
-            bwd[j] *= hp->p_mismatch[hp->mismatch[m + 1][j]];
-            sum += bwd[j];
+        const uint8_t *mismatch[2] = {mismatch_row(hp, 0, m + 1), mismatch_row(hp, 1, m + 1)};
+        hmm_bwd_update2(hp->bwd, p_recomb[m + 1], hp->p_mismatch, mismatch, n_states);
+        if (slot[m] < 0) continue;
+        for (int i = 0; i < 2; ++i) {
+            float *row = probs[i] + (size_t)slot[m] * (size_t)hp->max_states;
+            const float *bwd = hp->bwd[i];
+            float sum = 0.0f;
+            for (int j = 0; j < n_states[i]; ++j) {
+                row[j] *= bwd[j];
+                sum += row[j];
+            }
+            for (int j = 0; j < n_states[i]; ++j) row[j] /= sum;
         }
-        float p_rec = p_recomb[m + 1];
-        float scale = (1.0f - p_rec) / sum;
-        float shift = p_rec / n_states;
-        sum = 0.0f;
-        for (int j = 0; j < n_states; ++j) {
-            bwd[j] = scale * bwd[j] + shift;
-            probs[m][j] *= bwd[j];
-            sum += probs[m][j];
-        }
-        for (int j = 0; j < n_states; ++j) probs[m][j] /= sum;
     }
 }
 
-static int hmm_state_probs_run(hmm_state_probs *hp, int targ_hap, int **states, float **probs) {
-    int n_states = low_freq_phase_states_ibs_states(&hp->states, targ_hap, states, hp->mismatch);
-    run_fwd(hp, probs, n_states);
-    run_bwd(hp, probs, n_states);
-    return n_states;
+static void hmm_state_probs_run(hmm_state_probs *hp, int sample, const int *slot, int *const states[2], float *const probs[2], int n_states[2]) {
+    for (int i = 0; i < 2; ++i) {
+        n_states[i] = low_freq_phase_states_ibs_states(&hp->states, (sample << 1) | i, slot, states[i], hp->mismatch[i]);
+    }
+    run_fwd(hp, slot, probs, n_states);
+    run_bwd(hp, slot, probs, n_states);
 }
 
 /* Stage2Baum */
@@ -108,8 +138,12 @@ typedef struct {
     stage2_haps *s2;
     hmm_state_probs hp;
     int n_states[2];
-    int **states[2];    /* [marker][state] */
-    float **probs[2];
+    int *slot;          /* per stage-1 marker: its row in states and probs, or -1 */
+    int_list kept;      /* the stage-1 markers that have a row */
+    int_list todo;      /* the sample's stage-2 markers with a heterozygous or missing genotype */
+    int rows_cap;
+    int *states[2];     /* [row][state] */
+    float *probs[2];
     int n_targ_haps;
     uint64_t digest[2]; /* trace seam T4b */
     uint64_t decisions; /* trace seam T4d: the sample's allele probabilities at stage-2 markers */
@@ -122,28 +156,63 @@ static void stage2_baum_init(stage2_baum *b, const low_freq_phase_ibs *ibs, stag
     b->s2 = s2;
     hmm_state_probs_init(&b->hp, ibs);
     int n = b->fpd->n_stage1;
-    int max_states = pd->par->phase_states / 2;
+    b->slot = util_malloc((size_t)n * sizeof *b->slot);
+    for (int m = 0; m < n; ++m) b->slot[m] = -1;
+    b->kept = b->todo = (int_list){0};
+    b->rows_cap = 0;
     for (int i = 0; i < 2; ++i) {
-        b->states[i] = util_malloc((size_t)n * sizeof *b->states[i]);
-        b->probs[i] = util_malloc((size_t)n * sizeof *b->probs[i]);
-        for (int m = 0; m < n; ++m) {
-            b->states[i][m] = util_malloc((size_t)max_states * sizeof **b->states[i]);
-            b->probs[i][m] = util_malloc((size_t)max_states * sizeof **b->probs[i]);
-        }
+        b->states[i] = NULL;
+        b->probs[i] = NULL;
     }
     b->n_targ_haps = fpd_n_targ_haps(b->fpd);
 }
 
 static void stage2_baum_free(stage2_baum *b) {
     for (int i = 0; i < 2; ++i) {
-        for (int m = 0; m < b->fpd->n_stage1; ++m) {
-            free(b->states[i][m]);
-            free(b->probs[i][m]);
-        }
         free(b->states[i]);
         free(b->probs[i]);
     }
+    free(b->slot);
+    free(b->kept.v);
+    free(b->todo.v);
     hmm_state_probs_free(&b->hp);
+}
+
+static void keep(stage2_baum *b, int stage1_marker) {
+    if (b->slot[stage1_marker] >= 0) return;
+    b->slot[stage1_marker] = b->kept.n;
+    int_list_add(&b->kept, stage1_marker);
+}
+
+/* The two stage-1 markers whose state probabilities are interpolated at
+ * target marker m. */
+static int marker_a(const fixed_phase_data *fpd, int m) {
+    return fpd->prev_stage1_marker[m];
+}
+
+static int marker_b(const fixed_phase_data *fpd, int m) {
+    int mkr_a = fpd->prev_stage1_marker[m];
+    return mkr_a + 1 < fpd->n_stage1 - 1 ? mkr_a + 1 : fpd->n_stage1 - 1;
+}
+
+static void ensure_rows(stage2_baum *b) {
+    if (b->kept.n <= b->rows_cap) return;
+    b->rows_cap = b->kept.n + b->kept.n / 2;
+    size_t n = (size_t)b->rows_cap * (size_t)b->hp.max_states;
+    for (int i = 0; i < 2; ++i) {
+        free(b->states[i]);
+        free(b->probs[i]);
+        b->states[i] = util_malloc(n * sizeof *b->states[i]);
+        b->probs[i] = util_malloc(n * sizeof *b->probs[i]);
+    }
+}
+
+static const int *states_row(const stage2_baum *b, int hap_bit, int stage1_marker) {
+    return b->states[hap_bit] + (size_t)b->slot[stage1_marker] * (size_t)b->hp.max_states;
+}
+
+static const float *probs_row(const stage2_baum *b, int hap_bit, int stage1_marker) {
+    return b->probs[hap_bit] + (size_t)b->slot[stage1_marker] * (size_t)b->hp.max_states;
 }
 
 /* The spliced allele of a target haplotype, or a reference haplotype's allele,
@@ -166,11 +235,9 @@ static void unscaled_al_probs(const stage2_baum *b, int m, int hap_bit, int a1, 
     for (int a = 0; a < n_alleles; ++a) al_probs[a] = 0.0f;
     bool rare1 = is_low_freq(fpd, m, a1);
     bool rare2 = is_low_freq(fpd, m, a2);
-    int mkr_a = fpd->prev_stage1_marker[m];
-    int mkr_b = mkr_a + 1 < fpd->n_stage1 - 1 ? mkr_a + 1 : fpd->n_stage1 - 1;
-    const int *states_a = b->states[hap_bit][mkr_a];
-    const float *probs_a = b->probs[hap_bit][mkr_a];
-    const float *probs_b = b->probs[hap_bit][mkr_b];
+    const int *states_a = states_row(b, hap_bit, marker_a(fpd, m));
+    const float *probs_a = probs_row(b, hap_bit, marker_a(fpd, m));
+    const float *probs_b = probs_row(b, hap_bit, marker_b(fpd, m));
     for (int j = 0; j < b->n_states[hap_bit]; ++j) {
         int hap = states_a[j];
         int b1 = allele(b, m, hap);
@@ -193,11 +260,9 @@ static void unscaled_al_probs(const stage2_baum *b, int m, int hap_bit, int a1, 
 static int impute_allele(const stage2_baum *b, int m, int hap_bit, float *al_probs, int n_alleles) {
     const fixed_phase_data *fpd = b->fpd;
     for (int a = 0; a < n_alleles; ++a) al_probs[a] = 0.0f;
-    int mkr_a = fpd->prev_stage1_marker[m];
-    int mkr_b = mkr_a + 1 < fpd->n_stage1 - 1 ? mkr_a + 1 : fpd->n_stage1 - 1;
-    const int *states_a = b->states[hap_bit][mkr_a];
-    const float *probs_a = b->probs[hap_bit][mkr_a];
-    const float *probs_b = b->probs[hap_bit][mkr_b];
+    const int *states_a = states_row(b, hap_bit, marker_a(fpd, m));
+    const float *probs_a = probs_row(b, hap_bit, marker_a(fpd, m));
+    const float *probs_b = probs_row(b, hap_bit, marker_b(fpd, m));
     for (int j = 0; j < b->n_states[hap_bit]; ++j) {
         float wt = fpd->prev_stage1_wt[m];
         float prob = wt * probs_a[j] + (1.0f - wt) * probs_b[j];
@@ -242,71 +307,99 @@ static void fold_probs(stage2_baum *b, const float *al_probs, int n_alleles) {
     for (int a = 0; a < n_alleles; ++a) b->decisions = trace_fold(b->decisions, jnum_float_bits(al_probs[a]));
 }
 
-static void impute_interval(stage2_baum *b, jrandom *r, int sample, int start, int end) {
+/* Stage-2 markers [start, end): a homozygous genotype needs no state
+ * probabilities and is recorded at once. A heterozygous or missing genotype
+ * waits in todo, and the two stage-1 markers it reads get a row. */
+static void scan_interval(stage2_baum *b, int sample, int start, int end) {
+    const fixed_phase_data *fpd = b->fpd;
     int hap1 = sample << 1;
     int hap2 = hap1 | 1;
     for (int m = start; m < end; ++m) {
-        int n_alleles = marker_n_alleles(&b->fpd->win->targ[m]->marker);
-        float *al1 = util_malloc((size_t)n_alleles * sizeof *al1);
-        float *al2 = util_malloc((size_t)n_alleles * sizeof *al2);
-        int a1 = fpd_spliced_allele(b->fpd, m, hap1);
-        int a2 = fpd_spliced_allele(b->fpd, m, hap2);
-        if (a1 >= 0 && a2 >= 0) {
-            if (a1 != a2) {
-                unscaled_al_probs(b, m, 0, a1, a2, al1, n_alleles);
-                unscaled_al_probs(b, m, 1, a1, a2, al2, n_alleles);
-                float p1 = al1[a1] * al2[a2];
-                float p2 = al1[a2] * al2[a1];
-                b->decisions = trace_fold(b->decisions, (uint32_t)m);
-                b->decisions = trace_fold(b->decisions, jnum_float_bits(p1));
-                b->decisions = trace_fold(b->decisions, jnum_float_bits(p2));
-                if (p1 < p2 || (p1 == p2 && jrandom_next_boolean(r))) {
-                    int tmp = a1;
-                    a1 = a2;
-                    a2 = tmp;
-                }
-            }
+        int a1 = fpd_spliced_allele(fpd, m, hap1);
+        int a2 = fpd_spliced_allele(fpd, m, hap2);
+        if (a1 >= 0 && a1 == a2) {
+            set_phased_gt(b->s2, m, sample, a1, a2);
         } else {
-            a1 = impute_allele(b, m, 0, al1, n_alleles);
-            a2 = impute_allele(b, m, 1, al2, n_alleles);
-            b->decisions = trace_fold(b->decisions, (uint32_t)m);
-            fold_probs(b, al1, n_alleles);
-            fold_probs(b, al2, n_alleles);
+            int_list_add(&b->todo, m);
+            keep(b, marker_a(fpd, m));
+            keep(b, marker_b(fpd, m));
         }
-        set_phased_gt(b->s2, m, sample, a1, a2);
-        free(al1);
-        free(al2);
     }
+}
+
+static void impute_marker(stage2_baum *b, jrandom *r, int sample, int m) {
+    int n_alleles = marker_n_alleles(&b->fpd->win->targ[m]->marker);
+    float *al1 = util_malloc((size_t)n_alleles * sizeof *al1);
+    float *al2 = util_malloc((size_t)n_alleles * sizeof *al2);
+    int a1 = fpd_spliced_allele(b->fpd, m, sample << 1);
+    int a2 = fpd_spliced_allele(b->fpd, m, (sample << 1) | 1);
+    if (a1 >= 0 && a2 >= 0) {
+        unscaled_al_probs(b, m, 0, a1, a2, al1, n_alleles);
+        unscaled_al_probs(b, m, 1, a1, a2, al2, n_alleles);
+        float p1 = al1[a1] * al2[a2];
+        float p2 = al1[a2] * al2[a1];
+        b->decisions = trace_fold(b->decisions, (uint32_t)m);
+        b->decisions = trace_fold(b->decisions, jnum_float_bits(p1));
+        b->decisions = trace_fold(b->decisions, jnum_float_bits(p2));
+        if (p1 < p2 || (p1 == p2 && jrandom_next_boolean(r))) {
+            int tmp = a1;
+            a1 = a2;
+            a2 = tmp;
+        }
+    } else {
+        a1 = impute_allele(b, m, 0, al1, n_alleles);
+        a2 = impute_allele(b, m, 1, al2, n_alleles);
+        b->decisions = trace_fold(b->decisions, (uint32_t)m);
+        fold_probs(b, al1, n_alleles);
+        fold_probs(b, al2, n_alleles);
+    }
+    set_phased_gt(b->s2, m, sample, a1, a2);
+    free(al1);
+    free(al2);
 }
 
 static uint64_t digest(const stage2_baum *b, int hap_bit) {
     uint64_t h = TRACE_FNV_BASIS;
     for (int m = 0; m < b->fpd->n_stage1; ++m) {
+        const int *states = states_row(b, hap_bit, m);
+        const float *probs = probs_row(b, hap_bit, m);
         for (int j = 0; j < b->n_states[hap_bit]; ++j) {
-            h = trace_fold(h, (uint32_t)b->states[hap_bit][m][j]);
-            h = trace_fold(h, jnum_float_bits(b->probs[hap_bit][m][j]));
+            h = trace_fold(h, (uint32_t)states[j]);
+            h = trace_fold(h, jnum_float_bits(probs[j]));
         }
     }
     return h;
 }
 
 static void stage2_baum_phase(stage2_baum *b, int sample) {
-    const phase_data *pd = b->pd;
+    const fixed_phase_data *fpd = b->fpd;
     jrandom r;
-    jrandom_init(&r, jrandom_seed_plus(phase_data_seed(pd), sample));
-    int h1 = sample << 1;
-    b->n_states[0] = hmm_state_probs_run(&b->hp, h1, b->states[0], b->probs[0]);
-    b->n_states[1] = hmm_state_probs_run(&b->hp, h1 | 1, b->states[1], b->probs[1]);
-    b->digest[0] = trace_on() ? digest(b, 0) : 0;
-    b->digest[1] = trace_on() ? digest(b, 1) : 0;
-    b->decisions = TRACE_FNV_BASIS;
+    jrandom_init(&r, jrandom_seed_plus(phase_data_seed(b->pd), sample));
+    b->todo.n = 0;
+    if (trace_on()) {
+        /* The T4b digest covers every stage-1 marker. */
+        for (int m = 0; m < fpd->n_stage1; ++m) keep(b, m);
+    }
     int start = 0;
-    for (int j = 0; j < b->fpd->n_stage1; ++j) {
-        int end = b->fpd->stage1_to2[j];
-        impute_interval(b, &r, sample, start, end);
+    for (int j = 0; j < fpd->n_stage1; ++j) {
+        int end = fpd->stage1_to2[j];
+        scan_interval(b, sample, start, end);
         start = end + 1;
     }
-    impute_interval(b, &r, sample, start, b->fpd->n_markers);
+    scan_interval(b, sample, start, fpd->n_markers);
+    b->n_states[0] = b->n_states[1] = 0;
+    b->digest[0] = b->digest[1] = 0;
+    b->decisions = TRACE_FNV_BASIS;
+    if (b->kept.n == 0) return;
+    ensure_rows(b);
+    hmm_state_probs_run(&b->hp, sample, b->slot, b->states, b->probs, b->n_states);
+    if (trace_on()) {
+        b->digest[0] = digest(b, 0);
+        b->digest[1] = digest(b, 1);
+    }
+    for (int k = 0; k < b->todo.n; ++k) impute_marker(b, &r, sample, b->todo.v[k]);
+    for (int k = 0; k < b->kept.n; ++k) b->slot[b->kept.v[k]] = -1;
+    b->kept.n = 0;
 }
 
 static void stage2_haps_init(stage2_haps *s2, const phase_data *pd) {
