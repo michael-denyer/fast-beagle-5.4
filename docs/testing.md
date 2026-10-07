@@ -32,7 +32,7 @@ To check fast-beagle, run `tests/check-oracle.sh build/beagle`.
 - a 2-marker target and a 3-marker, 2-sample reference, whose middle marker `err=0` imputes with `AF=NaN`
 - for `tests/check-bgen.sh`, the chrX split moved to chromosome 22 and the reference/target split moved to chromosome 38
 
-The script records in `data/.fixtures.sha256` a hash of itself, the three case tables, the jars and every fixture. With `--ensure` it keeps the existing fixtures while every hash still matches, and regenerates them otherwise. Without `--ensure` it always regenerates the derived fixtures. The gate's `fixtures` step and the case runners pass `--ensure`. CI restores `data/` from a cache keyed on the hash of `tests/fetch-fixtures.sh`, so a job with a cache hit only checks the hashes.
+The script records in `data/.fixtures.sha256` a hash of itself, the three case tables, the jars and every fixture. With `--ensure` it keeps the existing fixtures while every hash still matches, and regenerates them otherwise. Without `--ensure` it always regenerates the derived fixtures. The gate's `fixtures` step and the case runners pass `--ensure`. CI restores `data/` from a cache keyed on the hash of `tests/fetch-fixtures.sh`, so a job with a cache hit only checks the hashes. Before it regenerates, the script runs `java -version` and exits 1 with a `FAIL` line when `java` cannot run, as with the macOS `/usr/bin/java` placeholder. `tests/check-tla.sh` does the same before it runs TLC. Every runner that sources `tests/cases.sh` stops with a `FAIL fixtures` line when the script fails.
 
 ## Oracle hashes
 
@@ -148,6 +148,7 @@ The check builds `build/beagle-piece1` with one marker per work item. It runs `b
 - `make check-block-reader` forces a published batch to be consumed and refilled with EOF before the parser resumes. The parser must still publish the EOF sentinel (`tests/vcf/block_reader_test.c`).
 - `make check-records`: `tests/output/record_fixture.c` writes phased, imputed, genotyped, haploid and multiallelic records through the window writer with no BGEN and in both `bgen=` modes. `tests/check_records.py` requires the same VCF from all three runs and the expected VCF fields. It also requires phased BGEN probabilities captured before the VCF rounds them.
 - `make check-tracker` tests the composite haplotype tracker in `src/beagleutil/comp_hap_queue.c` through the interface every caller uses (`tests/beagleutil/tracker_test.c`).
+- `make check-oom` requests an allocation that cannot succeed inside `util_try`. The process must exit 1 with `ERROR: out of memory`, and not return to the `util_try` frame (`tests/blbutil/oom_test.c`).
 - `make check-bgen-unit` tests:
   - the scaling rule, exactly (`tests/bgen/quantise_test.c`)
   - the packing of values at 1 to 16 bits (`tests/bgen/pack_test.c`)
@@ -231,9 +232,11 @@ The live checks need `PLINK2` naming the pinned plink2 binary, and fail without 
 - The runner stops a run after 120 s, and stops a Java run as soon as its main thread throws, because another thread can keep the JVM alive.
 - The full tier runs a fixed set of 200 examples (about 30 s per 100 on an M5) and 2 for each invalid-parameter change. The nightly CI run fuzzes 1000 new examples on each runner. `uv run --python 3.12 --script tests/check_fuzz.py --examples 1000 --random` tries new ones.
 
-## Model check the pipelined writer
+## Model check the thread protocols
 
-`tests/check-tla.sh` model-checks [tla/ParallelOrdered.tla](../tla/ParallelOrdered.tla), the protocol of `parallel_ordered` (the pipelined imputed writer). It runs TLC from tla2tools.jar v1.7.4 for several worker counts, item counts and windows. It checks that:
+`tests/check-tla.sh` model-checks the TLA+ specs in `tla/` with TLC from tla2tools.jar v1.7.4 over a matrix of small constants. `tests/check-tla.sh BlockReader` runs one spec. The three protocol models take each critical section as one step. They represent a condition-variable wait as a wait set that only a broadcast or a spurious wakeup leaves, so a lost wakeup fails a liveness property. The specs name the C functions they model.
+
+[tla/ParallelOrdered.tla](../tla/ParallelOrdered.tla) is the protocol of `parallel_ordered` (the pipelined imputed writer and the phased-record writer), for several worker counts, item counts and windows. It checks that:
 
 - at most `window` items are claimed but not consumed
 - no slot is overwritten before it is consumed
@@ -241,11 +244,32 @@ The live checks need `PLINK2` naming the pinned plink2 binary, and fail without 
 - there is no deadlock
 - every run finishes with every item consumed
 
-The model represents condition-variable waits with wait sets and spurious wakeups, so a lost wakeup fails the check.
+[tla/BlockReader.tla](../tla/BlockReader.tla) is the three-stage pipeline of `src/vcf/block_reader.c` (reader thread, parser thread, consumer), for 1 to 4 slots and 0 to 5 batches, with and without a `block_reader_close` at an arbitrary point. It checks that every slot is in exactly one of free, read, full or a thread's hands, that batches reach the consumer in file order, that `block_reader_next` and `block_reader_close` always return, and that a run without close reaches the end-of-file batch. The 1-slot runs are the boundary where the broadcast after a slot is recycled matters: without it the three threads all wait on `changed` after the first batch.
+
+[tla/SlidingWindow.tla](../tla/SlidingWindow.tla) is the read-ahead hand-over of `src/vcf/sliding_window.c`, for 1 to 4 windows, with the reader able to fail at any window. It checks that the caller receives windows in order with none skipped, duplicated, or delivered after NULL or after an error, that an error producing window k+1 is seen only after windows 1..k were taken, that `sliding_window_close` frees `ahead` at most once and leaks no window, and that `sliding_window_next` and `sliding_window_close` always return.
+
+[tla/FatalExit.tla](../tla/FatalExit.tla) is the fatal-error lifecycle of `util_exit` and `util_oom` across the main thread, the read-ahead reader (which runs under `util_try`) and one or two parse workers. A `util_exit` under `util_try` longjmps to its frame and is raised later by the frame's consumer. A `util_exit` outside one, or a `util_oom` anywhere, calls `exit()` once and pauses every later caller. The model takes from the code that an input error is raised outside the `chrom_ids` lock and that only an allocation can fail under it. It checks that the process always terminates once a thread exits, that the reader's deferred error is raised unless another exit comes first, that the lock is released or the process ends, and that the main thread never blocks on the lock forever. `make check-oom` tests the C side of the allocation rule, and the [lock check](#lock-check) tests the input-error rule for every mutex.
+
+[tla/BgenCleanup.tla](../tla/BgenCleanup.tla) is the partial-output cleanup of `src/bgen/bgen_files.c`, with `exit()` able to start at any point while the other threads keep running. It checks that once `remove_partial` ran no partial BGEN member is on disk and none is created, and that completed members survive.
+
+## Lock check
+
+`tests/check_lock_exit.py` reads the C source in `src/` and fails when a function calls anything that can reach `util_exit` while it holds a pthread mutex. Inside `util_try` that call would longjmp past the unlock. A failure names the call, the mutex and the chain of calls that reaches `util_exit`:
+
+```text
+src/vcf/block_reader.c:133: read_batches holds &r->mutex and calls read_lines > index_chrom > chrom_ids_index > util_exit
+```
+
+- `util_oom` does not count, because it exits without unwinding.
+- A callee may unlock its caller's mutex and then call `util_exit` in the same block, as `seam_file` in `src/blbutil/trace.c` does.
+- The check reads text, so it is strict where it cannot tell. Functions that share a name count as one function. A call through a struct member or a parameter counts as a call that reaches `util_exit`.
+- It does not see a call through a local function-pointer variable.
+
+The script also runs its own cases, which are small C fragments that must pass or fail.
 
 ## Benchmark
 
-`tests/bench/` holds the 1000 Genomes chr20 benchmark. `fetch-chr20.sh <dir>` downloads and derives the inputs, and `bench.sh <dir> <rounds>` times Java and C alternately. [perf-baseline.md](perf-baseline.md) has the method and the current result.
+`tests/bench/` holds the 1000 Genomes chr20 benchmark. `fetch-chr20.sh <dir>` downloads and derives the inputs, and `bench.sh <dir> <rounds>` times Java and C alternately. [perf-baseline.md](perf-baseline.md) has the method and the current result. `make_phase.py` builds the phasing inputs, and `tests/check_make_phase.py` checks the records and genotypes it keeps, with and without a position range.
 
 ## Run the pre-merge gate
 
@@ -258,7 +282,7 @@ Each check belongs to one group, so CI can run the groups as parallel jobs. `GAT
 | Group | Checks |
 | --- | --- |
 | `setup` | `fixtures` and `c-build`. They run in every group, because every other group needs the fixtures and the `bgen`, `trace`, `trace-threads` and C-binary checks need `build/beagle`. |
-| `core` | `gate-tier`, `log-recording`, `jcompat`, `tracker`, `interval`, `markers`, `block-reader`, `snv-perms`, `oracle-c`, `gate-planning`, `failures-c`, `output-failures`, `log-c`, `piece-size`, `bgen-unit`, `records`, `bgen-files`, `vcf-index`, `tbi`, `tla`, `fuzz` and `fuzz-regressions` |
+| `core` | `gate-tier`, `log-recording`, `make-phase`, `lock-exit`, `jcompat`, `tracker`, `oom`, `interval`, `markers`, `block-reader`, `snv-perms`, `oracle-c`, `gate-planning`, `failures-c`, `output-failures`, `log-c`, `piece-size`, `bgen-unit`, `records`, `bgen-files`, `vcf-index`, `tbi`, `tla`, `fuzz` and `fuzz-regressions` |
 | `bgen` | `bgen` |
 | `java` | `oracle-jar`, `failures-jar`, `log-jar`, `java-build`, `oracle-source`, `java-trace`, `oracle-trace`, `trace` and `trace-threads` |
 | `cases` | `cases` |

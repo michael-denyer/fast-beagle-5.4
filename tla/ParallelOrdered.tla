@@ -6,7 +6,8 @@
 (* clearing each slot. Each step below is one critical section under the   *)
 (* mutex, or the unlocked build or consume. A condition-variable wait adds *)
 (* the thread to a wait set, and only a signal, a broadcast or a spurious  *)
-(* wakeup takes it out, so a lost wakeup shows up as a deadlock.           *)
+(* wakeup takes it out, so a lost wakeup shows up as a liveness violation  *)
+(* (a spurious wakeup is always possible, so never as a TLC deadlock).     *)
 (***************************************************************************)
 EXTENDS Integers, FiniteSets
 

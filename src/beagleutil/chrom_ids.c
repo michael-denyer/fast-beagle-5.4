@@ -14,7 +14,9 @@
 #include "blbutil/str_set.h"
 #include "blbutil/utilities.h"
 
-/* Shared by the reference reader thread and the main thread. */
+/* Shared by the reader threads, the parse workers and the main thread. Under
+ * the lock only an allocation can fail, and util_oom does not unwind: a
+ * util_exit there would longjmp out of a util_try past the unlock. */
 static str_set *ids;
 static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 

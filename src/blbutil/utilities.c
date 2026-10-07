@@ -81,15 +81,20 @@ void util_exit(const char *fmt, ...) {
     exit(1);
 }
 
+void util_oom(void) {
+    trying = NULL;
+    util_exit("ERROR: out of memory");
+}
+
 void *util_malloc(size_t size) {
     void *p = malloc(size == 0 ? 1 : size);
-    if (p == NULL) util_exit("ERROR: out of memory");
+    if (p == NULL) util_oom();
     return p;
 }
 
 void *util_realloc(void *p, size_t size) {
     p = realloc(p, size == 0 ? 1 : size);
-    if (p == NULL) util_exit("ERROR: out of memory");
+    if (p == NULL) util_oom();
     return p;
 }
 

@@ -169,6 +169,15 @@ if [ "$1" != java ]; then
     ref="$OUT/samples.bref3" gt="$DATA/target.thin.vcf.gz" out="$OUT/samples"
 fi
 
+# An imp-step too small to change a cluster's position when added to it.
+# CodedSteps.stepStarts then never reaches the next cluster, so Java appends
+# the same step start until it runs out of memory. Only the port's refusal is
+# fixed.
+if [ "$1" != java ]; then
+  check imp-step-no-advance "fast-beagle: imp-step=1e-20 is too small to advance" \
+    ref="$DATA/ref.vcf.gz" gt="$DATA/target.thin.vcf.gz" out="$OUT/step" imp-step=1e-20
+fi
+
 # ImpIbs divides imp-states by round(imp-segment / imp-step), which is 0 here.
 check imp-segment "java.lang.ArithmeticException: / by zero" \
   ref="$DATA/ref.vcf.gz" gt="$DATA/target.thin.vcf.gz" out="$OUT/segment" imp-segment=0.01

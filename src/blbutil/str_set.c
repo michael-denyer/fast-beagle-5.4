@@ -19,6 +19,7 @@ struct str_set {
 str_set *str_set_new(void) {
     str_set *set = util_malloc(sizeof *set);
     set->map = kh_init(str_index);
+    if (set->map == NULL) util_oom();
     set->items = NULL;
     set->size = set->cap = 0;
     return set;
@@ -44,7 +45,7 @@ int str_set_index(str_set *set, const char *s, size_t len) {
     char *key = util_strndup(s, len);
     int absent;
     khiter_t k = kh_put(str_index, set->map, key, &absent);
-    if (absent < 0) util_exit("ERROR: out of memory");
+    if (absent < 0) util_oom();
     kh_val(set->map, k) = set->size;
     set->items[set->size] = key;
     return set->size++;

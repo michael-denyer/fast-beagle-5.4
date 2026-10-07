@@ -31,6 +31,9 @@ void util_exit_log(FILE *log);
  * exiting. Memory that fn allocated before the call is not freed. Readers that
  * work ahead of their consumer keep an error until the consumer reaches it. */
 char *util_try(void (*fn)(void *), void *arg);
+/* fast-beagle only: util_exit for a failed allocation. It exits even inside
+ * util_try, so it never unwinds past a lock its caller holds. */
+_Noreturn void util_oom(void);
 
 void *util_malloc(size_t size);
 void *util_realloc(void *p, size_t size);

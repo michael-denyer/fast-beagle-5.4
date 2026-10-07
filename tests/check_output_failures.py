@@ -93,6 +93,44 @@ class OutputFailures(unittest.TestCase):
                 with self.subTest(alias=alias, suffix=suffix):
                     self.collision("gt", suffix, "phased", alias)
 
+    def test_output_alias_collisions(self):
+        pairs = [(a, b) for j, a in enumerate(SUFFIXES) for b in SUFFIXES[j + 1 :]]
+        for alias in ("symlink", "hardlink"):
+            for first, second in pairs:
+                with self.subTest(alias=alias, first=first, second=second), tempfile.TemporaryDirectory() as tmp:
+                    root = Path(tmp)
+                    target = root / "target.vcf"
+                    target.write_text(VCF)
+                    prefix = root / "result"
+                    kept, linked = Path(str(prefix) + first), Path(str(prefix) + second)
+                    kept.write_text("untouched\n")
+                    if alias == "symlink":
+                        linked.symlink_to(kept)
+                    else:
+                        os.link(kept, linked)
+                    proc = run({"gt": target, "out": prefix, "bgen": "phased", "tbi": "true"})
+                    self.assertEqual(proc.returncode, 1, proc.stderr)
+                    self.assertEqual(
+                        proc.stderr.strip(),
+                        f"{PROGRAM}: output file {prefix}{first} equals output file {prefix}{second}",
+                    )
+                    self.assertEqual(kept.read_text(), "untouched\n", "output was overwritten")
+                    for ext in SUFFIXES:
+                        if ext not in (first, second):
+                            self.assertFalse(Path(str(prefix) + ext).exists(), f"unexpected {ext}")
+
+    def test_outputs_may_share_a_device(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            target = root / "target.vcf"
+            target.write_text(VCF)
+            prefix = root / "result"
+            for suffix in (".info", ".sample"):
+                Path(str(prefix) + suffix).symlink_to("/dev/null")
+            proc = run({"gt": target, "out": prefix, "bgen": "phased"})
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertEqual(gzip.decompress(Path(str(prefix) + ".vcf.gz").read_bytes()).count(b"\n1\t"), 2)
+
     def test_log_collision_without_bgen(self):
         self.collision("gt", ".log", None)
 
