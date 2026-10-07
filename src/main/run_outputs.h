@@ -12,8 +12,8 @@ typedef enum {
     RUN_OUTPUT_SAMPLE, RUN_OUTPUT_TBI, RUN_OUTPUT_COUNT
 } run_output_file;
 
-/* Check enabled destinations against inputs without opening files. Called at
- * the existing parameter validation point. */
+/* Check enabled destinations against inputs and against each other without
+ * opening files. Called at the existing parameter validation point. */
 void run_outputs_check(const par *p);
 run_outputs *run_outputs_new(const par *p);
 /* Optional destinations are NULL when disabled. out must outlive the path. */

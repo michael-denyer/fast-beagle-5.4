@@ -23,7 +23,9 @@
 #include "jcompat/jrandom.h"
 
 /* CodedSteps.stepStarts: the first step is half of imp-step. Cluster
- * positions increase strictly, so the insertion point is a lower bound. */
+ * positions increase strictly, so the insertion point is a lower bound.
+ * fast-beagle only: a step too small to change a cluster's position is
+ * refused, where Java appends the same start until it runs out of memory. */
 static int_list step_starts(const imp_data *id, const par *p) {
     int_list starts = {0};
     int_list_add(&starts, 0);
@@ -35,6 +37,8 @@ static int_list step_starts(const imp_data *id, const par *p) {
         if (index >= id->n_clusters) break;
         int_list_add(&starts, index);
         next_pos = id->pos[index] + step;
+        if (!(next_pos > id->pos[index]))
+            util_exit(PROGRAM ": imp-step=%g is too small to advance from genetic position %g", step, id->pos[index]);
     }
     return starts;
 }

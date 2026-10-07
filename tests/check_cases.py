@@ -67,9 +67,17 @@ def main():
         java.chmod(0o755)
         env = dict(os.environ, PATH=f"{fake_bin}:{os.environ['PATH']}")
         missing.unlink()
-        run(root, prepare, env=env, ok=False)
+        failed = run(root, prepare, env=env, ok=False).stderr
         assert not manifest.exists()
+        assert "FAIL java cannot run" in failed and "FAIL fixtures" in failed, failed
         print("PASS failed preparation stops runner and invalidates manifest")
+        tla = str(ROOT / "tests/check-tla.sh")
+        assert (
+            run(root, [tla], env=env, ok=False).stderr
+            == "FAIL java cannot run, and TLC needs it: put a JDK first on PATH\n"
+        )
+        assert run(root, [tla, "BlockReader Nope"], env=env, ok=False).stdout == "FAIL unknown spec BlockReader Nope\n"
+        print("PASS model check stops once without java or for an unknown spec")
         run(root, prepare)
         print("PASS interrupted fixture generation recovers")
 

@@ -5,7 +5,7 @@ DATA="$ROOT/data"
 SEED=-99999
 SHA=$(command -v sha256sum || echo "shasum -a 256")
 # Preparation errors must stop even callers that deliberately run without -e.
-"$ROOT/tests/fetch-fixtures.sh" --ensure >&2 || exit 1
+"$ROOT/tests/fetch-fixtures.sh" --ensure >&2 || { echo "FAIL fixtures: tests/fetch-fixtures.sh --ensure" >&2; exit 1; }
 
 # The case rows (name expect tags args) of the named tables, default the
 # oracle's. expect is the recorded hash or exit=<status>.

@@ -26,7 +26,7 @@ JCOMPAT_FIXTURES := random math numbers utf8 parse parseint pqueue search
 LIBDEFLATE_OBJ := $(patsubst %.c,build/obj/%.o,$(wildcard third_party/libdeflate/lib/*.c third_party/libdeflate/lib/*/*.c))
 BEAGLE_OBJ := $(sort $(patsubst src/%.c,build/obj/%.o,$(wildcard src/*/*.c)) $(JCOMPAT_OBJ) $(LIBDEFLATE_OBJ))
 
-.PHONY: all install check-jcompat check-bgen-unit check-records check-bgen-files check-vcf-index check-tbi check-tracker check-interval check-markers check-block-reader check-snv-perms check-piece-size java-trace clean
+.PHONY: all install check-jcompat check-bgen-unit check-records check-bgen-files check-vcf-index check-tbi check-tracker check-oom check-interval check-markers check-block-reader check-snv-perms check-piece-size java-trace clean
 .SECONDARY:
 .DELETE_ON_ERROR:
 all: build/beagle
@@ -113,6 +113,13 @@ check-tracker: build/beagleutil/tracker_test
 
 build/beagleutil/tracker_test: tests/beagleutil/tracker_test.c build/obj/beagleutil/comp_hap_queue.o \
         build/obj/blbutil/utilities.o $(JCOMPAT_OBJ)
+	@mkdir -p $(@D)
+	$(LINK)
+
+check-oom: build/blbutil/oom_test
+	./build/blbutil/oom_test
+
+build/blbutil/oom_test: tests/blbutil/oom_test.c build/obj/blbutil/utilities.o $(JCOMPAT_OBJ)
 	@mkdir -p $(@D)
 	$(LINK)
 

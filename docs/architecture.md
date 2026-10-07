@@ -46,7 +46,9 @@ The port threads the loops that dominate run time:
 - imputation per haplotype
 - the imputed writer, which builds records on worker threads and prints them in order
 
-`nthreads=` sets both the thread count and the partitions that Beagle's output depends on, so the output matches Beagle run with the same thread count. [tla/ParallelOrdered.tla](../tla/ParallelOrdered.tla) models the protocol of `parallel_ordered`, the pipelined imputed writer ([model check](testing.md#model-check-the-pipelined-writer)).
+`nthreads=` sets both the thread count and the partitions that Beagle's output depends on, so the output matches Beagle run with the same thread count. [tla/ParallelOrdered.tla](../tla/ParallelOrdered.tla) models the protocol of `parallel_ordered`, the pipelined imputed writer. [tla/BlockReader.tla](../tla/BlockReader.tla) and [tla/SlidingWindow.tla](../tla/SlidingWindow.tla) model the reference-reading pipeline and the read-ahead hand-over. [tla/FatalExit.tla](../tla/FatalExit.tla) models the fatal-error lifecycle of `util_exit` across threads, and [tla/BgenCleanup.tla](../tla/BgenCleanup.tla) the removal of partial BGEN output ([model check](testing.md#model-check-the-thread-protocols)).
+
+A failed allocation calls `util_oom`, which ends the process even inside `util_try`. An input error inside `util_try` unwinds to its frame instead, so the code raises input errors outside its locks ([lock check](testing.md#lock-check)).
 
 The imputation writer splits a long cluster into work items of at most `PIECE_RECORDS` reference markers (500). `PIECE_RECORDS` is a tuning value that must not change the output ([piece size check](testing.md#piece-size-check)).
 
@@ -64,7 +66,7 @@ The imputation writer splits a long cluster into work items of at most `PIECE_RE
 - `java/src/`: the unmodified Beagle 5.4 Java source, used as the oracle.
 - `java/trace.patch`: trace hooks for the Java source ([trace seams](testing.md#compare-trace-seams)).
 - `tests/`: the checks ([checks and the pre-merge gate](testing.md)).
-- `tla/`: the TLA+ model of the pipelined imputed writer.
+- `tla/`: the TLA+ models of the thread protocols.
 
 ## Tabix index in the same pass
 

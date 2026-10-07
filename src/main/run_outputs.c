@@ -64,12 +64,37 @@ static void check_file(const par *p, run_output_file file) {
     free(output);
 }
 
+/* Destinations differ in their suffix, so two of them are one file only
+ * through a link. Each writer truncates its own, so both would write it.
+ * Devices such as /dev/null take any number of writers. */
+static void check_aliases(const par *p) {
+    char *paths[RUN_OUTPUT_COUNT] = {0};
+    struct stat stats[RUN_OUTPUT_COUNT];
+    for (run_output_file file = 0; file < RUN_OUTPUT_COUNT; ++file) {
+        if (!enabled(p, file)) continue;
+        paths[file] = file_path(destination(p, file));
+        if (stat(paths[file], &stats[file]) != 0 || !S_ISREG(stats[file].st_mode)) {
+            free(paths[file]);
+            paths[file] = NULL;
+        }
+    }
+    for (run_output_file a = 0; a < RUN_OUTPUT_COUNT; ++a) {
+        if (paths[a] == NULL) continue;
+        for (run_output_file b = a + 1; b < RUN_OUTPUT_COUNT; ++b) {
+            if (paths[b] != NULL && stats[a].st_dev == stats[b].st_dev && stats[a].st_ino == stats[b].st_ino)
+                util_exit(PROGRAM ": output file %s equals output file %s", paths[a], paths[b]);
+        }
+    }
+    for (run_output_file file = 0; file < RUN_OUTPUT_COUNT; ++file) free(paths[file]);
+}
+
 void run_outputs_check(const par *p) {
     struct stat st;
     if (stat(p->out, &st) == 0 && S_ISDIR(st.st_mode))
         util_exit("ERROR: \"out\" parameter cannot be a directory: \"%s\"", p->out);
     for (run_output_file file = 0; file < RUN_OUTPUT_COUNT; ++file)
         if (enabled(p, file)) check_file(p, file);
+    check_aliases(p);
 }
 
 run_outputs *run_outputs_new(const par *p) {

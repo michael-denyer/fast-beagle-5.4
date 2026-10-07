@@ -98,9 +98,12 @@ checks() {
 step setup fixtures tests/fetch-fixtures.sh --ensure
 step core gate-tier tests/check-gate-tier.sh
 step core log-recording python3 tests/check_log_recording.py
+step core make-phase python3 tests/check_make_phase.py
+step core lock-exit python3 tests/check_lock_exit.py
 step full cases cases python3 tests/check_cases.py
 step full core jcompat make check-jcompat
 step core tracker make check-tracker
+step core oom make check-oom
 step core interval make check-interval
 step core markers make check-markers
 step core block-reader make check-block-reader

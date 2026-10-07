@@ -42,7 +42,7 @@ static void step_task(void *worker, int j) {
     for (int h = 0; h < cs->n_haps; ++h) {
         int absent;
         khiter_t k = kh_put(seq_index, w->map, (khint32_t)bit_array_hash(cs->haps[h], from, to), &absent);
-        if (absent < 0) util_exit(PROGRAM ": out of memory");
+        if (absent < 0) util_oom();
         if (absent) kh_value(w->map, k) = n_seq++;
         seq[h] = kh_value(w->map, k);
     }

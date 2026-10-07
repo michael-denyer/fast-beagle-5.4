@@ -71,7 +71,7 @@ Both `bgen=` modes also write `<out>.info`, the fields BGEN has no place for. Th
 
 If a `bgen=` run fails before the BGEN files are complete, it removes the `.bgen`, `.info` and `.sample` it has created. `bgen=phased` refuses nonfinite allele probabilities, which can arise with `err=0`, because BGEN cannot represent them. VCF-only output retains Beagle's `NaN` values.
 
-Before writing, fast-beagle refuses any log, VCF, BGEN, sidecar or tabix destination that names an input file, including aliases through symbolic or hard links.
+Before writing, fast-beagle refuses any log, VCF, BGEN, sidecar or tabix destination that names an input file, including aliases through symbolic or hard links. It also refuses two destinations that are the same file through a symbolic or hard link, because each writer would overwrite the other's output.
 
 ## Log file and console output
 

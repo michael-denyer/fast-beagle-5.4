@@ -33,6 +33,10 @@ The bioconda package `fast-beagle` is not published yet. Once it is, its version
 conda install -c conda-forge -c bioconda fast-beagle
 ```
 
+### macOS installer
+
+Each [release](https://github.com/michael-denyer/fast-beagle-5.4/releases) has `fast-beagle-<version>-macos-arm64.pkg`, a signed and notarised installer for Apple silicon Macs. It installs `/usr/local/bin/fast-beagle`.
+
 ### Release binaries
 
 Each [release](https://github.com/michael-denyer/fast-beagle-5.4/releases) has a `fast-beagle` binary for Linux x86_64, Linux arm64 and macOS arm64, with htslib linked in. The Linux binaries need glibc 2.28 or later. Download `fast-beagle-<version>-<os>-<arch>.tar.gz` and `SHA256SUMS` from the release, then check and unpack it:

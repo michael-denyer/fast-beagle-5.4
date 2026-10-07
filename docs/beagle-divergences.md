@@ -48,6 +48,10 @@ Both tools exit with status 1 when they refuse a run. fast-beagle prints the sam
 
 Beagle refuses an `out=` whose VCF path names the `gt=` or `ref=` file after `java.io.File` normalizes the path text, and fast-beagle prints the same message. fast-beagle then also refuses any output that is an existing input file, even through `./`, `..`, a relative path, a symlink or a hard link, and prints `fast-beagle: output file <output> equals input file <input>`. Beagle overwrites the input in these cases. The check compares the VCF, log, and enabled BGEN and tabix outputs with every input file parameter before any output is opened.
 
+fast-beagle also refuses two enabled outputs that are the same existing file through a symbolic or hard link, such as `<out>.log` linked to `<out>.vcf.gz`, and prints `fast-beagle: output file <output> equals output file <output>`. Beagle writes both outputs into the one file and exits 0.
+
+An `imp-step=` so small that adding it to a marker cluster's genetic position leaves the position unchanged, such as `1e-20`, stops fast-beagle with `fast-beagle: imp-step=<value> is too small to advance from genetic position <position>`. Beagle's step loop never ends in this case and allocates until it runs out of memory.
+
 When an input file has several malformed records, fast-beagle reports the first. At `nthreads=` above 1, Beagle's parse threads race, so the record Beagle names can change from run to run.
 
 Both tools read the next window while they phase the current one. When the current window fails, for example because it has only one position, and the next window cannot be read, Beagle reports either error, depending on thread timing. fast-beagle always reports the current window's error. Both tools parse the target and the reference in blocks of 1024 lines, the target's first block at startup, and report a malformed line when its block is parsed, which can be before an earlier window fails.
