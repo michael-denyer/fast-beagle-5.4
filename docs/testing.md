@@ -97,7 +97,7 @@ The check builds `build/beagle-piece1` with one marker per work item. It runs `b
 - `make check-markers` requires duplicate-marker and marker-order errors to return through `util_try` with their original messages, so the read-ahead reader can defer them (`tests/vcf/markers_test.c`).
 - `make check-block-reader` forces a published batch to be consumed and refilled with EOF before the parser resumes. The parser must still publish the EOF sentinel (`tests/vcf/block_reader_test.c`).
 - `make check-sliding-window` cuts windows from in-memory target records through `sliding_window_open_its` and checks each window's records, overlap and splice indices, and the chromosome break, against literal values (`tests/vcf/sliding_window_test.c`).
-- `make check-records`: `tests/output/record_fixture.c` writes phased, imputed, genotyped, haploid and multiallelic records through the window writer with no BGEN and in both `bgen=` modes. `tests/check_records.py` requires the same VCF from all three runs and the expected VCF fields. It also requires phased BGEN probabilities captured before the VCF rounds them.
+- `make check-records`: `tests/output/record_fixture.c` writes 20 items of phased, imputed, genotyped, haploid and multiallelic records through `window_writer_print_records`, then 1013 phased records through `window_writer_print_phased`, with no BGEN and in both `bgen=` modes at 1 and 4 threads. At 4 threads both runs wrap the ring of 8 record slots, so records are built into slots that earlier items used. `tests/check_records.py` requires the same VCF from all six runs and the same BGEN files at both thread counts, the expected VCF fields from every item, and every phased row in marker order with the genotypes the fixture's allele function gives. It also requires phased BGEN probabilities captured before the VCF rounds them.
 - `make check-tracker` tests the composite haplotype tracker in `src/beagleutil/comp_hap_queue.c` through the interface every caller uses (`tests/beagleutil/tracker_test.c`).
 - `make check-oom` requests an allocation that cannot succeed inside `util_try`. The process must exit 1 with `ERROR: out of memory`, and not return to the `util_try` frame (`tests/blbutil/oom_test.c`).
 - `make check-bgen-unit` tests:
@@ -182,7 +182,7 @@ The live checks need `PLINK2` naming the pinned plink2 binary, and fail without 
 
 `tests/check-tla.sh` model-checks the TLA+ specs in `tla/` with TLC from tla2tools.jar v1.7.4 over a matrix of small constants. `tests/check-tla.sh BlockReader` runs one spec. The three protocol models take each critical section as one step. They represent a condition-variable wait as a wait set that only a broadcast or a spurious wakeup leaves, so a lost wakeup fails a liveness property. The specs name the C functions they model.
 
-[tla/ParallelOrdered.tla](../tla/ParallelOrdered.tla) is the protocol of `parallel_ordered` (the pipelined imputed writer and the phased-record writer), for several worker counts, item counts and windows. It checks that:
+[tla/ParallelOrdered.tla](../tla/ParallelOrdered.tla) is the protocol of `parallel_ordered` (under `window_writer_print_records`, which the phased and the imputed writer print through), for several worker counts, item counts and windows. It checks that:
 
 - at most `window` items are claimed but not consumed
 - no slot is overwritten before it is consumed
