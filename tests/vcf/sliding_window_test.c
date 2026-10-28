@@ -80,12 +80,14 @@ int main(void) {
 
     /* Window 1 ends 2 cM past the first marker, at 2.1 Mb. Its overlap starts
      * at the last marker before 0.5 cM back from its last marker (1.4 Mb). Window 2
-     * ends 1.5 cM past the first new marker, at 4.0 Mb, and carries the markers
-     * from 2.5 Mb into window 3, which takes the rest and is the last window.
+     * ends 1.5 cM past window 1's end, at 3.6 Mb, so the marker at 3.8 Mb is not
+     * in it (1.5 cM past the first new marker, as Beagle 5.5 ends it, would be
+     * 4.0 Mb). It carries the markers from 2.5 Mb into window 3, which takes the
+     * rest and is the last window.
      * The splice points halve each overlap, so window 1 prints its markers 0 to
      * 2 and windows 2 and 3 their markers 1 to 3: each of the nine once. */
     gt_rec *recs[9];
-    const int32_t pos[9] = {100000, 500000, 1000000, 1500000, 1900000, 2500000, 3100000, 3500000, 4000000};
+    const int32_t pos[9] = {100000, 500000, 1000000, 1500000, 1900000, 2500000, 3100000, 3500000, 3800000};
     for (int j = 0; j < 9; ++j) recs[j] = rec_at("1", pos[j]);
     array_it src;
     sliding_window *sw = open_windows(recs, 9, &src);
@@ -99,12 +101,12 @@ int main(void) {
     assert(w->targ[3]->marker.pos == 2500000);
     window_free(w);
     w = sliding_window_next(sw);
-    check_window(w, 3, true, 0, 4, 1, 3, 4, 4, 2500000, 4000000);
+    check_window(w, 3, true, 0, 4, 1, 3, 4, 4, 2500000, 3800000);
     window_free(w);
     assert(sliding_window_next(sw) == NULL);
     assert(sliding_window_cum_targ_markers(sw) == 9 && sliding_window_cum_markers(sw) == 9);
     sliding_window_close(sw);
-    puts("PASS windows end window= cM past their first new marker and overlap by overlap= cM");
+    puts("PASS windows end window-overlap cM past the previous end and overlap by overlap= cM");
 
     /* A chromosome break ends the window with no overlap, and the next
      * chromosome's first window is a full window= cM again. */
