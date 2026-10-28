@@ -1,36 +1,40 @@
-/* Exercise the same record construction interface as both output producers. */
+/* Exercise the same record construction interface as both output producers,
+ * then the phased driver over enough markers to wrap its ring of records and
+ * leave a partial last task. Marker positions increase in output order. */
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "main/window_writer.h"
 
-int main(int argc, char **argv) {
-    if (argc != 3) return 2;
-    char *ids[] = {"D1", "H", "D2"};
-    bool diploid[] = {true, false, true};
-    samples s = {3, ids, diploid};
-    par p = {.out = argv[1], .nthreads = 1, .ap = true, .gp = true,
-        .bgen = (bgen_mode)atoi(argv[2]), .bgen_bits = 16, .bgen_chr_set = 22};
-    run_outputs *out = run_outputs_new(&p);
-    window_writer ww;
-    window_writer_open(&ww, &p, out, &s);
-    out_worker *wk = window_writer_worker_new(&ww);
-    out_rec r = {0};
-    const char *lines[] = {
-        "22\t100\tphased\tA\tC\t.\t.\t.\tGT",
-        "22\t200\timputed\tA\tC\t.\t.\t.\tGT",
-        "22\t300\tobserved\tA\tC,G\t.\t.\tEND=301\tGT",
-        "22\t400\tmono\tA\t.\t.\t.\t.\tGT",
-        "22\t500\tfive\tA\tC,G,T,AC\t.\t.\t.\tGT"
-    };
+#define PHASED_MARKERS 1013
+
+/* Five records of every kind, one item; FIVE_ITEMS items of them at 4 threads
+ * wrap the ring of 8 slots, so dosage records are built into reused slots. */
+#define FIVE_ITEMS 20
+static const char *five[][3] = {
+    {"phased", "C", "."},
+    {"imputed", "C", "."},
+    {"observed", "C,G", "END=99999"},
+    {"mono", ".", "."},
+    {"five", "C,G,T,AC", "."}
+};
+
+typedef struct {
+    const window_writer *ww;
+    const marker *mks;   /* FIVE_ITEMS * 5, in record order */
+} five_ctx;
+
+static int build_five(const void *ctx, int item, out_rec *recs) {
+    const five_ctx *c = ctx;
+    const samples *s = c->ww->samples;
     for (int m = 0; m < 5; ++m) {
-        marker mk;
-        marker_parse(&mk, lines[m], strlen(lines[m]));
+        out_rec *r = &recs[m];
         out_rec_kind kind = m == 0 ? OUT_PHASED : m == 2 ? OUT_GENOTYPED : OUT_IMPUTED;
-        window_writer_rec_begin(&ww, &r, &mk, kind);
-        for (int j = 0; j < s.n; ++j) {
+        window_writer_rec_begin(c->ww, r, &c->mks[item * 5 + m], kind);
+        for (int j = 0; j < s->n; ++j) {
             if (m == 0) {
-                window_writer_rec_gt(&r, j == 1 ? 1 : 0, 1);
+                window_writer_rec_gt(r, j == 1 ? 1 : 0, 1);
             } else {
                 float a1[5] = {1}, a2[5] = {1};
                 if (m == 1 && j == 0) {
@@ -41,18 +45,59 @@ int main(int argc, char **argv) {
                 } else if (m == 2 && j < 2) {
                     a1[0] = 0; a1[j == 0 ? 2 : 1] = 1;
                 }
-                window_writer_rec_probs(&r, a1, a2);
+                window_writer_rec_probs(r, a1, a2);
                 /* Both outputs must already own what they need. */
                 memset(a1, 0, sizeof a1);
                 memset(a2, 0, sizeof a2);
             }
         }
-        window_writer_encode(wk, &r);
-        window_writer_put(&ww, &r);
-        marker_free(&mk);
     }
-    window_writer_rec_free(&r);
-    window_writer_worker_free(wk);
+    return 5;
+}
+
+/* Haplotype hap's allele at marker m: one bit of m per haplotype, so rows and
+ * samples differ. tests/check_records.py recomputes it. */
+static int allele(const void *ctx, int m, int hap) {
+    (void)ctx;
+    return (m >> (hap % 4)) & 1;
+}
+
+int main(int argc, char **argv) {
+    if (argc != 4) return 2;
+    char *ids[] = {"D1", "H", "D2"};
+    bool diploid[] = {true, false, true};
+    samples s = {3, ids, diploid};
+    par p = {.out = argv[1], .nthreads = atoi(argv[3]), .ap = true, .gp = true,
+        .bgen = (bgen_mode)atoi(argv[2]), .bgen_bits = 16, .bgen_chr_set = 22};
+    run_outputs *out = run_outputs_new(&p);
+    window_writer ww;
+    window_writer_open(&ww, &p, out, &s);
+
+    marker mks[FIVE_ITEMS * 5];
+    for (int i = 0; i < FIVE_ITEMS * 5; ++i) {
+        char line[64];
+        int len = snprintf(line, sizeof line, "22\t%d\t%s\tA\t%s\t.\t.\t%s\tGT", i / 5 * 1000 + (i % 5 + 1) * 100,
+                five[i % 5][0], five[i % 5][1], five[i % 5][2]);
+        marker_parse(&mks[i], line, (size_t)len);
+    }
+    five_ctx fc = {&ww, mks};
+    window_writer_print_records(&ww, FIVE_ITEMS, 5, build_five, NULL, &fc);
+    for (int i = 0; i < FIVE_ITEMS * 5; ++i) marker_free(&mks[i]);
+
+    gt_rec *recs = calloc(PHASED_MARKERS, sizeof *recs);
+    gt_rec **targ = malloc(PHASED_MARKERS * sizeof *targ);
+    for (int m = 0; m < PHASED_MARKERS; ++m) {
+        char line[64];
+        int len = snprintf(line, sizeof line, "22\t%d\tm%d\tA\tC\t.\t.\t.\tGT", 100000 + m, m);
+        marker_parse(&recs[m].marker, line, (size_t)len);
+        targ[m] = &recs[m];
+    }
+    window w = {.n_targ = PHASED_MARKERS, .targ = targ};
+    window_writer_print_phased(&ww, &w, 0, PHASED_MARKERS, allele, NULL);
+    for (int m = 0; m < PHASED_MARKERS; ++m) marker_free(&recs[m].marker);
+    free(targ);
+    free(recs);
+
     window_writer_close(&ww);
     run_outputs_free(out);
     return 0;

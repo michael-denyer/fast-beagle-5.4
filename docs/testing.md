@@ -146,7 +146,9 @@ The check builds `build/beagle-piece1` with one marker per work item. It runs `b
 - `make check-interval` tests `src/vcf/interval_it.c` over an in-memory record source (`tests/vcf/interval_it_test.c`).
 - `make check-markers` requires duplicate-marker and marker-order errors to return through `util_try` with their original messages, so the read-ahead reader can defer them (`tests/vcf/markers_test.c`).
 - `make check-block-reader` forces a published batch to be consumed and refilled with EOF before the parser resumes. The parser must still publish the EOF sentinel (`tests/vcf/block_reader_test.c`).
-- `make check-records`: `tests/output/record_fixture.c` writes phased, imputed, genotyped, haploid and multiallelic records through the window writer with no BGEN and in both `bgen=` modes. `tests/check_records.py` requires the same VCF from all three runs and the expected VCF fields. It also requires phased BGEN probabilities captured before the VCF rounds them.
+- `make check-sliding-window` cuts windows from in-memory target records through `sliding_window_open_its` and checks each window's records, overlap and splice indices, and the chromosome break, against literal values (`tests/vcf/sliding_window_test.c`).
+- `make check-hmm-updater` steps one to six HMM lanes of distinct lengths through `hmm_fwd_lanes` and `hmm_bwd_lanes`, in and out of place, and requires every value and sum to equal the scalar form of `HmmUpdater.fwdUpdate` and `bwdUpdate` bit for bit (`tests/phase/hmm_updater_test.c`). The inputs span 26 binary orders of magnitude, so a changed summation order changes the sum's bits.
+- `make check-records`: `tests/output/record_fixture.c` writes 20 items of phased, imputed, genotyped, haploid and multiallelic records through `window_writer_print_records`, then 1013 phased records through `window_writer_print_phased`, with no BGEN and in both `bgen=` modes at 1 and 4 threads. At 4 threads both runs wrap the ring of 8 record slots, so records are built into slots that earlier items used. `tests/check_records.py` requires the same VCF from all six runs and the same BGEN files at both thread counts, the expected VCF fields from every item, and every phased row in marker order with the genotypes the fixture's allele function gives. It also requires phased BGEN probabilities captured before the VCF rounds them.
 - `make check-tracker` tests the composite haplotype tracker in `src/beagleutil/comp_hap_queue.c` through the interface every caller uses (`tests/beagleutil/tracker_test.c`).
 - `make check-oom` requests an allocation that cannot succeed inside `util_try`. The process must exit 1 with `ERROR: out of memory`, and not return to the `util_try` frame (`tests/blbutil/oom_test.c`).
 - `make check-bgen-unit` tests:
@@ -182,7 +184,7 @@ It also runs every case with `bgen=phased`, and some cases with `bgen=phased` at
 
 plink2 must load the BGEN of every autosomal case.
 
-In both modes, `tests/check_bgen_reader.py` checks that [bgen-reader](https://pypi.org/project/bgen-reader/) 4.0.9 decodes every `.bgen` to the same variants, ploidy, phased flag and probabilities as our own decoder. The live checks need [uv](https://docs.astral.sh/uv/) on `PATH` and fail without it. `tests/check_bgen_info.py` checks that the `.info` has one row per BGEN variant and that each row copies the variant's VCF record.
+In both modes, `tests/check_bgen_reader.py` checks that [bgen-reader](https://pypi.org/project/bgen-reader/) 4.0.9 decodes every `.bgen` to the same variants, ploidy, phased flag and probabilities as our own decoder. It runs once, over every `.bgen` that passed the other live checks, after the runs: importing bgen-reader costs more than a check. The live checks need [uv](https://docs.astral.sh/uv/) on `PATH` and fail without it. `tests/check_bgen_info.py` checks that the `.info` has one row per BGEN variant and that each row copies the variant's VCF record.
 
 Failed runs must leave no `.bgen`, `.sample` or `.info`. The rule covers runs that fail when the writer opens, when the VCF cannot be opened, and after records are written. `bgen-bits` values outside 1 to 16 or without `bgen=` must fail with a message. Every such refusal must exit 1.
 
@@ -205,7 +207,7 @@ The live checks need `PLINK2` naming the pinned plink2 binary, and fail without 
 
 ## Sanitizers
 
-`tests/check-sanitizers.sh` builds `build/beagle` and the unit tests of `make check-bgen-unit`, `make check-records`, `make check-tracker` and `make check-block-reader` with AddressSanitizer and UndefinedBehaviorSanitizer in `build/san`. It runs those tests. It then runs every oracle case at 1 and 2 threads as VCF only, with `bgen=plink2` and with `bgen=phased`. The `bgen=plink2` runs skip the cases tagged `nonautosome`, and the `bgen=phased` runs skip the cases tagged `nonfinite`. Every run must exit 0 with the oracle hash and no sanitizer report.
+`tests/check-sanitizers.sh` builds `build/beagle` and the unit tests of `make check-bgen-unit`, `make check-records`, `make check-tracker`, `make check-block-reader`, `make check-sliding-window` and `make check-hmm-updater` with AddressSanitizer and UndefinedBehaviorSanitizer in `build/san`. It runs those tests. It then runs every oracle case at 1 and 2 threads as VCF only, with `bgen=plink2` and with `bgen=phased`. The `bgen=plink2` runs skip the cases tagged `nonautosome`, and the `bgen=phased` runs skip the cases tagged `nonfinite`. The runs go `SAN_JOBS` at a time, default the CPU count, and print in table order once every run ends. Every run must exit 0 with the oracle hash and no sanitizer report.
 
 - On Linux, LeakSanitizer also runs, so any memory still allocated at a normal exit fails the check. LeakSanitizer does not support macOS arm64.
 - The build adds `-Wno-pass-failed`. clang cannot vectorise a `#pragma omp simd` loop that holds UndefinedBehaviorSanitizer checks, and `-Werror` would stop the build on its warning. The normal build keeps the warning as an error. GCC ignores the flag.
@@ -236,7 +238,7 @@ The live checks need `PLINK2` naming the pinned plink2 binary, and fail without 
 
 `tests/check-tla.sh` model-checks the TLA+ specs in `tla/` with TLC from tla2tools.jar v1.7.4 over a matrix of small constants. `tests/check-tla.sh BlockReader` runs one spec. The three protocol models take each critical section as one step. They represent a condition-variable wait as a wait set that only a broadcast or a spurious wakeup leaves, so a lost wakeup fails a liveness property. The specs name the C functions they model.
 
-[tla/ParallelOrdered.tla](../tla/ParallelOrdered.tla) is the protocol of `parallel_ordered` (the pipelined imputed writer and the phased-record writer), for several worker counts, item counts and windows. It checks that:
+[tla/ParallelOrdered.tla](../tla/ParallelOrdered.tla) is the protocol of `parallel_ordered` (under `window_writer_print_records`, which the phased and the imputed writer print through), for several worker counts, item counts and windows. It checks that:
 
 - at most `window` items are claimed but not consumed
 - no slot is overwritten before it is consumed
@@ -282,9 +284,11 @@ Each check belongs to one group, so CI can run the groups as parallel jobs. `GAT
 | Group | Checks |
 | --- | --- |
 | `setup` | `fixtures` and `c-build`. They run in every group, because every other group needs the fixtures and the `bgen`, `trace`, `trace-threads` and C-binary checks need `build/beagle`. |
-| `core` | `gate-tier`, `log-recording`, `make-phase`, `lock-exit`, `jcompat`, `tracker`, `oom`, `interval`, `markers`, `block-reader`, `snv-perms`, `oracle-c`, `gate-planning`, `failures-c`, `output-failures`, `log-c`, `piece-size`, `bgen-unit`, `records`, `bgen-files`, `vcf-index`, `tbi`, `tla`, `fuzz` and `fuzz-regressions` |
+| `core` | `gate-tier`, `log-recording`, `make-phase`, `lock-exit`, `jcompat`, `tracker`, `oom`, `interval`, `markers`, `block-reader`, `sliding-window`, `snv-perms`, `hmm-updater`, `oracle-c`, `gate-planning`, `failures-c`, `output-failures`, `log-c`, `piece-size`, `bgen-unit`, `records`, `bgen-files`, `vcf-index`, `tbi`, `tla`, `fuzz` and `fuzz-regressions` |
 | `bgen` | `bgen` |
-| `java` | `oracle-jar`, `failures-jar`, `log-jar`, `java-build`, `oracle-source`, `java-trace`, `oracle-trace`, `trace` and `trace-threads` |
+| `java-jar` | `oracle-jar`, `failures-jar` and `log-jar`, which run the released jar |
+| `java-source` | `java-build` and `oracle-source`, which run the Java source |
+| `trace` | `java-trace`, `oracle-trace`, `trace` and `trace-threads`, which compare the trace build with the C binary |
 | `cases` | `cases` |
 | `sanitizers` | `sanitizers`, which builds its own binaries in `build/san` |
 | `tsan` | `tsan`, which builds its own binary in `build/tsan`. It runs on macOS only and prints a `skip` line elsewhere. |
@@ -299,7 +303,7 @@ tests/check-local.sh
 
 Two GitHub Actions workflows define the same checks:
 
-- `.github/workflows/gate.yml` runs `tests/gate-steps.sh` on GitHub-hosted `macos-latest` (arm64) and `ubuntu-latest` (x86_64) runners. Its `check` jobs run one job for each runner and group, `check (<runner>, <group>)`, except that `cases` runs on Linux only and `tsan` on macOS only. The `cases` check tests shell logic that behaves the same on both runners but takes minutes longer on macOS. The C tier runs no `java` or `cases` jobs, because every check in those groups is full-tier only. Pushes to `main` run the C tier. A pull request runs no checks when it changes only documentation: files under `docs/`, Markdown files, images and `LICENSE`. It runs the C tier when every other changed file is under `src/` (except `src/jcompat/`) or `third_party/`, and the full tier otherwise, so a change to any test script or table runs the full tier. `tests/gate-tier.sh` holds that rule, and the `gate-tier` step checks it with `tests/check-gate-tier.sh`. Manual runs use the full tier with random fuzz examples. The nightly run does the same, and skips itself when `main` has not moved since the last nightly run that passed.
+- `.github/workflows/gate.yml` runs `tests/gate-steps.sh` on GitHub-hosted `macos-latest` (arm64) and `ubuntu-latest` (x86_64) runners. Its `check` jobs run one job for each runner and group, `check (<runner>, <group>)`, except that `cases`, `java-jar` and `java-source` run on Linux only and `tsan` on macOS only. The `cases` check tests shell logic that behaves the same on both runners but takes minutes longer on macOS. The `java-jar` and `java-source` groups run Java alone against recorded hashes that do not depend on the runner, and a personal account runs at most five macOS jobs at once. The C tier runs no `java-jar`, `java-source`, `trace` or `cases` jobs, because every check in those groups is full-tier only. Pushes to `main` run the C tier. A pull request runs no checks when it changes only documentation: files under `docs/`, Markdown files, images and `LICENSE`. It runs the C tier when every other changed file is under `src/` (except `src/jcompat/`) or `third_party/`, and the full tier otherwise, so a change to any test script or table runs the full tier. `tests/gate-tier.sh` holds that rule, and the `gate-tier` step checks it with `tests/check-gate-tier.sh`. Manual runs use the full tier with random fuzz examples. The nightly run does the same, and skips itself when `main` has not moved since the last nightly run that passed.
   - The `gate` job is the one check that a pull request must pass. It passes when every `check` job passed, or when the plan ran no checks. It fails in every other case, including a failed or cancelled plan.
 - `.github/workflows/lint.yml` runs every hook in `.pre-commit-config.yaml` on the macOS runner.
 
