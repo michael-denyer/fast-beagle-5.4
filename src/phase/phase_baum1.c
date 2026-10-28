@@ -159,13 +159,14 @@ static void bwd_begin(bwd_pass *bp, phase_baum1 *pb, const marker_cluster *mc) {
 
 /* The update that takes the backward values from cluster c + 1 to cluster c.
  * It takes the size of cluster c with the mismatches of cluster c + 1, as
- * Beagle 5.4 does. */
-static hmm3_step bwd_step(bwd_pass *bp) {
+ * Beagle 5.4 does. The update is lanes[0, 3). */
+static void bwd_step(bwd_pass *bp, hmm_lane *lanes) {
     phase_baum1 *pb = bp->pb;
     int c_p1 = bp->c + 1;
     set_em_probs(pb, cluster_size(bp->mc, bp->c));
-    return (hmm3_step){pb->bwd, NULL, bp->mc->p_recomb[c_p1], pb->em_probs,
-            {pb->mismatch[0][c_p1], pb->mismatch[1][c_p1], pb->mismatch[2][c_p1]}, pb->n_states};
+    for (int i = 0; i < 3; ++i) {
+        lanes[i] = (hmm_lane){NULL, pb->bwd[i], pb->mismatch[i][c_p1], pb->em_probs, NULL, bp->mc->p_recomb[c_p1], pb->n_states};
+    }
 }
 
 static void bwd_end_step(bwd_pass *bp) {
@@ -190,8 +191,9 @@ static void bwd_end_step(bwd_pass *bp) {
 
 static void bwd_finish(bwd_pass *bp) {
     while (bp->c >= 0) {
-        hmm3_step s = bwd_step(bp);
-        hmm_bwd_update3(s.val, s.p_switch, s.p_mismatch, s.m[0], s.m[1], s.m[2], s.n_states);
+        hmm_lane lanes[3];
+        bwd_step(bp, lanes);
+        hmm_bwd_lanes(lanes, 3);
         bwd_end_step(bp);
     }
 }
@@ -279,8 +281,8 @@ static void fwd_begin(fwd_pass *fp, phase_baum1 *pb, const marker_cluster *mc) {
 /* At an unphased heterozygote's cluster, phases it, applies the phase switch
  * to the clusters up to the next one, and restarts the haplotype HMMs from the
  * homozygous one. Then gives the update that takes the forward values to
- * cluster c. */
-static hmm3_step fwd_step(fwd_pass *fp) {
+ * cluster c, as lanes[0, 3). */
+static void fwd_step(fwd_pass *fp, hmm_lane *lanes) {
     phase_baum1 *pb = fp->pb;
     const marker_cluster *mc = fp->mc;
     int c = fp->c;
@@ -296,8 +298,9 @@ static hmm3_step fwd_step(fwd_pass *fp) {
         pb->sum[1] = pb->sum[2] = pb->sum[0];
     }
     set_em_probs(pb, cluster_size(mc, c));
-    return (hmm3_step){pb->fwd, pb->sum, mc->p_recomb[c], pb->em_probs,
-            {pb->mismatch[0][c], pb->mismatch[1][c], pb->mismatch[2][c]}, pb->n_states};
+    for (int i = 0; i < 3; ++i) {
+        lanes[i] = (hmm_lane){pb->fwd[i], pb->fwd[i], pb->mismatch[i][c], pb->em_probs, &pb->sum[i], mc->p_recomb[c], pb->n_states};
+    }
 }
 
 static void fwd_end_step(fwd_pass *fp) {
@@ -307,8 +310,9 @@ static void fwd_end_step(fwd_pass *fp) {
 
 static void fwd_finish(fwd_pass *fp) {
     while (fp->c < fp->mc->n_clusters) {
-        hmm3_step s = fwd_step(fp);
-        hmm_fwd_update3(s.val, s.sums, s.p_switch, s.p_mismatch, s.m[0], s.m[1], s.m[2], s.n_states);
+        hmm_lane lanes[3];
+        fwd_step(fp, lanes);
+        hmm_fwd_lanes(lanes, 3);
         fwd_end_step(fp);
     }
 }
@@ -435,8 +439,10 @@ void phase_baum1_phase_pair(phase_baum1 *pb0, int sample0, phase_baum1 *pb1, int
     if (run0) bwd_begin(&b0, pb0, &mc0);
     if (run1) bwd_begin(&b1, pb1, &mc1);
     while (run0 && run1 && b0.c >= 0 && b1.c >= 0) {
-        hmm3_step t0 = bwd_step(&b0), t1 = bwd_step(&b1);
-        hmm_bwd_update3x2(&t0, &t1);
+        hmm_lane lanes[6];
+        bwd_step(&b0, lanes);
+        bwd_step(&b1, lanes + 3);
+        hmm_bwd_lanes(lanes, 6);
         bwd_end_step(&b0);
         bwd_end_step(&b1);
     }
@@ -446,8 +452,10 @@ void phase_baum1_phase_pair(phase_baum1 *pb0, int sample0, phase_baum1 *pb1, int
     if (run0) fwd_begin(&f0, pb0, &mc0);
     if (run1) fwd_begin(&f1, pb1, &mc1);
     while (run0 && run1 && f0.c < mc0.n_clusters && f1.c < mc1.n_clusters) {
-        hmm3_step t0 = fwd_step(&f0), t1 = fwd_step(&f1);
-        hmm_fwd_update3x2(&t0, &t1);
+        hmm_lane lanes[6];
+        fwd_step(&f0, lanes);
+        fwd_step(&f1, lanes + 3);
+        hmm_fwd_lanes(lanes, 6);
         fwd_end_step(&f0);
         fwd_end_step(&f1);
     }
