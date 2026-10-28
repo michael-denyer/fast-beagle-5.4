@@ -36,7 +36,7 @@ def main():
         assert imputed[8] == "GT:DS:AP1:AP2:GP"
         assert imputed[9].split(":")[:4] == ["0|1", "1.21", "0.33", "0.88"]
         assert imputed[10:] == ["0:0.25:0.25", "0|0:0:0:0:1,0,0"]
-        assert observed[7].endswith(";END=301")
+        assert observed[7].endswith(";END=99999")
         assert observed[9:] == [
             "2|0:0,1:0,1:0,0:0,0,0,1,0,0",
             "1:1,0:1,0",

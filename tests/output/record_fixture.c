@@ -15,7 +15,7 @@
 static const char *five[][3] = {
     {"phased", "C", "."},
     {"imputed", "C", "."},
-    {"observed", "C,G", "END=301"},
+    {"observed", "C,G", "END=99999"},
     {"mono", ".", "."},
     {"five", "C,G,T,AC", "."}
 };

@@ -52,7 +52,7 @@ static gt_rec *rec_at(const char *chrom, int32_t pos) {
 
 /* window=2 cM and overlap=0.5 cM on the default map of 1 cM per Mb. */
 static sliding_window *open_windows(gt_rec **recs, int n, array_it *src) {
-    static const par p = {.window = 2.0f, .overlap = 0.5f, .window_markers = 1000000, .impute = true};
+    static const par p = {.window = 2.0f, .overlap = 0.5f, .impute = true};
     *src = (array_it){.recs = recs, .n = n, .smp = &header.samples};
     return sliding_window_open_its(&p, (sample_file_it){&array_ops, src}, (sample_file_it){0}, genetic_map_open(NULL, NULL));
 }
