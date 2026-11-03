@@ -12,7 +12,7 @@ Every comparison runs both tools at the same `nthreads=`. Beagle's own output de
 
 ## Evidence
 
-Each check below runs in the pre-merge gate, `tests/gate-steps.sh`, except the chr20 benchmark.
+Each check below runs in the pre-merge gate, `tests/gate-steps.sh`, except the chr20 benchmark. The nightly CI run checks fast-beagle's chr20 hash with `tests/check-chr20.sh`.
 
 | Evidence | What it checks | Scale | Rerun with |
 |---|---|---|---|
@@ -23,7 +23,7 @@ Each check below runs in the pre-merge gate, `tests/gate-steps.sh`, except the c
 | [Java library fixtures](#java-library-fixtures) | C reproductions of the Java library behaviour that Beagle depends on, against a real JVM | 8 fixture sets | `make check-jcompat` |
 | [Thread safety and ordering](#thread-safety-and-ordering) | Memory errors, undefined behaviour and data races on the oracle cases, the ordered writer protocol, and the imputation work-item size | Sanitizers on 53 cases, TLC on 8 model sizes, piece size on 30 cases at 2 and 18 threads | `tests/check-sanitizers.sh`, `tests/check-tsan.sh`, `tests/check-tla.sh`, `make check-piece-size` |
 | [Platforms](#platforms) | The whole gate on two operating systems and two CPU architectures | macOS arm64 and Linux x86_64 | `tests/check-local.sh` |
-| [chr20 benchmark](#chr20-benchmark) | A realistic imputation run, outside the gate | 1000 Genomes chr20, 6 runs per tool at 18 threads | `tests/bench/bench.sh <dir> 3` |
+| [chr20 benchmark](#chr20-benchmark) | A whole-chromosome imputation run, nightly in CI and outside the pre-merge gate | 1000 Genomes chr20, 6 runs per tool at 18 threads, and fast-beagle on each nightly run on Linux x86_64 | `tests/check-chr20.sh <dir>`, `tests/bench/bench.sh <dir> 3` |
 
 ### Oracle hashes
 
@@ -109,6 +109,8 @@ The release workflow runs `tests/check-oracle.sh` on the binaries that users ins
 
 `tests/bench/bench.sh` runs the jar and fast-beagle on a 1000 Genomes chr20 imputation. The target has 321 samples at 15,879 markers, and the reference has 2,881 samples at 1,642,181 markers. The script records the output hash as `tests/check-oracle.sh` computes it. In the recorded run, all 6 Java runs and all 6 fast-beagle runs at 18 threads wrote hash `41b92f8850e50b23`. [perf-baseline.md](perf-baseline.md) has the method, the machine and the timings.
 
+`tests/check-chr20.sh <dir>` runs fast-beagle alone on the same input at 18 threads and requires hash `41b92f8850e50b23`. The `chr20` job in `.github/workflows/gate.yml` runs it on `ubuntu-latest` in the nightly and manual CI runs. The required `gate` job does not wait for it, so it never blocks a pull request.
+
 ## Why identical output is possible
 
 Floating-point results depend on the order of operations. fast-beagle keeps Java's order and Java's library behaviour.
@@ -122,9 +124,9 @@ Floating-point results depend on the order of operations. fast-beagle keeps Java
 
 ## Limits
 
-- The proof covers the inputs, parameters and thread counts that the checks run. The oracle cases use 100 kb of chromosome 22 with at most 5,068 reference samples. Only the chr20 benchmark runs at realistic scale, and it is outside the gate.
+- The proof covers the inputs, parameters and thread counts that the checks run. The oracle cases use 100 kb of chromosome 22 with at most 5,068 reference samples. The chr20 imputation runs at realistic scale in the nightly CI run, outside the pre-merge gate, so a change that breaks only at that scale can merge and then fail the next nightly run.
 - Thread counts 1, 2 and 18 are checked on the oracle cases, and 1, 2, 3 and 5 by the fuzzer. Only 3 oracle cases have windows longer than 4.5 cM, where the thread count changes the output.
-- The benchmark proves identity for one input, at 18 threads, on one macOS arm64 machine.
+- The chr20 check proves identity for one input at 18 threads. The jar wrote the expected hash on one macOS arm64 machine.
 - The fuzzer accepts a failure in both tools with different messages. Only the invalid-parameter examples and `tests/check-failures.sh` require the same message.
 - A failed run is compared by exit code and message only. The VCF that each tool leaves behind differs ([a failed run leaves a partial VCF](beagle-divergences.md#a-failed-run-leaves-a-partial-vcf)).
 - The `math` fixture checks `Math` against the fdlibm port at sampled inputs for each call site, not at every input.
