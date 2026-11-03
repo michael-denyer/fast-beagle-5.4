@@ -165,6 +165,44 @@ jobs:
           path: build/fuzz-fail
           if-no-files-found: ignore
 
+  # The 1000 Genomes chr20 imputation, a whole chromosome against the gate's
+  # 100 kb cases, on the nightly and manual runs only (tests/check-chr20.sh).
+  # It is not one of the gate job's needs, so it never blocks a pull request.
+  # A failure fails the run, so the next nightly run reruns the whole full
+  # tier, not only this job. It runs on Linux only: the oracle cases already
+  # check both platforms, and macOS runners are the scarcer ones.
+  chr20:
+    needs: plan
+    if: needs.plan.outputs.run == 'true' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    timeout-minutes: 60
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install htslib
+        run: |
+          if [ ! -e /usr/include/htslib/hts.h ] || ! command -v tabix > /dev/null; then
+            sudo apt-get update && sudo apt-get install -y libhts-dev tabix
+          fi
+      # The files that tests/bench/fetch-chr20.sh derives, from the
+      # chr20-inputs-1 release of fast-beagle-5.5, which runs the same inputs:
+      # downloads from EBI to GitHub runners ran at about 80 KB/s.
+      - name: Download the chr20 inputs
+        run: |
+          mkdir -p "$RUNNER_TEMP/chr20"
+          cd "$RUNNER_TEMP/chr20"
+          for f in ref.vcf.gz target.vcf.gz chr20.map; do
+            curl -fSL -o "$f" "https://github.com/michael-denyer/fast-beagle-5.5/releases/download/chr20-inputs-1/$f"
+          done
+          sha256sum -c - <<'EOF'
+          37486ff2a7466ea1f7181048e8a133493f62406394b6fce913daaf669e303cb3  ref.vcf.gz
+          d6c64ca29b5429e93881a3f85ef735b65996329364bf389554cbbe3dfc1d957a  target.vcf.gz
+          8ed4770abb0a6cfbc4e30e3be7b1606f33b05eb64109fcb3400deb3816aa4077  chr20.map
+          EOF
+      - run: make build/beagle
+      - run: tests/check-chr20.sh "$RUNNER_TEMP/chr20"
+
   gate:
     needs: [plan, check]
     if: always()
