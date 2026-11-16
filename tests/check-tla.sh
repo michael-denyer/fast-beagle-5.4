@@ -8,7 +8,7 @@
 # shellcheck disable=SC2329  # the function named after each spec is called through SPECS
 set -uo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-SPECS=(ParallelOrdered BlockReader SlidingWindow FatalExit BgenCleanup)
+SPECS=(ParallelOrdered BlockReader SlidingWindow FatalExit BgenCleanup VcfIt LineReader Bref3It RefSeqGroup WindowChain VcfIndex BgenWriter PhasingSchedule ClusterLifecycle HmmPass CompHapTracker)
 [ $# -gt 0 ] || set -- "${SPECS[@]}"
 for spec in "$@"; do
   known=0
@@ -49,7 +49,7 @@ check() {
   if java -XX:+UseParallelGC -cp "$JAR" tlc2.TLC -workers 4 -metadir "$OUT/states-$run" \
       -config "$OUT/MC.cfg" "$OUT/$spec.tla" > "$OUT/tlc.log" 2>&1 \
       && grep -q "No error has been found" "$OUT/tlc.log"; then
-    echo "PASS $spec $label $(grep -o '[0-9,]* distinct states found' "$OUT/tlc.log" | head -1)"
+    echo "PASS $spec $label $(sed -n 's/.* \([0-9,]*\) distinct states found, 0 states left on queue.*/\1/p' "$OUT/tlc.log" | tail -1) distinct states found"
   else
     echo "FAIL $spec $label: $(grep -m1 "^Error:" "$OUT/tlc.log")"; grep -v "^\s*$" "$OUT/tlc.log" | tail -60; fail=1
   fi
@@ -122,6 +122,170 @@ BgenCleanup() {
     "TypeOK NoPartialAfterCleanup CompletedSurvive" "Terminates" <<EOF
   Members = {bgen, info, sample}
 EOF
+}
+
+VcfIt() {
+  # The code has BUFFER_SIZE = 1024 lines per block and records per fill;
+  # Init chooses every line's kind and the failing read, so each run covers
+  # every input of N lines. vcf_header_read exits when there are no data lines.
+  for model in "1 1" "2 1" "3 1" "3 2" "4 2" "4 3" "5 2"; do
+    read -r n batch <<< "$model"
+    check VcfIt "lines=$n batch=$batch" "TypeOK OutPrefix BufFits" "Completes" <<EOF
+  N = $n
+  Batch = $batch
+EOF
+  done
+}
+
+LineReader() {
+  # Init chooses every input of up to K bytes over {a, CR, LF} and every
+  # split into chunks, so one run per mode covers all of them.
+  for bgzip in TRUE FALSE; do
+    check LineReader "bytes<=6 bgzip=$bgzip" "TypeOK OutPrefix EofReadOnce" "Completes" <<EOF
+  K = 6
+  BgzipLines = $bgzip
+EOF
+  done
+}
+
+Bref3It() {
+  # blocks records: Init chooses up to R records per block, their filter
+  # verdicts, and where the file is cut short.
+  for model in "0 0" "1 2" "2 2" "3 3"; do
+    read -r nb r <<< "$model"
+    check Bref3It "blocks=$nb records<=$r" "TypeOK OutPrefix NoReadPastEnd" "Completes" <<EOF
+  NB = $nb
+  R = $r
+EOF
+  done
+}
+
+RefSeqGroup() {
+  # records haplotypes max_nseq block. 4 haplotypes with max_nseq 3 is the
+  # default for 2 samples, where a record that carries 3 alleles is refused
+  # even by an empty coder; 3 with 2 makes the coder refuse sooner; 2 with 3,
+  # the default for 1 sample, never refuses. 4 records in one block are the
+  # fewest where coding whole blocks changes what is returned before the exit.
+  for model in "3 3 2 1" "4 3 2 3" "2 4 3 1" "3 2 3 1"; do
+    read -r n h m b <<< "$model"
+    check RefSeqGroup "records=$n haps=$h maxnseq=$m block=$b" \
+      "TypeOK OutPrefix PlaceholdersFilled CoderSeqs EmptyCoderFresh GroupOneChrom" "Completes" <<EOF
+  N = $n
+  H = $h
+  MaxNSeq = $m
+  C = 2
+  B = $b
+EOF
+  done
+}
+
+WindowChain() {
+  # mode targ-records ref-records chromosomes positions alleles window overlap.
+  # A window ends at least window past its first record, so each model has
+  # positions beyond it to carry an overlap; with 4 positions, window=2 and
+  # overlap=1 a window can read no new record.
+  for model in "targ 3 0 2 3 1 2 1" "targ 6 0 2 3 1 2 1" "targ 5 0 2 4 1 3 2" "targ 5 0 2 4 1 2 1" \
+      "ref 3 3 2 2 2 2 1" "ref 2 3 2 3 2 2 1" "ref 3 4 2 3 1 2 1" "ref 2 3 2 3 2 3 2" "ref 2 3 2 4 1 2 1" \
+      "impute 2 3 2 3 2 2 1" "impute 3 4 1 3 2 2 1" "impute 2 3 2 4 1 2 1"; do
+    read -r mode nt nr nc p a w o <<< "$model"
+    local invariants="TypeOK CarrySuffix BoundaryEmpty Paired ChromsBesideCarry ReadsToEnd OverlapFromEnd EndOnGrid"
+    [ "$mode" != targ ] || invariants="TypeOK WinInterval Covered OneChrom CarrySuffix BoundaryEmpty DoneAtLast ReadsToEnd OverlapFromEnd EndOnGrid"
+    check WindowChain "mode=$mode targ=$nt ref=$nr chroms=$nc pos=$p alleles=$a window=$w overlap=$o" \
+      "$invariants" "Terminates" <<EOF
+  Mode = "$mode"
+  NT = $nt
+  NR = $nr
+  NC = $nc
+  P = $p
+  A = $a
+  W = $w
+  O = $o
+EOF
+  done
+}
+
+VcfIndex() {
+  # Records whose CHROM starts with '#' are the only lines put can pass to the
+  # '#' branch; Init chooses each line's kind.
+  for n in 0 1 3 5 7; do
+    check VcfIndex "lines=$n" "TypeOK IndexedLikeTabix HeaderEndLikeTabix" "Completes" <<EOF
+  N = $n
+  Kinds = {"hash", "rec"}
+EOF
+  done
+}
+
+BgenWriter() {
+  # BgenWriter.tla instantiates BgenCleanup, and check copies only the spec it runs.
+  cp "$ROOT/tla/BgenCleanup.tla" "$OUT/"
+  # records chromosomes autosomes
+  for model in "0 1 {1}" "2 2 {1}" "3 2 {1}" "2 3 {1,2}"; do
+    read -r n nc au <<< "$model"
+    check BgenWriter "records=$n chroms=$nc autosomes=$au" \
+      "TypeOK WrittenAutosomes CheckedBeforeWrite HeaderCountsWritten CompleteAfterClose Plink2EmptyExits SuccessKeepsAll" \
+      "Terminates" <<EOF
+  N = $n
+  NChroms = $nc
+  Autosomes = $au
+EOF
+  done
+}
+
+PhasingSchedule() {
+  # The defaults are burnin=3 iterations=12; par.c allows both down to 1.
+  for model in "1 1" "1 2" "2 1" "3 1" "3 3" "4 4" "3 12" "5 6"; do
+    read -r burnin its <<< "$model"
+    check PhasingSchedule "burnin=$burnin iterations=$its" \
+      "TypeOK RunBound FollowsSchedule EarlyExitOnLowRate BurninRuns LastRunsPhase EmInBurnin Stage2AfterStage1 PhasedRunsNothing" \
+      "Terminates" <<EOF
+  Burnin = $burnin
+  Iterations = $its
+EOF
+  done
+}
+
+ClusterLifecycle() {
+  # markers max_size runs; MaxSize stands for the 255-marker cluster limit.
+  for model in "3 2 2" "4 2 3" "5 2 2" "5 3 3" "6 2 2"; do
+    read -r nm ms nr <<< "$model"
+    check ClusterLifecycle "markers=$nm max_size=$ms runs=$nr" \
+      "TypeOK Partition UnphClustersMatch LrPairsWithMarker NoUnphAtFirst HasMissingMatch UnphasedShrinks" \
+      "BurninKeepsList Terminates" <<EOF
+  M = $nm
+  MaxSize = $ms
+  Runs = $nr
+EOF
+  done
+}
+
+HmmPass() {
+  # clusters samples; two samples on one phase_baum1 check begin_sample's resets.
+  for model in "3 1" "4 1" "5 1" "3 2"; do
+    read -r n ns <<< "$model"
+    check HmmPass "clusters=$n samples=$ns" \
+      "TypeOK FwdLockstep BwdLockstep IndicesMatch PassKeepsTypes SwapsCountFlips SwapRange LrPerHet RateSums NoUpdateInBurnin ThresholdInRange UpdateKeepsBelow PhasingProgress" \
+      "Transitions Terminates" <<EOF
+  N = $n
+  S = $ns
+EOF
+  done
+}
+
+CompHapTracker() {
+  # haps max_states max_step min_steps calls; min_steps > max_step is INT_MAX.
+  # Four slots is the smallest heap whose poll sifts past a node with two children.
+  for model in "3 1 2 1 4" "3 2 2 3 5" "3 2 2 1 5" "3 3 2 2 6" "4 3 3 9 5" "5 4 1 3 5"; do
+    read -r nh ms st mn ev <<< "$model"
+    check CompHapTracker "haps=$nh max_states=$ms steps=$st min_steps=$mn calls=$ev" \
+      "TypeOK SizeBound SlotsArePrefix HeapOrdered NilIffSlot KeyBehindStep EvictsLeast TrackedNoChange" \
+      "RepairEnds" <<EOF
+  H = $nh
+  MaxStates = $ms
+  MaxStep = $st
+  MinSteps = $mn
+  MaxEvents = $ev
+EOF
+  done
 }
 
 for spec in "$@"; do "$spec"; done

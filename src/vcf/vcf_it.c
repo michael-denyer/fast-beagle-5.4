@@ -118,12 +118,13 @@ static void parse_task(void *worker, int j) {
 /* VcfIt.fillEmissionBuffer: parses blocks of BUFFER_SIZE lines in parallel
  * until BUFFER_SIZE records have passed the marker filter or the input ends,
  * so a malformed record stops the run before the records ahead of it are
- * used. As when the lines are parsed one at a time, a block's first bad line
- * is reported ahead of an error reading past its last line. */
+ * used. fillStringBuffer reads a block before any of it is parsed, so an
+ * error reading the block is reported ahead of its bad lines. */
 static void fill_buffer(vcf_it *it) {
     it->head = 0;
     while (it->have_line && it->n < BUFFER_SIZE) {
         char *read_error = util_try(read_block, it);
+        if (read_error != NULL) util_exit("%s", read_error);
         parallel_for(parallel_threads(it->n_threads, it->n_lines), it->n_lines, it, 0, parse_task);
         for (int j = 0; j < it->n_lines; ++j) {
             if (it->errors[j] != NULL) util_exit("%s", it->errors[j]);
@@ -131,7 +132,6 @@ static void fill_buffer(vcf_it *it) {
             if (filter_accept_marker(it->exclude, &rec->marker)) it->buf[it->n++] = rec;
             else gt_rec_release(rec);
         }
-        if (read_error != NULL) util_exit("%s", read_error);
     }
 }
 
