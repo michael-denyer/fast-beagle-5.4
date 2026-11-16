@@ -101,7 +101,7 @@ check first-block-target "ERROR: Invalid allele [x]" gt="$OUT/in-first-bad.vcf.g
 # VcfIt reads a block of lines before it parses them, so when the stream ends
 # early inside the block that holds a bad line, the read error comes first.
 awk 'BEGIN {
-  OFS = "\t"; srand(7)
+  srand(7)
   print "##fileformat=VCFv4.2"
   h = "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT"
   for (s = 1; s <= 100; s++) h = h "\tS" s

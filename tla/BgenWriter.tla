@@ -89,7 +89,6 @@ Running == C!Live
 (* A util_exit from the step the main thread is on. *)
 Halt == C!Exit /\ UNCHANGED writer
 
-(* pc moves on; nothing else changes. *)
 Goto(p) == pc' = p /\ UNCHANGED <<Mode, Chrom, Kind, WinStart, Lag, i, cur, checked, nVar, written, hdrCount, closedOK>>
 
 (* bgen_writer_open creates the .bgen, then the .info. *)
