@@ -98,6 +98,22 @@ vcf_head() { printf '##fileformat=VCFv4.2\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILT
 rec() { printf '%s\t%s\t.\tA\tC\t.\t.\t.\tGT\t0|1\t%s\n' "$1" "$2" "${3:-1|0}"; }
 { vcf_head; rec 1 100; rec 2 100; rec 2 200 '1|x'; } | gzip > "$OUT/in-first-bad.vcf.gz"
 check first-block-target "ERROR: Invalid allele [x]" gt="$OUT/in-first-bad.vcf.gz" out="$OUT/first-target"
+# VcfIt reads a block of lines before it parses them, so when the stream ends
+# early inside the block that holds a bad line, the read error comes first.
+awk 'BEGIN {
+  OFS = "\t"; srand(7)
+  print "##fileformat=VCFv4.2"
+  h = "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT"
+  for (s = 1; s <= 100; s++) h = h "\tS" s
+  print h
+  for (r = 1; r <= 900; r++) {
+    line = "1\t" (r * 100) "\t.\tA\tC\t.\t.\t.\tGT"
+    for (s = 1; s <= 100; s++) line = line "\t" (r == 2 && s == 1 ? "1|x" : int(rand() * 2) "|" int(rand() * 2))
+    print line
+  }
+}' | gzip > "$OUT/whole.vcf.gz"
+head -c $(($(wc -c < "$OUT/whole.vcf.gz") * 3 / 4)) "$OUT/whole.vcf.gz" > "$OUT/in-bad-cut.vcf.gz"
+check bad-line-then-cut "Error reading $OUT/in-bad-cut.vcf.gz" gt="$OUT/in-bad-cut.vcf.gz" out="$OUT/bad-cut"
 # With the bad allele in the second block of 1024 lines of the target or the
 # reference, the port reads window 2 while window 1 is phased but reports
 # window 1's error. Beagle parses that block on its window reader thread, and
